@@ -34,6 +34,10 @@ import ExcelToPDF from "./pages/tools/ExcelToPDF";
 import TextToPDF from "./pages/tools/TextToPDF";
 import EbookToPDF from "./pages/tools/EbookToPDF";
 import ScanToPDF from "./pages/tools/ScanToPDF";
+import ExtractPDFPages from "./pages/tools/ExtractPDFPages";
+import OrganizePDF from "./pages/tools/OrganizePDF";
+import WatermarkPDF from "./pages/tools/WatermarkPDF";
+import CropPDF from "./pages/tools/CropPDF";
 
 const queryClient = new QueryClient();
 
@@ -74,6 +78,10 @@ const App = () => (
           <Route path="/tools/text-to-pdf" element={<TextToPDF />} />
           <Route path="/tools/ebook-to-pdf" element={<EbookToPDF />} />
           <Route path="/tools/scan-to-pdf" element={<ScanToPDF />} />
+          <Route path="/tools/extract-pdf-pages" element={<ExtractPDFPages />} />
+          <Route path="/tools/organize-pdf" element={<OrganizePDF />} />
+          <Route path="/tools/watermark-pdf" element={<WatermarkPDF />} />
+          <Route path="/tools/crop-pdf" element={<CropPDF />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

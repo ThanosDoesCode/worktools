@@ -272,6 +272,42 @@ export const tools: Tool[] = [
     keywords: ["pdf", "split", "pages", "ranges", "extract", "zip"],
     icon: "Scissors",
   },
+  {
+    id: "30",
+    name: "Extract PDF Pages",
+    description: "Pick only the pages you need and download a new PDF",
+    category: "pdfs",
+    slug: "extract-pdf-pages",
+    keywords: ["pdf", "extract", "pages", "split", "range"],
+    icon: "Scissors",
+  },
+  {
+    id: "31",
+    name: "Organize PDF",
+    description: "Reorder, rotate, and delete pages, then download",
+    category: "pdfs",
+    slug: "organize-pdf",
+    keywords: ["pdf", "organize", "reorder", "rotate", "delete", "pages"],
+    icon: "Layers",
+  },
+  {
+    id: "32",
+    name: "Watermark PDF",
+    description: "Add a text watermark to every page",
+    category: "pdfs",
+    slug: "watermark-pdf",
+    keywords: ["pdf", "watermark", "stamp", "confidential"],
+    icon: "Stamp",
+  },
+  {
+    id: "33",
+    name: "Crop PDF",
+    description: "Crop margins on every page of your PDF",
+    category: "pdfs",
+    slug: "crop-pdf",
+    keywords: ["pdf", "crop", "trim", "margins"],
+    icon: "Crop",
+  },
 ];
 
 export const categories = [
