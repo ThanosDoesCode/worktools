@@ -3,7 +3,7 @@ import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, ArrowUp, ArrowDown, Merge, Loader2, Download, FileText } from "lucide-react";
+import { Upload, X, ArrowUp, ArrowDown, Layers, Loader2, Download, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PDFDocument } from "pdf-lib";
 
@@ -34,27 +34,30 @@ export default function MergePDFs() {
 
   const totalSize = useMemo(() => items.reduce((acc, it) => acc + it.size, 0), [items]);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const pdfs = acceptedFiles.filter((f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      const pdfs = acceptedFiles.filter((f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
 
-    if (pdfs.length === 0) {
-      toast({
-        title: "Only PDFs supported",
-        description: "Please upload one or more .pdf files.",
-        variant: "destructive",
-      });
-      return;
-    }
+      if (pdfs.length === 0) {
+        toast({
+          title: "Only PDFs supported",
+          description: "Please upload one or more .pdf files.",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    const newItems: PDFItem[] = pdfs.map((file) => ({
-      id: safeId(),
-      file,
-      name: file.name,
-      size: file.size,
-    }));
+      const newItems: PDFItem[] = pdfs.map((file) => ({
+        id: safeId(),
+        file,
+        name: file.name,
+        size: file.size,
+      }));
 
-    setItems((prev) => [...prev, ...newItems]);
-  }, [toast]);
+      setItems((prev) => [...prev, ...newItems]);
+    },
+    [toast],
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -158,7 +161,8 @@ export default function MergePDFs() {
             <Card className="p-4">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <div className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">{items.length}</span> file{items.length === 1 ? "" : "s"} •{" "}
+                  <span className="font-medium text-foreground">{items.length}</span> file
+                  {items.length === 1 ? "" : "s"} •{" "}
                   <span className="font-medium text-foreground">{formatBytes(totalSize)}</span>
                 </div>
                 <Button variant="ghost" onClick={clearAll} className="h-8 px-2">
@@ -220,7 +224,7 @@ export default function MergePDFs() {
               </>
             ) : (
               <>
-                <Merge className="h-4 w-4 mr-2" />
+                <Layers className="h-4 w-4 mr-2" />
                 Merge PDFs
               </>
             )}
