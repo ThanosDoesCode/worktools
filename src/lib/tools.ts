@@ -276,7 +276,7 @@ export const tools: Tool[] = [
   // Files — consolidated pages (instead of many tiny tool pages)
   {
     id: "101",
-    name: "ZIP Tools",
+    name: "Compress Optimize Tools",
     description: "Create ZIP files or extract ZIP archives — client-side",
     category: "files",
     slug: "zip-tools",
@@ -300,7 +300,11 @@ export const categories = [
   { id: "operations", name: "Operations", description: "Tools for day-to-day business operations" },
   { id: "hr", name: "HR & Costs", description: "Employee costs, meetings, and workforce tools" },
   { id: "pdfs", name: "PDFs", description: "Convert documents, images, and files to PDF" },
-  { id: "files", name: "Compress & Optimize", description: "ZIP tools, image compression, and code minifiers" },
+  {
+    id: "files",
+    name: "Compress & Optimize",
+    description: "Compress Optimize Tools, image compression, and code minifiers",
+  },
 ];
 
 export function searchTools(query: string): Tool[] {

@@ -6,16 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import {
-  Upload,
-  Download,
-  Loader2,
-  X,
-  FileArchive,
-  Copy,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { Upload, Download, Loader2, X, FileArchive, Copy, Sparkles, Trash2 } from "lucide-react";
 
 // deps:
 // npm i jszip file-saver
@@ -56,10 +47,7 @@ export default function CompressOptimizeTools() {
     return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${sizes[i]}`;
   };
 
-  const totalCreateBytes = useMemo(
-    () => createFiles.reduce((a, f) => a + f.size, 0),
-    [createFiles]
-  );
+  const totalCreateBytes = useMemo(() => createFiles.reduce((a, f) => a + f.size, 0), [createFiles]);
 
   // ---------- Dropzones ----------
   const onDropCreate = useCallback((accepted: File[]) => {
@@ -83,7 +71,7 @@ export default function CompressOptimizeTools() {
       }
       setZipFile(f);
     },
-    [toast]
+    [toast],
   );
 
   const createDZ = useDropzone({
@@ -190,7 +178,10 @@ export default function CompressOptimizeTools() {
         return JSON.stringify(obj, null, 2);
       }
       if (minifyTab === "html") {
-        return input.replace(/>\s+</g, "><").replace(/\s{2,}/g, " ").trim();
+        return input
+          .replace(/>\s+</g, "><")
+          .replace(/\s{2,}/g, " ")
+          .trim();
       }
       // css/js lightweight minifier
       return input
@@ -217,7 +208,7 @@ export default function CompressOptimizeTools() {
   return (
     <ToolLayout
       title="Compress & Optimize"
-      description="ZIP tools + JSON prettifier + lightweight HTML/CSS/JS minifiers — 100% client-side."
+      description="Compress Optimize Tools + JSON prettifier + lightweight HTML/CSS/JS minifiers — 100% client-side."
     >
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Left */}
@@ -225,16 +216,24 @@ export default function CompressOptimizeTools() {
           <Card className="p-6">
             <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as MainTab)}>
               <TabsList className="w-full">
-                <TabsTrigger className="flex-1" value="zip">ZIP Tools</TabsTrigger>
-                <TabsTrigger className="flex-1" value="minify">Minify / Prettify</TabsTrigger>
+                <TabsTrigger className="flex-1" value="zip">
+                  Compress Optimize Tools
+                </TabsTrigger>
+                <TabsTrigger className="flex-1" value="minify">
+                  Minify / Prettify
+                </TabsTrigger>
               </TabsList>
 
-              {/* ZIP Tools */}
+              {/* Compress Optimize Tools */}
               <TabsContent value="zip" className="mt-6 space-y-5">
                 <Tabs value={zipMode} onValueChange={(v) => setZipMode(v as "create" | "extract")}>
                   <TabsList className="w-full">
-                    <TabsTrigger className="flex-1" value="create">Create ZIP</TabsTrigger>
-                    <TabsTrigger className="flex-1" value="extract">Extract ZIP</TabsTrigger>
+                    <TabsTrigger className="flex-1" value="create">
+                      Create ZIP
+                    </TabsTrigger>
+                    <TabsTrigger className="flex-1" value="extract">
+                      Extract ZIP
+                    </TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="create" className="mt-5 space-y-4">
@@ -343,12 +342,7 @@ export default function CompressOptimizeTools() {
                       </div>
                     )}
 
-                    <Button
-                      onClick={extractZipNow}
-                      disabled={extracting || !zipFile}
-                      className="w-full"
-                      size="lg"
-                    >
+                    <Button onClick={extractZipNow} disabled={extracting || !zipFile} className="w-full" size="lg">
                       {extracting ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -373,9 +367,15 @@ export default function CompressOptimizeTools() {
               <TabsContent value="minify" className="mt-6 space-y-4">
                 <Tabs value={minifyTab} onValueChange={(v) => setMinifyTab(v as MinifyTab)}>
                   <TabsList className="w-full">
-                    <TabsTrigger className="flex-1" value="json">JSON</TabsTrigger>
-                    <TabsTrigger className="flex-1" value="html">HTML</TabsTrigger>
-                    <TabsTrigger className="flex-1" value="cssjs">CSS/JS</TabsTrigger>
+                    <TabsTrigger className="flex-1" value="json">
+                      JSON
+                    </TabsTrigger>
+                    <TabsTrigger className="flex-1" value="html">
+                      HTML
+                    </TabsTrigger>
+                    <TabsTrigger className="flex-1" value="cssjs">
+                      CSS/JS
+                    </TabsTrigger>
                   </TabsList>
 
                   <div className="mt-5 space-y-4">
@@ -386,8 +386,8 @@ export default function CompressOptimizeTools() {
                         minifyTab === "json"
                           ? "Paste JSON here..."
                           : minifyTab === "html"
-                          ? "Paste HTML here..."
-                          : "Paste CSS or JS here..."
+                            ? "Paste HTML here..."
+                            : "Paste CSS or JS here..."
                       }
                       className="min-h-[220px]"
                     />
@@ -454,7 +454,9 @@ export default function CompressOptimizeTools() {
           <Card className="p-6 bg-muted/50">
             <h3 className="font-semibold mb-2">Notes</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• ZIP tools require <code>jszip</code> + <code>file-saver</code>.</li>
+              <li>
+                • Compress Optimize Tools require <code>jszip</code> + <code>file-saver</code>.
+              </li>
               <li>• HTML/CSS/JS minifiers are lightweight (not bundler-grade).</li>
               <li>• Everything runs locally in your browser.</li>
             </ul>
