@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import JSZip from "jszip";
+import heic2any from "heic2any";
+
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,21 +13,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Upload, X, Download, Loader2, Wand2, FileArchive } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-type MimeOut = "image/jpeg" | "image/webp";
-type PresetId =
-  | "email-1mb"
-  | "email-5mb"
-  | "instagram-post"
-  | "instagram-story"
-  | "linkedin"
-  | "website"
-  | "custom";
+type MimeOut = "image/jpeg" | "image/webp" | "image/avif";
+type PresetId = "email-1mb" | "email-5mb" | "instagram-post" | "instagram-story" | "linkedin" | "website" | "custom";
+
+type BgMode = "white" | "black" | "custom";
 
 interface ImgItem {
   id: string;
-  file: File;
+
+  /** Original file as uploaded */
+  originalFile: File;
+
+  /** File used for decoding/rendering (e.g., HEIC -> PNG) */
+  workingFile: File;
+
   name: string;
   size: number;
+
   previewUrl: string;
   width?: number;
   height?: number;
@@ -58,7 +62,19 @@ function clamp(n: number, min: number, max: number) {
 }
 
 function extFromMime(m: MimeOut) {
-  return m === "image/jpeg" ? "jpg" : "webp";
+  if (m === "image/jpeg") return "jpg";
+  if (m === "image/webp") return "webp";
+  return "avif";
+}
+
+function isHeicLike(file: File) {
+  const name = file.name.toLowerCase();
+  return file.type === "image/heic" || file.type === "image/heif" || name.endsWith(".heic") || name.endsWith(".heif");
+}
+
+function isSvgLike(file: File) {
+  const name = file.name.toLowerCase();
+  return file.type === "image/svg+xml" || name.endsWith(".svg");
 }
 
 async function supportsEncoding(mime: string): Promise<boolean> {
@@ -77,8 +93,8 @@ async function supportsEncoding(mime: string): Promise<boolean> {
   }
 }
 
-async function loadImageFromFile(file: File): Promise<HTMLImageElement> {
-  const url = URL.createObjectURL(file);
+async function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
+  const url = URL.createObjectURL(blob);
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -93,6 +109,10 @@ async function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   });
 }
 
+async function loadImageFromFile(file: File): Promise<HTMLImageElement> {
+  return loadImageFromBlob(file);
+}
+
 type Preset = {
   id: PresetId;
   name: string;
@@ -102,27 +122,74 @@ type Preset = {
 };
 
 const PRESETS: Preset[] = [
-  { id: "email-1mb", name: "Email (≤ 1MB each)", description: "Great for fast attachments", targetBytes: 1 * 1024 * 1024, maxWidth: 1600 },
-  { id: "email-5mb", name: "Email (≤ 5MB each)", description: "Safer for bigger images", targetBytes: 5 * 1024 * 1024, maxWidth: 2400 },
-  { id: "instagram-post", name: "Instagram Post (1080px)", description: "Feeds nicely at 1080px width", targetBytes: 900 * 1024, maxWidth: 1080 },
-  { id: "instagram-story", name: "Instagram Story/Reel (1080px)", description: "Fits story width (no crop)", targetBytes: 1200 * 1024, maxWidth: 1080 },
-  { id: "linkedin", name: "LinkedIn Post (1200px)", description: "Sharp for LinkedIn feed", targetBytes: 1200 * 1024, maxWidth: 1200 },
-  { id: "website", name: "Website (1600px)", description: "Good for blogs/hero images", targetBytes: 1600 * 1024, maxWidth: 1600 },
+  {
+    id: "email-1mb",
+    name: "Email (≤ 1MB each)",
+    description: "Great for fast attachments",
+    targetBytes: 1 * 1024 * 1024,
+    maxWidth: 1600,
+  },
+  {
+    id: "email-5mb",
+    name: "Email (≤ 5MB each)",
+    description: "Safer for bigger images",
+    targetBytes: 5 * 1024 * 1024,
+    maxWidth: 2400,
+  },
+  {
+    id: "instagram-post",
+    name: "Instagram Post (1080px)",
+    description: "Feeds nicely at 1080px width",
+    targetBytes: 900 * 1024,
+    maxWidth: 1080,
+  },
+  {
+    id: "instagram-story",
+    name: "Instagram Story/Reel (1080px)",
+    description: "Fits story width (no crop)",
+    targetBytes: 1200 * 1024,
+    maxWidth: 1080,
+  },
+  {
+    id: "linkedin",
+    name: "LinkedIn Post (1200px)",
+    description: "Sharp for LinkedIn feed",
+    targetBytes: 1200 * 1024,
+    maxWidth: 1200,
+  },
+  {
+    id: "website",
+    name: "Website (1600px)",
+    description: "Good for blogs/hero images",
+    targetBytes: 1600 * 1024,
+    maxWidth: 1600,
+  },
   { id: "custom", name: "Custom", description: "Pick your own size + quality + target", maxWidth: 1600 },
 ];
 
-async function canvasEncode(
-  img: HTMLImageElement,
-  outType: MimeOut,
-  width: number,
-  height: number,
-  quality01: number
-): Promise<Blob> {
+async function canvasEncode(params: {
+  img: HTMLImageElement;
+  outType: MimeOut;
+  width: number;
+  height: number;
+  quality01: number;
+  jpgBgMode: BgMode;
+  jpgBgCustom: string;
+}): Promise<Blob> {
+  const { img, outType, width, height, quality01, jpgBgMode, jpgBgCustom } = params;
+
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(width));
   canvas.height = Math.max(1, Math.round(height));
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas not supported");
+
+  // If exporting JPEG, paint a background first (JPEG has no alpha)
+  if (outType === "image/jpeg") {
+    const bg = jpgBgMode === "white" ? "#ffffff" : jpgBgMode === "black" ? "#000000" : jpgBgCustom || "#ffffff";
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
 
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
@@ -130,7 +197,7 @@ async function canvasEncode(
     canvas.toBlob(
       (b) => resolve(b),
       outType,
-      outType === "image/jpeg" || outType === "image/webp" ? quality01 : undefined
+      outType === "image/jpeg" || outType === "image/webp" || outType === "image/avif" ? quality01 : undefined,
     );
   });
 
@@ -150,14 +217,17 @@ async function compressToTarget(params: {
   targetBytes?: number;
   minQ: number;
   maxQ: number;
+  jpgBgMode: BgMode;
+  jpgBgCustom: string;
 }): Promise<{ blob: Blob; w: number; h: number; q: number }> {
-  const { img, outType, origW, origH, maxWidth, targetBytes, minQ, maxQ } = params;
+  const { img, outType, origW, origH, maxWidth, targetBytes, minQ, maxQ, jpgBgMode, jpgBgCustom } = params;
 
   const aspect = origH / origW;
   let w = Math.min(origW, maxWidth);
   let h = Math.round(w * aspect);
 
-  const encodeAt = async (q: number) => canvasEncode(img, outType, w, h, q);
+  const encodeAt = async (q: number) =>
+    canvasEncode({ img, outType, width: w, height: h, quality01: q, jpgBgMode, jpgBgCustom });
 
   if (!targetBytes) {
     const blob = await encodeAt(maxQ);
@@ -190,25 +260,40 @@ async function compressToTarget(params: {
     h = Math.round(w * aspect);
 
     if (w <= 340) {
-      const blob = await canvasEncode(img, outType, w, h, minQ);
+      const blob = await canvasEncode({
+        img,
+        outType,
+        width: w,
+        height: h,
+        quality01: minQ,
+        jpgBgMode,
+        jpgBgCustom,
+      });
       return { blob, w, h, q: minQ };
     }
   }
 
-  const blob = await canvasEncode(img, outType, w, h, minQ);
+  const blob = await canvasEncode({
+    img,
+    outType,
+    width: w,
+    height: h,
+    quality01: minQ,
+    jpgBgMode,
+    jpgBgCustom,
+  });
+
   return { blob, w, h, q: minQ };
 }
 
 /**
  * Allocate a total size budget across images.
- * - By default uses original file size weights
- * - Guarantees a minimum budget per image so tiny allocations don’t break everything
  */
 function allocateBudgets(params: {
   items: ImgItem[];
   totalBytes: number;
   minPerImageBytes: number;
-  perImageCapBytes?: number; // optional cap (like preset targetBytes)
+  perImageCapBytes?: number;
 }): number[] {
   const { items, totalBytes, minPerImageBytes, perImageCapBytes } = params;
 
@@ -221,14 +306,11 @@ function allocateBudgets(params: {
   const totalWeight = items.reduce((acc, it) => acc + Math.max(1, it.size), 0);
   let budgets = items.map((it) => (effectiveTotal * Math.max(1, it.size)) / totalWeight);
 
-  // apply caps and mins
   budgets = budgets.map((b) => clamp(b, minPerImageBytes, perImageCapBytes ?? Number.POSITIVE_INFINITY));
 
-  // normalize to totalBytes if we exceeded due to mins/caps
   const sum = budgets.reduce((a, b) => a + b, 0);
   if (sum <= totalBytes) return budgets;
 
-  // if over, scale down but keep minimums
   const fixedMin = n * minPerImageBytes;
   const remaining = Math.max(0, totalBytes - fixedMin);
   const variable = budgets.map((b) => Math.max(0, b - minPerImageBytes));
@@ -249,6 +331,11 @@ export default function ImageCompressor() {
 
   const [outType, setOutType] = useState<MimeOut>("image/webp");
   const [webpSupported, setWebpSupported] = useState(true);
+  const [avifSupported, setAvifSupported] = useState(false);
+
+  // JPG background (only relevant when output is JPG)
+  const [jpgBgMode, setJpgBgMode] = useState<BgMode>("white");
+  const [jpgBgCustom, setJpgBgCustom] = useState<string>("#ffffff");
 
   // custom controls
   const [customTargetMB, setCustomTargetMB] = useState<number>(1);
@@ -257,56 +344,115 @@ export default function ImageCompressor() {
   const [maxQuality, setMaxQuality] = useState<number>(90);
   const [renameToCompressed, setRenameToCompressed] = useState(true);
 
-  // NEW: total limit mode (email-friendly)
+  // total limit mode
   const [fitTotalLimit, setFitTotalLimit] = useState<boolean>(false);
   const [totalLimitMB, setTotalLimitMB] = useState<number>(10);
 
   useMemo(() => {
     (async () => {
       const w = await supportsEncoding("image/webp");
+      const a = await supportsEncoding("image/avif");
       setWebpSupported(w);
-      if (!w) setOutType("image/jpeg");
+      setAvifSupported(a);
+
+      if (!w && outType === "image/webp") setOutType("image/jpeg");
+      if (!a && outType === "image/avif") setOutType(w ? "image/webp" : "image/jpeg");
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
-      const allowed = acceptedFiles.filter(
-        (f) =>
-          ["image/jpeg", "image/png", "image/webp", "image/avif"].includes(f.type) ||
-          /\.(jpg|jpeg|png|webp|avif)$/i.test(f.name)
-      );
+      const allowed = acceptedFiles.filter((f) => {
+        const nameOk = /\.(jpg|jpeg|png|webp|avif|bmp|svg|ico|heic|heif)$/i.test(f.name);
+        const typeOk = [
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "image/avif",
+          "image/bmp",
+          "image/svg+xml",
+          "image/x-icon",
+          "image/vnd.microsoft.icon",
+          "image/heic",
+          "image/heif",
+        ].includes(f.type);
+
+        return typeOk || nameOk;
+      });
 
       if (allowed.length === 0) {
         toast({
           title: "Upload images only",
-          description: "Supported: JPG, PNG, WebP, AVIF",
+          description: "Supported: JPG, PNG, WebP, AVIF, HEIC/HEIF, BMP, SVG, ICO",
           variant: "destructive",
         });
         return;
       }
 
-      const newItems: ImgItem[] = allowed.map((file) => ({
-        id: safeId(),
-        file,
-        name: file.name,
-        size: file.size,
-        previewUrl: URL.createObjectURL(file),
-      }));
+      const newItems: ImgItem[] = [];
+
+      for (const file of allowed) {
+        let workingFile = file;
+
+        // HEIC/HEIF -> PNG for browser compatibility
+        if (isHeicLike(file)) {
+          try {
+            const converted = await heic2any({
+              blob: file,
+              toType: "image/png",
+              quality: 0.92,
+            });
+            const blob = Array.isArray(converted) ? converted[0] : converted;
+            const base = file.name.replace(/\.[^.]+$/, "");
+            workingFile = new File([blob], `${base}.png`, { type: "image/png" });
+          } catch {
+            toast({
+              title: "HEIC/HEIF decode failed",
+              description: `Could not decode "${file.name}" in this browser.`,
+              variant: "destructive",
+            });
+            continue;
+          }
+        }
+
+        const previewUrl = URL.createObjectURL(workingFile);
+
+        newItems.push({
+          id: safeId(),
+          originalFile: file,
+          workingFile,
+          name: file.name,
+          size: file.size,
+          previewUrl,
+        });
+      }
 
       setItems((prev) => [...prev, ...newItems]);
 
+      // Dimensions
       try {
         for (const it of newItems) {
-          const img = await loadImageFromFile(it.file);
+          let img: HTMLImageElement;
+          try {
+            img = await loadImageFromFile(it.workingFile);
+          } catch {
+            if (isSvgLike(it.workingFile)) {
+              const svgText = await it.workingFile.text();
+              const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+              img = await loadImageFromBlob(svgBlob);
+            } else {
+              throw new Error();
+            }
+          }
+
           setItems((prev) => prev.map((p) => (p.id === it.id ? { ...p, width: img.width, height: img.height } : p)));
         }
       } catch {
         // ignore
       }
     },
-    [toast]
+    [toast],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -317,6 +463,12 @@ export default function ImageCompressor() {
       "image/png": [".png"],
       "image/webp": [".webp"],
       "image/avif": [".avif"],
+      "image/bmp": [".bmp"],
+      "image/svg+xml": [".svg"],
+      "image/x-icon": [".ico"],
+      "image/vnd.microsoft.icon": [".ico"],
+      "image/heic": [".heic"],
+      "image/heif": [".heif"],
     },
   });
 
@@ -345,7 +497,15 @@ export default function ImageCompressor() {
     if (outType === "image/webp" && !webpSupported) {
       toast({
         title: "WebP not supported here",
-        description: "Switch output to JPG.",
+        description: "Switch output to JPG or AVIF.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (outType === "image/avif" && !avifSupported) {
+      toast({
+        title: "AVIF not supported here",
+        description: "Switch output to WebP or JPG.",
         variant: "destructive",
       });
       return;
@@ -354,32 +514,27 @@ export default function ImageCompressor() {
     setCompressing(true);
 
     try {
-      // base settings
       const perImageTargetBytes =
         presetId === "custom" ? Math.max(0, customTargetMB) * 1024 * 1024 : preset.targetBytes;
 
-      const maxWidth =
-        presetId === "custom" ? Math.max(320, customMaxWidth) : preset.maxWidth ?? 1600;
+      const maxWidth = presetId === "custom" ? Math.max(320, customMaxWidth) : (preset.maxWidth ?? 1600);
 
       const minQ = clamp(minQuality / 100, 0.1, 0.95);
       const maxQ = clamp(maxQuality / 100, minQ, 0.98);
 
-      // TOTAL LIMIT MODE budgets
       const totalLimitBytes = Math.max(0.1, totalLimitMB) * 1024 * 1024;
       const useTotal = fitTotalLimit && items.length > 1;
 
-      // allocate initial budgets (best effort)
       let budgets: number[] | null = null;
       if (useTotal) {
         budgets = allocateBudgets({
           items,
           totalBytes: totalLimitBytes,
-          minPerImageBytes: 120 * 1024, // keep at least 120KB per image
-          perImageCapBytes: perImageTargetBytes, // if preset has per-image cap, respect it
+          minPerImageBytes: 120 * 1024,
+          perImageCapBytes: perImageTargetBytes,
         });
       }
 
-      // We may need multiple passes to fit total bytes (because image compressibility varies)
       const MAX_PASSES = useTotal ? 3 : 1;
 
       let lastUpdated: ImgItem[] = items;
@@ -393,14 +548,27 @@ export default function ImageCompressor() {
 
           if (it.outUrl) URL.revokeObjectURL(it.outUrl);
 
-          const img = await loadImageFromFile(it.file);
+          let img: HTMLImageElement;
+          try {
+            img = await loadImageFromFile(it.workingFile);
+          } catch {
+            if (isSvgLike(it.workingFile)) {
+              const svgText = await it.workingFile.text();
+              const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+              img = await loadImageFromBlob(svgBlob);
+            } else {
+              throw new Error(`Could not decode "${it.name}"`);
+            }
+          }
+
           const origW = img.width;
           const origH = img.height;
 
-          const targetForThis =
-            useTotal
-              ? budgets![i] // per-image budget in total mode
-              : (perImageTargetBytes && perImageTargetBytes > 0 ? perImageTargetBytes : undefined);
+          const targetForThis = useTotal
+            ? budgets![i]
+            : perImageTargetBytes && perImageTargetBytes > 0
+              ? perImageTargetBytes
+              : undefined;
 
           const { blob, w, h, q } = await compressToTarget({
             img,
@@ -411,6 +579,8 @@ export default function ImageCompressor() {
             targetBytes: targetForThis,
             minQ,
             maxQ,
+            jpgBgMode,
+            jpgBgCustom,
           });
 
           const base = it.name.replace(/\.[^.]+$/, "");
@@ -435,14 +605,10 @@ export default function ImageCompressor() {
         lastUpdated = updated;
         lastTotalOut = totalOut;
 
-        // If not using total mode, done
         if (!useTotal) break;
-
-        // If fits, done
         if (totalOut <= totalLimitBytes) break;
 
-        // If still too big, scale budgets down proportionally and try again
-        const ratio = (totalLimitBytes / totalOut) * 0.92; // 0.92 = safety margin
+        const ratio = (totalLimitBytes / totalOut) * 0.92;
         budgets = budgets!.map((b) => Math.max(90 * 1024, b * ratio));
       }
 
@@ -458,7 +624,7 @@ export default function ImageCompressor() {
         } else {
           toast({
             title: "Best-effort compression done",
-            description: `Could not fully reach ${totalLimitMB}MB total with current settings. Try lower Max quality or switch to WebP.`,
+            description: `Could not fully reach ${totalLimitMB}MB total with current settings. Try lower Max quality or switch format.`,
             variant: "destructive",
           });
         }
@@ -578,7 +744,9 @@ export default function ImageCompressor() {
               <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-lg font-medium">Drop images here</p>
               <p className="text-sm text-muted-foreground mt-1">or click to browse</p>
-              <p className="text-xs text-muted-foreground mt-3">JPG/PNG/WebP/AVIF supported</p>
+              <p className="text-xs text-muted-foreground mt-3">
+                JPG/PNG/WebP/AVIF + HEIC/HEIF, BMP, SVG, ICO supported
+              </p>
             </div>
           </Card>
 
@@ -609,26 +777,64 @@ export default function ImageCompressor() {
                 </SelectTrigger>
                 <SelectContent>
                   {webpSupported && <SelectItem value="image/webp">WebP (smaller)</SelectItem>}
+                  {avifSupported && <SelectItem value="image/avif">AVIF (smallest)</SelectItem>}
                   <SelectItem value="image/jpeg">JPG (compatible)</SelectItem>
                 </SelectContent>
               </Select>
               {!webpSupported && (
                 <p className="text-xs text-muted-foreground">WebP encoding not supported in this browser.</p>
               )}
+              {!avifSupported && (
+                <p className="text-xs text-muted-foreground">AVIF encoding not supported in this browser.</p>
+              )}
             </div>
 
-            {/* NEW: Total limit mode */}
+            {/* JPG background */}
+            {outType === "image/jpeg" && (
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="space-y-1">
+                  <Label>JPG background (for transparent images)</Label>
+                  <p className="text-xs text-muted-foreground">Prevents black backgrounds when compressing PNG/SVG</p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 items-end">
+                  <div className="space-y-2">
+                    <Label>Background</Label>
+                    <Select value={jpgBgMode} onValueChange={(v) => setJpgBgMode(v as BgMode)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="white">White</SelectItem>
+                        <SelectItem value="black">Black</SelectItem>
+                        <SelectItem value="custom">Custom</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {jpgBgMode === "custom" && (
+                    <div className="space-y-2">
+                      <Label>Custom color</Label>
+                      <Input
+                        value={jpgBgCustom}
+                        onChange={(e) => setJpgBgCustom(e.target.value)}
+                        placeholder="#ffffff"
+                      />
+                      <p className="text-xs text-muted-foreground">Use hex like #ffffff</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Total limit mode */}
             <div className="rounded-lg border p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <Label>Fit ALL images into a total limit</Label>
                   <p className="text-xs text-muted-foreground">Best for email limits (example: 10MB total)</p>
                 </div>
-                <Switch
-                  checked={fitTotalLimit}
-                  onCheckedChange={setFitTotalLimit}
-                  disabled={items.length < 2}
-                />
+                <Switch checked={fitTotalLimit} onCheckedChange={setFitTotalLimit} disabled={items.length < 2} />
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 items-end">
@@ -743,13 +949,7 @@ export default function ImageCompressor() {
             </Button>
           </div>
 
-          <Button
-            onClick={downloadZip}
-            disabled={!outReady || zipping}
-            className="w-full"
-            size="lg"
-            variant="outline"
-          >
+          <Button onClick={downloadZip} disabled={!outReady || zipping} className="w-full" size="lg" variant="outline">
             {zipping ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -829,7 +1029,9 @@ export default function ImageCompressor() {
           <Card className="p-6">
             <h3 className="font-semibold mb-4">What’s new</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• “Fit ALL images into a total limit” (ex: 10MB total for email)</li>
+              <li>• Added HEIC/HEIF (iPhone photos), BMP, SVG, ICO inputs</li>
+              <li>• Added AVIF output option when supported</li>
+              <li>• Added JPG background selector for transparent images</li>
               <li>• Best-effort multiple compression passes to reach the target</li>
               <li>• ZIP download stays client-side</li>
             </ul>
