@@ -34,16 +34,20 @@ export default function PDFToWord() {
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       const file = acceptedFiles[0];
-      if (file && (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"))) {
-        setPdfFile({ file, name: file.name });
-        setProgress(null);
-      } else {
+      if (!file) return;
+
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (!isPdf) {
         toast({
           title: "Only PDFs supported",
           description: "Please upload a .pdf file.",
           variant: "destructive",
         });
+        return;
       }
+
+      setPdfFile({ file, name: file.name });
+      setProgress(null);
     },
     [toast],
   );
@@ -67,27 +71,26 @@ export default function PDFToWord() {
 
     try {
       const arrayBuffer = await pdfFile.file.arrayBuffer();
-
       const loadingTask = (pdfjsLib as any).getDocument({ data: arrayBuffer });
       const pdf = await loadingTask.promise;
 
       const totalPages: number = pdf.numPages;
       setProgress({ current: 0, total: totalPages });
 
-      const paragraphs: Paragraph[] = [];
+      const children: Paragraph[] = [];
 
-      paragraphs.push(
+      // Title + note (honest + free approach)
+      children.push(
         new Paragraph({
           text: baseName(pdfFile.name),
           heading: HeadingLevel.TITLE,
         }),
       );
-
-      paragraphs.push(
+      children.push(
         new Paragraph({
           children: [
             new TextRun({
-              text: "Converted from PDF (text-first). Formatting may differ from the original.",
+              text: "Text-first conversion (free, runs in your browser). Layout may differ from the original PDF.",
               italics: true,
             }),
           ],
@@ -100,14 +103,13 @@ export default function PDFToWord() {
         const page = await pdf.getPage(pageNumber);
         const textContent = await page.getTextContent();
 
-        // PDF.js returns items with "str" fragments
         const strings = (textContent.items as any[])
           .map((it) => (typeof it.str === "string" ? it.str : ""))
           .filter(Boolean);
 
         const pageText = strings.join(" ").replace(/\s+/g, " ").trim();
 
-        paragraphs.push(
+        children.push(
           new Paragraph({
             text: `Page ${pageNumber}`,
             heading: HeadingLevel.HEADING_2,
@@ -115,29 +117,38 @@ export default function PDFToWord() {
         );
 
         if (!pageText) {
-          paragraphs.push(
+          children.push(
             new Paragraph({
-              children: [new TextRun({ text: "(No selectable text found on this page.)", italics: true })],
+              children: [
+                new TextRun({
+                  text: "(No selectable text found on this page. If this is a scan, use PDF OCR first.)",
+                  italics: true,
+                }),
+              ],
             }),
           );
         } else {
-          // Split into chunks to avoid absurdly long paragraphs
-          const chunks = pageText.split(/\n{2,}|\r{2,}/g);
+          // Keep it readable: chunk into reasonable paragraph sizes
+          const chunks: string[] = [];
+          const maxLen = 1200;
+          let buf = pageText;
+
+          while (buf.length > maxLen) {
+            const cut = buf.lastIndexOf(" ", maxLen);
+            const idx = cut > 200 ? cut : maxLen;
+            chunks.push(buf.slice(0, idx).trim());
+            buf = buf.slice(idx).trim();
+          }
+          if (buf) chunks.push(buf);
+
           for (const chunk of chunks) {
-            const t = chunk.trim();
-            if (!t) continue;
-            paragraphs.push(new Paragraph({ children: [new TextRun(t)] }));
+            children.push(new Paragraph({ children: [new TextRun(chunk)] }));
           }
         }
       }
 
       const doc = new Document({
-        sections: [
-          {
-            properties: {},
-            children: paragraphs,
-          },
-        ],
+        sections: [{ properties: {}, children }],
       });
 
       const blob = await Packer.toBlob(doc);
@@ -160,7 +171,10 @@ export default function PDFToWord() {
   };
 
   return (
-    <ToolLayout title="PDF to Word" description="Convert PDF documents to editable DOCX files (text-first)">
+    <ToolLayout
+      title="PDF to Word (Text Extract)"
+      description="Extract selectable text from a PDF and download an editable DOCX — free and client-side."
+    >
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">
           <Card className="p-6">
@@ -206,7 +220,7 @@ export default function PDFToWord() {
             ) : (
               <>
                 <Download className="h-4 w-4 mr-2" />
-                Convert to Word (DOCX)
+                Download DOCX
               </>
             )}
           </Button>
@@ -220,7 +234,7 @@ export default function PDFToWord() {
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                   1
                 </span>
-                <span>Upload your PDF file</span>
+                <span>Upload a PDF</span>
               </li>
               <li className="flex gap-3">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
@@ -232,7 +246,7 @@ export default function PDFToWord() {
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                   3
                 </span>
-                <span>We generate a DOCX you can edit in Word/Google Docs</span>
+                <span>Download an editable DOCX</span>
               </li>
             </ol>
           </Card>
@@ -240,9 +254,9 @@ export default function PDFToWord() {
           <Card className="p-6 bg-muted/50">
             <h3 className="font-semibold mb-2">Notes</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Best for PDFs that contain real text (not scanned images)</li>
-              <li>• Complex layouts may not be preserved</li>
-              <li>• For scanned PDFs, use OCR first (PDF OCR tool)</li>
+              <li>• Best for PDFs with real text (not scanned images)</li>
+              <li>• Layout/tables may not match the original PDF</li>
+              <li>• For scanned PDFs, run OCR first</li>
             </ul>
           </Card>
         </div>
