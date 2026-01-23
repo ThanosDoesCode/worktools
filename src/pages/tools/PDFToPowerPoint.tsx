@@ -141,7 +141,7 @@ export default function PDFToPowerPoint() {
       }
 
       // Export PPTX
-      const blob: Blob = await pptx.writeFile({ outputType: "blob" } as any);
+      const blob = await pptx.write({ outputType: "blob" }) as Blob;
       saveAs(blob, `${baseName(pdfFile.name)}.pptx`);
 
       toast({
