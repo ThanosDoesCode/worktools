@@ -468,6 +468,18 @@ export default function ImageConverter() {
                           {it.width && it.height ? `${it.width}×${it.height} • ` : ""}
                           {formatBytes(it.size)}
                           {it.convertedSize ? ` → ${formatBytes(it.convertedSize)}` : ""}
+                          {it.convertedSize && (
+                            <span className={`ml-1 font-medium ${
+                              it.convertedSize < it.size 
+                                ? "text-green-600 dark:text-green-400" 
+                                : it.convertedSize > it.size 
+                                  ? "text-red-600 dark:text-red-400" 
+                                  : "text-muted-foreground"
+                            }`}>
+                              ({it.convertedSize < it.size ? "−" : it.convertedSize > it.size ? "+" : ""}
+                              {Math.abs(Math.round(((it.convertedSize - it.size) / it.size) * 100))}%)
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
