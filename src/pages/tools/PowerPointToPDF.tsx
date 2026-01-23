@@ -132,7 +132,6 @@ export default function PowerpointToPDF() {
     <ToolLayout 
       title="PowerPoint to PDF" 
       description="Convert PPT and PPTX presentations to PDF"
-      icon={<Presentation className="h-5 w-5" />}
     >
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Input Panel */}

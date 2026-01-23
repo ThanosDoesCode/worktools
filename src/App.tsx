@@ -16,7 +16,7 @@ import PricingCalculator from "./pages/tools/PricingCalculator";
 import CashFlowForecast from "./pages/tools/CashFlowForecast";
 import HeadcountCostCalculator from "./pages/tools/HeadcountCostCalculator";
 import ImageToPDF from "./pages/tools/ImageToPDF";
-import PowerpointToPDF from "./pages/tools/PowerpointToPDF";
+import PowerPointToPDF from "./pages/tools/PowerPointToPDF";
 
 const queryClient = new QueryClient();
 
@@ -39,7 +39,7 @@ const App = () => (
           <Route path="/tools/cash-flow-forecast" element={<CashFlowForecast />} />
           <Route path="/tools/headcount-cost-calculator" element={<HeadcountCostCalculator />} />
           <Route path="/tools/images-to-pdf" element={<ImageToPDF />} />
-          <Route path="/tools/powerpoint-to-pdf" element={<PowerpointToPDF />} />
+          <Route path="/tools/powerpoint-to-pdf" element={<PowerPointToPDF />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
