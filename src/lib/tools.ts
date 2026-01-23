@@ -263,6 +263,15 @@ export const tools: Tool[] = [
     keywords: ["pdf", "merge", "combine", "join", "documents"],
     icon: "Merge",
   },
+  {
+    id: "29",
+    name: "Split PDF",
+    description: "Split a PDF by page ranges or every N pages",
+    category: "pdfs",
+    slug: "split-pdf",
+    keywords: ["pdf", "split", "pages", "ranges", "extract", "zip"],
+    icon: "Scissors",
+  },
 ];
 
 export const categories = [

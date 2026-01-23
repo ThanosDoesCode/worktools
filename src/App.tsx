@@ -28,6 +28,7 @@ import PDFToEPUB from "./pages/tools/PDFToEPUB";
 import PDFToSVG from "./pages/tools/PDFToSVG";
 import PDFOCR from "./pages/tools/PDFOCR";
 import MergePDFs from "./pages/tools/MergePDFs";
+import SplitPDF from "./pages/tools/SplitPDF";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,7 @@ const App = () => (
           <Route path="/tools/pdf-to-svg" element={<PDFToSVG />} />
           <Route path="/tools/pdf-ocr" element={<PDFOCR />} />
           <Route path="/tools/merge-pdfs" element={<MergePDFs />} />
+          <Route path="/tools/split-pdf" element={<SplitPDF />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
