@@ -8,11 +8,10 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, X, Download, Image as ImageIcon, Loader2, Wand2, FileArchive } from "lucide-react";
+import { Upload, X, Download, Loader2, Wand2, FileArchive } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type MimeOut = "image/jpeg" | "image/webp";
-
 type PresetId =
   | "email-1mb"
   | "email-5mb"
@@ -38,7 +37,7 @@ interface ImgItem {
   outWidth?: number;
   outHeight?: number;
   qualityUsed?: number;
-  outBlob?: Blob; // <-- added for ZIP
+  outBlob?: Blob;
 }
 
 function safeId() {
@@ -52,6 +51,14 @@ function formatBytes(bytes: number): string {
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
   const value = bytes / Math.pow(k, i);
   return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${sizes[i]}`;
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function extFromMime(m: MimeOut) {
+  return m === "image/jpeg" ? "jpg" : "webp";
 }
 
 async function supportsEncoding(mime: string): Promise<boolean> {
@@ -86,72 +93,22 @@ async function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   });
 }
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function extFromMime(m: MimeOut) {
-  return m === "image/jpeg" ? "jpg" : "webp";
-}
-
 type Preset = {
   id: PresetId;
   name: string;
   description: string;
-  targetBytes?: number; // if present, try to hit size
-  maxWidth?: number; // scale down to this width (keep aspect)
-  exactSize?: { w: number; h: number }; // informational
+  targetBytes?: number; // per-image target
+  maxWidth?: number;
 };
 
 const PRESETS: Preset[] = [
-  {
-    id: "email-1mb",
-    name: "Email (≤ 1MB each)",
-    description: "Good for quick attachments and fast sending",
-    targetBytes: 1 * 1024 * 1024,
-    maxWidth: 1600,
-  },
-  {
-    id: "email-5mb",
-    name: "Email (≤ 5MB each)",
-    description: "Safer for larger images / multiple attachments",
-    targetBytes: 5 * 1024 * 1024,
-    maxWidth: 2400,
-  },
-  {
-    id: "instagram-post",
-    name: "Instagram Post (1080px)",
-    description: "Resizes to ~1080px wide (best practice)",
-    maxWidth: 1080,
-    targetBytes: 900 * 1024,
-  },
-  {
-    id: "instagram-story",
-    name: "Instagram Story/Reel (1080×1920)",
-    description: "Fits to 1080px wide (no cropping)",
-    maxWidth: 1080,
-    targetBytes: 1200 * 1024,
-    exactSize: { w: 1080, h: 1920 },
-  },
-  {
-    id: "linkedin",
-    name: "LinkedIn Post (1200px)",
-    description: "Clean and sharp for LinkedIn feed",
-    maxWidth: 1200,
-    targetBytes: 1200 * 1024,
-  },
-  {
-    id: "website",
-    name: "Website (1600px)",
-    description: "Great quality for hero images / blogs",
-    maxWidth: 1600,
-    targetBytes: 1600 * 1024,
-  },
-  {
-    id: "custom",
-    name: "Custom",
-    description: "Pick your own size + quality + target MB",
-  },
+  { id: "email-1mb", name: "Email (≤ 1MB each)", description: "Great for fast attachments", targetBytes: 1 * 1024 * 1024, maxWidth: 1600 },
+  { id: "email-5mb", name: "Email (≤ 5MB each)", description: "Safer for bigger images", targetBytes: 5 * 1024 * 1024, maxWidth: 2400 },
+  { id: "instagram-post", name: "Instagram Post (1080px)", description: "Feeds nicely at 1080px width", targetBytes: 900 * 1024, maxWidth: 1080 },
+  { id: "instagram-story", name: "Instagram Story/Reel (1080px)", description: "Fits story width (no crop)", targetBytes: 1200 * 1024, maxWidth: 1080 },
+  { id: "linkedin", name: "LinkedIn Post (1200px)", description: "Sharp for LinkedIn feed", targetBytes: 1200 * 1024, maxWidth: 1200 },
+  { id: "website", name: "Website (1600px)", description: "Good for blogs/hero images", targetBytes: 1600 * 1024, maxWidth: 1600 },
+  { id: "custom", name: "Custom", description: "Pick your own size + quality + target", maxWidth: 1600 },
 ];
 
 async function canvasEncode(
@@ -181,6 +138,9 @@ async function canvasEncode(
   return blob;
 }
 
+/**
+ * Hit per-image target size by searching over quality and scaling down if needed.
+ */
 async function compressToTarget(params: {
   img: HTMLImageElement;
   outType: MimeOut;
@@ -188,8 +148,8 @@ async function compressToTarget(params: {
   origH: number;
   maxWidth: number;
   targetBytes?: number;
-  minQ: number; // 0..1
-  maxQ: number; // 0..1
+  minQ: number;
+  maxQ: number;
 }): Promise<{ blob: Blob; w: number; h: number; q: number }> {
   const { img, outType, origW, origH, maxWidth, targetBytes, minQ, maxQ } = params;
 
@@ -223,10 +183,9 @@ async function compressToTarget(params: {
       }
     }
 
-    if (bestBlob) {
-      return { blob: bestBlob, w, h, q: bestQ };
-    }
+    if (bestBlob) return { blob: bestBlob, w, h, q: bestQ };
 
+    // still too big even at low quality -> reduce dimensions and retry
     w = Math.max(320, Math.round(w * 0.85));
     h = Math.round(w * aspect);
 
@@ -238,6 +197,44 @@ async function compressToTarget(params: {
 
   const blob = await canvasEncode(img, outType, w, h, minQ);
   return { blob, w, h, q: minQ };
+}
+
+/**
+ * Allocate a total size budget across images.
+ * - By default uses original file size weights
+ * - Guarantees a minimum budget per image so tiny allocations don’t break everything
+ */
+function allocateBudgets(params: {
+  items: ImgItem[];
+  totalBytes: number;
+  minPerImageBytes: number;
+  perImageCapBytes?: number; // optional cap (like preset targetBytes)
+}): number[] {
+  const { items, totalBytes, minPerImageBytes, perImageCapBytes } = params;
+
+  const n = items.length;
+  if (n === 0) return [];
+
+  const minTotal = n * minPerImageBytes;
+  const effectiveTotal = Math.max(minTotal, totalBytes);
+
+  const totalWeight = items.reduce((acc, it) => acc + Math.max(1, it.size), 0);
+  let budgets = items.map((it) => (effectiveTotal * Math.max(1, it.size)) / totalWeight);
+
+  // apply caps and mins
+  budgets = budgets.map((b) => clamp(b, minPerImageBytes, perImageCapBytes ?? Number.POSITIVE_INFINITY));
+
+  // normalize to totalBytes if we exceeded due to mins/caps
+  const sum = budgets.reduce((a, b) => a + b, 0);
+  if (sum <= totalBytes) return budgets;
+
+  // if over, scale down but keep minimums
+  const fixedMin = n * minPerImageBytes;
+  const remaining = Math.max(0, totalBytes - fixedMin);
+  const variable = budgets.map((b) => Math.max(0, b - minPerImageBytes));
+  const varSum = variable.reduce((a, b) => a + b, 0) || 1;
+
+  return budgets.map((b, i) => minPerImageBytes + (variable[i] / varSum) * remaining);
 }
 
 export default function ImageCompressor() {
@@ -253,11 +250,16 @@ export default function ImageCompressor() {
   const [outType, setOutType] = useState<MimeOut>("image/webp");
   const [webpSupported, setWebpSupported] = useState(true);
 
+  // custom controls
   const [customTargetMB, setCustomTargetMB] = useState<number>(1);
   const [customMaxWidth, setCustomMaxWidth] = useState<number>(1600);
   const [minQuality, setMinQuality] = useState<number>(55);
   const [maxQuality, setMaxQuality] = useState<number>(90);
   const [renameToCompressed, setRenameToCompressed] = useState(true);
+
+  // NEW: total limit mode (email-friendly)
+  const [fitTotalLimit, setFitTotalLimit] = useState<boolean>(false);
+  const [totalLimitMB, setTotalLimitMB] = useState<number>(10);
 
   useMemo(() => {
     (async () => {
@@ -352,59 +354,120 @@ export default function ImageCompressor() {
     setCompressing(true);
 
     try {
-      const updated: ImgItem[] = [];
-
-      const targetBytes =
+      // base settings
+      const perImageTargetBytes =
         presetId === "custom" ? Math.max(0, customTargetMB) * 1024 * 1024 : preset.targetBytes;
 
-      const maxWidth = presetId === "custom" ? Math.max(320, customMaxWidth) : preset.maxWidth ?? 1600;
+      const maxWidth =
+        presetId === "custom" ? Math.max(320, customMaxWidth) : preset.maxWidth ?? 1600;
 
       const minQ = clamp(minQuality / 100, 0.1, 0.95);
       const maxQ = clamp(maxQuality / 100, minQ, 0.98);
 
-      for (const it of items) {
-        if (it.outUrl) URL.revokeObjectURL(it.outUrl);
+      // TOTAL LIMIT MODE budgets
+      const totalLimitBytes = Math.max(0.1, totalLimitMB) * 1024 * 1024;
+      const useTotal = fitTotalLimit && items.length > 1;
 
-        const img = await loadImageFromFile(it.file);
-        const origW = img.width;
-        const origH = img.height;
-
-        const { blob, w, h, q } = await compressToTarget({
-          img,
-          outType,
-          origW,
-          origH,
-          maxWidth,
-          targetBytes: targetBytes && targetBytes > 0 ? targetBytes : undefined,
-          minQ,
-          maxQ,
-        });
-
-        const base = it.name.replace(/\.[^.]+$/, "");
-        const outExt = extFromMime(outType);
-        const outName = renameToCompressed ? `${base}-compressed.${outExt}` : `${base}.${outExt}`;
-
-        const outUrl = URL.createObjectURL(blob);
-
-        updated.push({
-          ...it,
-          outUrl,
-          outName,
-          outType,
-          outSize: blob.size,
-          outWidth: w,
-          outHeight: h,
-          qualityUsed: Math.round(q * 100),
-          outBlob: blob,
+      // allocate initial budgets (best effort)
+      let budgets: number[] | null = null;
+      if (useTotal) {
+        budgets = allocateBudgets({
+          items,
+          totalBytes: totalLimitBytes,
+          minPerImageBytes: 120 * 1024, // keep at least 120KB per image
+          perImageCapBytes: perImageTargetBytes, // if preset has per-image cap, respect it
         });
       }
 
-      setItems(updated);
+      // We may need multiple passes to fit total bytes (because image compressibility varies)
+      const MAX_PASSES = useTotal ? 3 : 1;
 
-      toast({
-        title: "Compressed!",
-        description: "Your compressed images are ready to download.",
-      });
+      let lastUpdated: ImgItem[] = items;
+      let lastTotalOut = Number.POSITIVE_INFINITY;
+
+      for (let pass = 0; pass < MAX_PASSES; pass++) {
+        const updated: ImgItem[] = [];
+
+        for (let i = 0; i < lastUpdated.length; i++) {
+          const it = lastUpdated[i];
+
+          if (it.outUrl) URL.revokeObjectURL(it.outUrl);
+
+          const img = await loadImageFromFile(it.file);
+          const origW = img.width;
+          const origH = img.height;
+
+          const targetForThis =
+            useTotal
+              ? budgets![i] // per-image budget in total mode
+              : (perImageTargetBytes && perImageTargetBytes > 0 ? perImageTargetBytes : undefined);
+
+          const { blob, w, h, q } = await compressToTarget({
+            img,
+            outType,
+            origW,
+            origH,
+            maxWidth,
+            targetBytes: targetForThis,
+            minQ,
+            maxQ,
+          });
+
+          const base = it.name.replace(/\.[^.]+$/, "");
+          const outExt = extFromMime(outType);
+          const outName = renameToCompressed ? `${base}-compressed.${outExt}` : `${base}.${outExt}`;
+          const outUrl = URL.createObjectURL(blob);
+
+          updated.push({
+            ...it,
+            outUrl,
+            outName,
+            outType,
+            outSize: blob.size,
+            outWidth: w,
+            outHeight: h,
+            qualityUsed: Math.round(q * 100),
+            outBlob: blob,
+          });
+        }
+
+        const totalOut = updated.reduce((acc, it) => acc + (it.outSize ?? 0), 0);
+        lastUpdated = updated;
+        lastTotalOut = totalOut;
+
+        // If not using total mode, done
+        if (!useTotal) break;
+
+        // If fits, done
+        if (totalOut <= totalLimitBytes) break;
+
+        // If still too big, scale budgets down proportionally and try again
+        const ratio = (totalLimitBytes / totalOut) * 0.92; // 0.92 = safety margin
+        budgets = budgets!.map((b) => Math.max(90 * 1024, b * ratio));
+      }
+
+      setItems(lastUpdated);
+
+      if (useTotal) {
+        const totalLimitBytes2 = Math.max(0.1, totalLimitMB) * 1024 * 1024;
+        if (lastTotalOut <= totalLimitBytes2) {
+          toast({
+            title: "Compressed to total limit!",
+            description: `All images fit under ${totalLimitMB}MB total.`,
+          });
+        } else {
+          toast({
+            title: "Best-effort compression done",
+            description: `Could not fully reach ${totalLimitMB}MB total with current settings. Try lower Max quality or switch to WebP.`,
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Compressed!",
+          description: "Your compressed images are ready to download.",
+        });
+      }
     } catch (e: any) {
       toast({
         title: "Compression failed",
@@ -457,7 +520,6 @@ export default function ImageCompressor() {
       const folder = zip.folder("compressed-images") ?? zip;
 
       for (const it of ready) {
-        // Ensure unique names inside zip
         let name = it.outName!;
         if (folder.file(name)) {
           const base = name.replace(/\.[^.]+$/, "");
@@ -480,8 +542,8 @@ export default function ImageCompressor() {
       setTimeout(() => URL.revokeObjectURL(url), 1500);
 
       toast({
-        title: "ZIP ready!",
-        description: "Downloaded a ZIP with all compressed images.",
+        title: "ZIP downloaded!",
+        description: "A ZIP with all compressed images was created locally.",
       });
     } catch (e: any) {
       toast({
@@ -493,6 +555,9 @@ export default function ImageCompressor() {
       setZipping(false);
     }
   };
+
+  const outTotal = useMemo(() => items.reduce((acc, it) => acc + (it.outSize ?? 0), 0), [items]);
+  const outReady = items.some((it) => !!it.outBlob);
 
   return (
     <ToolLayout
@@ -552,11 +617,49 @@ export default function ImageCompressor() {
               )}
             </div>
 
+            {/* NEW: Total limit mode */}
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label>Fit ALL images into a total limit</Label>
+                  <p className="text-xs text-muted-foreground">Best for email limits (example: 10MB total)</p>
+                </div>
+                <Switch
+                  checked={fitTotalLimit}
+                  onCheckedChange={setFitTotalLimit}
+                  disabled={items.length < 2}
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 items-end">
+                <div className="space-y-2">
+                  <Label>Total limit (MB)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={totalLimitMB}
+                    onChange={(e) => setTotalLimitMB(Math.max(1, Number(e.target.value)))}
+                    disabled={!fitTotalLimit}
+                  />
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {outReady ? (
+                    <>
+                      Current output total: <span className="font-medium text-foreground">{formatBytes(outTotal)}</span>
+                    </>
+                  ) : (
+                    <>Upload 2+ images to enable</>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Custom options */}
             {presetId === "custom" && (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Target size (MB)</Label>
+                  <Label>Target size per image (MB)</Label>
                   <Input
                     type="number"
                     min={0.1}
@@ -642,7 +745,7 @@ export default function ImageCompressor() {
 
           <Button
             onClick={downloadZip}
-            disabled={items.every((x) => !x.outBlob) || zipping}
+            disabled={!outReady || zipping}
             className="w-full"
             size="lg"
             variant="outline"
@@ -676,6 +779,12 @@ export default function ImageCompressor() {
                   <span className="font-medium text-foreground">{items.length}</span> image
                   {items.length === 1 ? "" : "s"} •{" "}
                   <span className="font-medium text-foreground">{formatBytes(totalSize)}</span>
+                  {outReady && (
+                    <>
+                      {" "}
+                      • output: <span className="font-medium text-foreground">{formatBytes(outTotal)}</span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -718,35 +827,11 @@ export default function ImageCompressor() {
           )}
 
           <Card className="p-6">
-            <h3 className="font-semibold mb-4">How it works</h3>
-            <ol className="space-y-3 text-sm text-muted-foreground">
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                  1
-                </span>
-                <span>Upload images (bulk supported)</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                  2
-                </span>
-                <span>Pick a preset (Email / Instagram / LinkedIn / Web)</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                  3
-                </span>
-                <span>Compress, then download individually or as a ZIP</span>
-              </li>
-            </ol>
-          </Card>
-
-          <Card className="p-6 bg-muted/50">
-            <h3 className="font-semibold mb-2">Notes</h3>
+            <h3 className="font-semibold mb-4">What’s new</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• WebP usually gives the smallest size (if supported).</li>
-              <li>• PNG → JPG/WebP will remove transparency.</li>
-              <li>• ZIP is created locally in your browser.</li>
+              <li>• “Fit ALL images into a total limit” (ex: 10MB total for email)</li>
+              <li>• Best-effort multiple compression passes to reach the target</li>
+              <li>• ZIP download stays client-side</li>
             </ul>
           </Card>
         </div>
