@@ -3,7 +3,7 @@ import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, Table, Loader2 } from "lucide-react";
+import { Upload, X, Download, Table, Loader2, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import * as XLSX from "xlsx";
