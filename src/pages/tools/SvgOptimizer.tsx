@@ -5,7 +5,46 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Upload, X, Download, Shapes, Copy, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { optimize } from "svgo";
+
+// Browser-compatible SVG optimizer using regex transformations
+function optimizeSvg(svg: string): string {
+  return svg
+    // Remove XML declaration
+    .replace(/<\?xml[^?]*\?>/gi, "")
+    // Remove DOCTYPE
+    .replace(/<!DOCTYPE[^>]*>/gi, "")
+    // Remove comments
+    .replace(/<!--[\s\S]*?-->/g, "")
+    // Remove editor metadata (Inkscape, Illustrator, etc.)
+    .replace(/\s*(inkscape|sodipodi|xmlns:inkscape|xmlns:sodipodi)[^=]*="[^"]*"/gi, "")
+    .replace(/\s*(sketch|xmlns:sketch)[^=]*="[^"]*"/gi, "")
+    .replace(/\s*data-name="[^"]*"/gi, "")
+    // Remove empty groups
+    .replace(/<g[^>]*>\s*<\/g>/gi, "")
+    // Remove empty defs
+    .replace(/<defs[^>]*>\s*<\/defs>/gi, "")
+    // Remove metadata element
+    .replace(/<metadata[\s\S]*?<\/metadata>/gi, "")
+    // Remove title and desc if empty or whitespace only
+    .replace(/<title>\s*<\/title>/gi, "")
+    .replace(/<desc>\s*<\/desc>/gi, "")
+    // Collapse whitespace
+    .replace(/>\s+</g, "><")
+    .replace(/\s+/g, " ")
+    // Remove unnecessary spaces in tags
+    .replace(/\s+>/g, ">")
+    .replace(/<\s+/g, "<")
+    // Clean up self-closing tags
+    .replace(/\s+\/>/g, "/>")
+    // Remove default values
+    .replace(/\s+fill-opacity="1"/gi, "")
+    .replace(/\s+stroke-opacity="1"/gi, "")
+    .replace(/\s+opacity="1"/gi, "")
+    // Simplify colors
+    .replace(/#([0-9a-fA-F])\1([0-9a-fA-F])\2([0-9a-fA-F])\3/gi, "#$1$2$3")
+    // Remove trailing/leading whitespace
+    .trim();
+}
 
 export default function SvgOptimizer() {
   const [name, setName] = useState<string | null>(null);
@@ -49,13 +88,11 @@ export default function SvgOptimizer() {
 
     setWorking(true);
     try {
-      const result = optimize(input, { multipass: true });
-      if ("data" in result) {
-        setOutput(result.data);
-        toast({ title: "Optimized", description: "SVG optimized successfully." });
-      } else {
-        throw new Error("SVGO failed to optimize this SVG.");
-      }
+      const result = optimizeSvg(input);
+      setOutput(result);
+      const saved = input.length - result.length;
+      const pct = input.length > 0 ? ((saved / input.length) * 100).toFixed(1) : "0";
+      toast({ title: "Optimized", description: `Reduced by ${saved} chars (${pct}%)` });
     } catch (e: any) {
       toast({ title: "Optimize failed", description: e?.message ? String(e.message) : "Error optimizing SVG.", variant: "destructive" });
     } finally {
@@ -79,7 +116,7 @@ export default function SvgOptimizer() {
   const copyOut = async () => {
     if (!output) return;
     await navigator.clipboard.writeText(output);
-    toast({ title: "Copied", description: "Optimized SVG copied to clipboard." });
+    toast({ title: "Copied", description: "Optimized SVCV copied to clipboard." });
   };
 
   return (
@@ -154,6 +191,12 @@ export default function SvgOptimizer() {
               readOnly
               placeholder="Optimized SVG will appear here"
             />
+
+            {output && (
+              <div className="text-xs text-muted-foreground">
+                Original: {input.length} chars • Optimized: {output.length} chars • Saved: {input.length - output.length} chars
+              </div>
+            )}
           </Card>
         </div>
       </div>
