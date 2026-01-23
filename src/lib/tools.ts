@@ -2,7 +2,7 @@ export interface Tool {
   id: string;
   name: string;
   description: string;
-  category: 'communication' | 'finance' | 'operations' | 'hr';
+  category: 'communication' | 'finance' | 'operations' | 'hr' | 'pdfs';
   slug: string;
   keywords: string[];
   icon: string;
@@ -99,6 +99,70 @@ export const tools: Tool[] = [
     keywords: ['meeting', 'cost', 'time', 'productivity'],
     icon: 'Clock',
   },
+  // PDF Converters
+  {
+    id: '11',
+    name: 'Images to PDF',
+    description: 'Convert JPG, PNG, WebP, HEIC, or TIFF images to PDF',
+    category: 'pdfs',
+    slug: 'images-to-pdf',
+    keywords: ['image', 'jpg', 'png', 'webp', 'heic', 'tiff', 'pdf', 'convert'],
+    icon: 'Image',
+  },
+  {
+    id: '12',
+    name: 'Word to PDF',
+    description: 'Convert DOC and DOCX Word documents to PDF',
+    category: 'pdfs',
+    slug: 'word-to-pdf',
+    keywords: ['word', 'doc', 'docx', 'pdf', 'convert', 'document'],
+    icon: 'FileType',
+  },
+  {
+    id: '13',
+    name: 'PowerPoint to PDF',
+    description: 'Convert PPT and PPTX presentations to PDF',
+    category: 'pdfs',
+    slug: 'powerpoint-to-pdf',
+    keywords: ['powerpoint', 'ppt', 'pptx', 'pdf', 'convert', 'presentation', 'slides'],
+    icon: 'Presentation',
+  },
+  {
+    id: '14',
+    name: 'Excel to PDF',
+    description: 'Convert XLS, XLSX, and CSV spreadsheets to PDF',
+    category: 'pdfs',
+    slug: 'excel-to-pdf',
+    keywords: ['excel', 'xls', 'xlsx', 'csv', 'pdf', 'convert', 'spreadsheet'],
+    icon: 'Table',
+  },
+  {
+    id: '15',
+    name: 'Text to PDF',
+    description: 'Convert TXT, Markdown, or HTML files to PDF',
+    category: 'pdfs',
+    slug: 'text-to-pdf',
+    keywords: ['text', 'txt', 'markdown', 'md', 'html', 'pdf', 'convert'],
+    icon: 'FileCode',
+  },
+  {
+    id: '16',
+    name: 'E-book to PDF',
+    description: 'Convert EPUB and MOBI e-books to PDF',
+    category: 'pdfs',
+    slug: 'ebook-to-pdf',
+    keywords: ['ebook', 'epub', 'mobi', 'kindle', 'pdf', 'convert', 'book'],
+    icon: 'BookOpen',
+  },
+  {
+    id: '17',
+    name: 'Scan to PDF',
+    description: 'Auto-clean and convert scanned images to professional PDFs',
+    category: 'pdfs',
+    slug: 'scan-to-pdf',
+    keywords: ['scan', 'scanner', 'clean', 'document', 'pdf', 'ocr', 'image'],
+    icon: 'ScanLine',
+  },
 ];
 
 export const categories = [
@@ -106,6 +170,7 @@ export const categories = [
   { id: 'finance', name: 'Finance & Pricing', description: 'Calculators for margins, pricing, VAT, and cash flow' },
   { id: 'operations', name: 'Operations', description: 'Tools for day-to-day business operations' },
   { id: 'hr', name: 'HR & Costs', description: 'Employee costs, meetings, and workforce tools' },
+  { id: 'pdfs', name: 'PDFs', description: 'Convert documents, images, and files to PDF' },
 ];
 
 export function searchTools(query: string): Tool[] {
