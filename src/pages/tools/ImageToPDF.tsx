@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { useDropzone } from "react-dropzone";
@@ -123,7 +123,6 @@ Status: ${pdfUrl ? "PDF generated" : "Ready to convert"}`;
     <ToolLayout
       title="Images to PDF"
       description="Convert JPG, PNG, WebP, HEIC, or TIFF images to PDF"
-      icon={<FileText className="h-5 w-5" />}
     >
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Input Panel */}
