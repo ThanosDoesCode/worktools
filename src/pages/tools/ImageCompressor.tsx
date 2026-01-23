@@ -21,15 +21,11 @@ type BgMode = "white" | "black" | "custom";
 interface ImgItem {
   id: string;
 
-  /** Original file as uploaded */
   originalFile: File;
-
-  /** File used for decoding/rendering (e.g., HEIC -> PNG) */
   workingFile: File;
 
   name: string;
   size: number;
-
   previewUrl: string;
   width?: number;
   height?: number;
@@ -184,7 +180,6 @@ async function canvasEncode(params: {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas not supported");
 
-  // If exporting JPEG, paint a background first (JPEG has no alpha)
   if (outType === "image/jpeg") {
     const bg = jpgBgMode === "white" ? "#ffffff" : jpgBgMode === "black" ? "#000000" : jpgBgCustom || "#ffffff";
     ctx.fillStyle = bg;
@@ -205,9 +200,6 @@ async function canvasEncode(params: {
   return blob;
 }
 
-/**
- * Hit per-image target size by searching over quality and scaling down if needed.
- */
 async function compressToTarget(params: {
   img: HTMLImageElement;
   outType: MimeOut;
@@ -255,7 +247,6 @@ async function compressToTarget(params: {
 
     if (bestBlob) return { blob: bestBlob, w, h, q: bestQ };
 
-    // still too big even at low quality -> reduce dimensions and retry
     w = Math.max(320, Math.round(w * 0.85));
     h = Math.round(w * aspect);
 
@@ -286,9 +277,6 @@ async function compressToTarget(params: {
   return { blob, w, h, q: minQ };
 }
 
-/**
- * Allocate a total size budget across images.
- */
 function allocateBudgets(params: {
   items: ImgItem[];
   totalBytes: number;
@@ -333,18 +321,15 @@ export default function ImageCompressor() {
   const [webpSupported, setWebpSupported] = useState(true);
   const [avifSupported, setAvifSupported] = useState(false);
 
-  // JPG background (only relevant when output is JPG)
   const [jpgBgMode, setJpgBgMode] = useState<BgMode>("white");
   const [jpgBgCustom, setJpgBgCustom] = useState<string>("#ffffff");
 
-  // custom controls
   const [customTargetMB, setCustomTargetMB] = useState<number>(1);
   const [customMaxWidth, setCustomMaxWidth] = useState<number>(1600);
   const [minQuality, setMinQuality] = useState<number>(55);
   const [maxQuality, setMaxQuality] = useState<number>(90);
   const [renameToCompressed, setRenameToCompressed] = useState(true);
 
-  // total limit mode
   const [fitTotalLimit, setFitTotalLimit] = useState<boolean>(false);
   const [totalLimitMB, setTotalLimitMB] = useState<number>(10);
 
@@ -395,7 +380,6 @@ export default function ImageCompressor() {
       for (const file of allowed) {
         let workingFile = file;
 
-        // HEIC/HEIF -> PNG for browser compatibility
         if (isHeicLike(file)) {
           try {
             const converted = await heic2any({
@@ -430,7 +414,6 @@ export default function ImageCompressor() {
 
       setItems((prev) => [...prev, ...newItems]);
 
-      // Dimensions
       try {
         for (const it of newItems) {
           let img: HTMLImageElement;
@@ -789,7 +772,6 @@ export default function ImageCompressor() {
               )}
             </div>
 
-            {/* JPG background */}
             {outType === "image/jpeg" && (
               <div className="rounded-lg border p-4 space-y-3">
                 <div className="space-y-1">
@@ -938,7 +920,25 @@ export default function ImageCompressor() {
             </Button>
 
             <Button
-              onClick={downloadAll}
+              onClick={() => {
+                const ready = items.filter((x) => x.outUrl && x.outName);
+                if (ready.length === 0) {
+                  toast({
+                    title: "Nothing to download",
+                    description: "Compress your images first.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                ready.forEach((it) => {
+                  const a = document.createElement("a");
+                  a.href = it.outUrl!;
+                  a.download = it.outName!;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                });
+              }}
               disabled={items.every((x) => !x.outUrl)}
               variant="secondary"
               className="w-full"
@@ -1027,13 +1027,38 @@ export default function ImageCompressor() {
           )}
 
           <Card className="p-6">
-            <h3 className="font-semibold mb-4">What’s new</h3>
+            <h3 className="font-semibold mb-4">How it works</h3>
+            <ol className="space-y-3 text-sm text-muted-foreground">
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  1
+                </span>
+                <span>Upload one or more images (including HEIC/HEIF, SVG, ICO)</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  2
+                </span>
+                <span>Choose a preset, output format, and quality limits (optional total size limit)</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  3
+                </span>
+                <span>Compress and download — runs locally in your browser</span>
+              </li>
+            </ol>
+          </Card>
+
+          <Card className="p-6 bg-muted/50">
+            <h3 className="font-semibold mb-2">Notes</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Added HEIC/HEIF (iPhone photos), BMP, SVG, ICO inputs</li>
-              <li>• Added AVIF output option when supported</li>
-              <li>• Added JPG background selector for transparent images</li>
-              <li>• Best-effort multiple compression passes to reach the target</li>
-              <li>• ZIP download stays client-side</li>
+              <li>• PNG/SVG can have transparency. JPG does not (choose a background above).</li>
+              <li>• AVIF/WebP encoding depends on your browser.</li>
+              <li>• HEIC/HEIF is decoded locally using a browser-side converter.</li>
+              <li>• SVG is rasterized (converted to pixels) when compressing.</li>
+              <li>• ZIP download stays client-side.</li>
+              <li>• No files are uploaded anywhere.</li>
             </ul>
           </Card>
         </div>
