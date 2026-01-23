@@ -1,12 +1,13 @@
 import { categories, getToolsByCategory } from '@/lib/tools';
 import { ToolCard } from '@/components/ui/tool-card';
-import { Mail, DollarSign, Settings, Users } from 'lucide-react';
+import { Mail, DollarSign, Settings, Users, FileText } from 'lucide-react';
 
 const categoryIcons: Record<string, React.ReactNode> = {
   communication: <Mail className="h-5 w-5" />,
   finance: <DollarSign className="h-5 w-5" />,
   operations: <Settings className="h-5 w-5" />,
   hr: <Users className="h-5 w-5" />,
+  pdfs: <FileText className="h-5 w-5" />,
 };
 
 const categoryColors: Record<string, string> = {
@@ -14,6 +15,7 @@ const categoryColors: Record<string, string> = {
   finance: 'bg-success-light text-success',
   operations: 'bg-accent text-accent-foreground',
   hr: 'bg-warning-light text-warning',
+  pdfs: 'bg-primary/10 text-primary',
 };
 
 export function CategorySection() {
