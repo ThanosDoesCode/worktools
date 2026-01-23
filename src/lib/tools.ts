@@ -312,7 +312,7 @@ export const tools: Tool[] = [
   },
 
   {
-    id: 32,
+    id: "32",
     name: "Compress PDF",
     description:
       "Compress PDFs locally in your browser — Safe Optimize or Strong Compress with DPI + quality controls.",
