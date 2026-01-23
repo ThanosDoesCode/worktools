@@ -172,6 +172,15 @@ export const tools: Tool[] = [
     icon: "ScanLine",
   },
   {
+    id: "33",
+    name: "Organize PDF",
+    description: "Reorder, rotate, or delete pages in your PDF — client-side",
+    category: "pdfs",
+    slug: "organize-pdf",
+    keywords: ["organize", "pdf", "reorder", "rotate", "delete", "pages", "rearrange"],
+    icon: "Layers",
+  },
+  {
     id: "28",
     name: "Merge PDFs",
     description: "Combine multiple PDF files into one — client-side",
