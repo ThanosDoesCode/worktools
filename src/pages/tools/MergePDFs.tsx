@@ -100,7 +100,7 @@ export default function MergePDFs() {
       }
 
       const mergedBytes = await mergedPdf.save();
-      const blob = new Blob([mergedBytes], { type: "application/pdf" });
+      const blob = new Blob([new Uint8Array(mergedBytes)], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
 
       const filename = `merged-${new Date().toISOString().slice(0, 10)}.pdf`;
