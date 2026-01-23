@@ -59,7 +59,7 @@ export default function WordToPDF() {
       try {
         const arrayBuffer = await file.arrayBuffer();
 
-        // Convert DOCX -> HTML (preserves basic styling)
+        // DOCX -> HTML (preserves basic styling)
         const result = await mammoth.convertToHtml(
           { arrayBuffer },
           {
@@ -73,7 +73,6 @@ export default function WordToPDF() {
           },
         );
 
-        // Mammoth output is safe-ish, but we still keep it inside our own container
         setPreviewHtml(result.value || "");
 
         if (!result.value) {
@@ -111,105 +110,121 @@ export default function WordToPDF() {
 
   const convertNow = async () => {
     if (!docx || !previewHtml) return;
-
     setConverting(true);
 
+    // Offscreen container for consistent rendering
+    const container = document.createElement("div");
+    container.style.position = "fixed";
+    container.style.left = "-10000px";
+    container.style.top = "0";
+    container.style.width = "794px"; // ~A4 at 96dpi
+    container.style.background = "white";
+    container.style.color = "black";
+    container.style.padding = "48px";
+    container.style.boxSizing = "border-box";
+    container.style.overflow = "visible";
+    container.style.height = "auto";
+
+    // Better print-like styling + page-break hints
+    container.innerHTML = `
+      <style>
+        * { box-sizing: border-box; }
+        body { margin:0; }
+        .doc {
+          font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", sans-serif;
+          font-size: 14px;
+          line-height: 1.6;
+        }
+        h1 { font-size: 26px; margin: 18px 0 10px; line-height: 1.2; }
+        h2 { font-size: 20px; margin: 16px 0 8px; line-height: 1.25; }
+        h3 { font-size: 16px; margin: 14px 0 6px; line-height: 1.3; }
+        p { margin: 0 0 10px; }
+        ul, ol { margin: 0 0 10px 18px; padding: 0; }
+        li { margin: 0 0 6px; break-inside: avoid; page-break-inside: avoid; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; break-inside: avoid; page-break-inside: avoid; }
+        td, th { border: 1px solid #ddd; padding: 6px; vertical-align: top; }
+        a { color: #0b57d0; text-decoration: underline; }
+        img { max-width: 100%; height: auto; display:block; margin: 10px 0; break-inside: avoid; page-break-inside: avoid; }
+        figure, pre, blockquote { break-inside: avoid; page-break-inside: avoid; }
+        blockquote { border-left: 3px solid #ddd; margin: 10px 0; padding-left: 10px; color: #444; }
+        /* Keep headings with what follows */
+        h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+      </style>
+      <div class="doc">${previewHtml}</div>
+    `;
+
+    document.body.appendChild(container);
+
     try {
-      // Create an offscreen container to render HTML consistently
-      const container = document.createElement("div");
-      container.style.position = "fixed";
-      container.style.left = "-10000px";
-      container.style.top = "0";
-      container.style.width = "794px"; // ~A4 at 96dpi
-      container.style.background = "white";
-      container.style.color = "black";
-      container.style.padding = "48px";
-      container.style.boxSizing = "border-box";
+      async function capturePagesToPdf(root: HTMLDivElement, filename: string) {
+        const pdf = new jsPDF("p", "pt", "a4");
+        const pageWidthPt = pdf.internal.pageSize.getWidth();
+        const pageHeightPt = pdf.internal.pageSize.getHeight();
 
-      // Basic “document-like” styling
-      container.innerHTML = `
-        <style>
-          * { box-sizing: border-box; }
-          body { margin:0; }
-          .doc {
-            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", sans-serif;
-            font-size: 14px;
-            line-height: 1.6;
+        const pageWidthPx = root.clientWidth; // 794px
+        const pageHeightPx = Math.floor((pageWidthPx * pageHeightPt) / pageWidthPt);
+
+        const docEl = root.querySelector(".doc") as HTMLDivElement | null;
+        if (!docEl) throw new Error("Missing .doc container");
+
+        const blocks = Array.from(docEl.children) as HTMLElement[];
+        if (blocks.length === 0) throw new Error("No content to convert");
+
+        const pageWrap = document.createElement("div");
+        pageWrap.className = "pagewrap";
+        pageWrap.style.width = "100%";
+
+        docEl.innerHTML = "";
+        docEl.appendChild(pageWrap);
+
+        let pageIndex = 0;
+        const fits = () => pageWrap.scrollHeight <= pageHeightPx;
+
+        const flushPage = async () => {
+          const canvas = await html2canvas(root, {
+            scale: 2,
+            backgroundColor: "#ffffff",
+            useCORS: true,
+            windowWidth: pageWidthPx,
+          });
+
+          const imgData = canvas.toDataURL("image/jpeg", 0.92);
+
+          if (pageIndex > 0) pdf.addPage();
+          pdf.addImage(imgData, "JPEG", 0, 0, pageWidthPt, pageHeightPt);
+
+          pageIndex++;
+        };
+
+        let currentBlocks: HTMLElement[] = [];
+
+        for (const block of blocks) {
+          pageWrap.appendChild(block);
+          currentBlocks.push(block);
+
+          if (!fits()) {
+            // Remove overflow block and render current page
+            pageWrap.removeChild(block);
+            currentBlocks.pop();
+
+            // If page is empty (single huge element), render it anyway
+            await flushPage();
+
+            // Start new page with overflow block
+            pageWrap.innerHTML = "";
+            pageWrap.appendChild(block);
+            currentBlocks = [block];
           }
-          h1 { font-size: 26px; margin: 18px 0 10px; line-height: 1.2; }
-          h2 { font-size: 20px; margin: 16px 0 8px; line-height: 1.25; }
-          h3 { font-size: 16px; margin: 14px 0 6px; line-height: 1.3; }
-          p { margin: 0 0 10px; }
-          ul, ol { margin: 0 0 10px 18px; padding: 0; }
-          li { margin: 0 0 6px; }
-          table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-          td, th { border: 1px solid #ddd; padding: 6px; vertical-align: top; }
-          a { color: #0b57d0; text-decoration: underline; }
-          img { max-width: 100%; height: auto; }
-          blockquote { border-left: 3px solid #ddd; margin: 10px 0; padding-left: 10px; color: #444; }
-        </style>
-        <div class="doc">${previewHtml}</div>
-      `;
+        }
 
-      document.body.appendChild(container);
+        if (currentBlocks.length > 0) {
+          await flushPage();
+        }
 
-      // Render to canvas
-      const canvas = await html2canvas(container, {
-        scale: 2, // sharper
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        windowWidth: 794,
-      });
-
-      // Remove offscreen container
-      container.remove();
-
-      // Create PDF (A4)
-      const pdf = new jsPDF("p", "pt", "a4");
-      const pageWidthPt = pdf.internal.pageSize.getWidth();
-      const pageHeightPt = pdf.internal.pageSize.getHeight();
-
-      // Convert canvas pixels -> "page slice height in pixels" based on A4 ratio
-      const pageHeightPx = Math.floor((canvas.width * pageHeightPt) / pageWidthPt);
-
-      let pageIndex = 0;
-      for (let y = 0; y < canvas.height; y += pageHeightPx) {
-        // Create a slice canvas for this page
-        const sliceCanvas = document.createElement("canvas");
-        sliceCanvas.width = canvas.width;
-        sliceCanvas.height = Math.min(pageHeightPx, canvas.height - y);
-
-        const sliceCtx = sliceCanvas.getContext("2d");
-        if (!sliceCtx) throw new Error("Could not create slice canvas context.");
-
-        // Draw part of the big canvas onto the slice
-        sliceCtx.drawImage(
-          canvas,
-          0,
-          y,
-          sliceCanvas.width,
-          sliceCanvas.height, // source rect
-          0,
-          0,
-          sliceCanvas.width,
-          sliceCanvas.height, // dest rect
-        );
-
-        // Use JPEG to reduce size + avoid transparency issues
-        const imgData = sliceCanvas.toDataURL("image/jpeg", 0.92);
-
-        if (pageIndex > 0) pdf.addPage();
-
-        // Fit slice to PDF page
-        const imgWidthPt = pageWidthPt;
-        const imgHeightPt = (sliceCanvas.height * imgWidthPt) / sliceCanvas.width;
-
-        pdf.addImage(imgData, "JPEG", 0, 0, imgWidthPt, imgHeightPt);
-
-        pageIndex++;
+        pdf.save(filename);
       }
 
-      pdf.save(`${baseName(docx.name)}.pdf`);
+      await capturePagesToPdf(container, `${baseName(docx.name)}.pdf`);
 
       toast({ title: "Converted!", description: "Your PDF has been downloaded." });
     } catch (e: any) {
@@ -219,6 +234,7 @@ export default function WordToPDF() {
         variant: "destructive",
       });
     } finally {
+      container.remove();
       setConverting(false);
     }
   };
@@ -226,6 +242,7 @@ export default function WordToPDF() {
   return (
     <ToolLayout title="Word to PDF" description="Convert DOCX to a good-looking PDF (client-side, best-effort).">
       <div className="grid lg:grid-cols-2 gap-8">
+        {/* Left */}
         <div className="space-y-6">
           <Card className="p-6">
             <div
@@ -274,6 +291,7 @@ export default function WordToPDF() {
           </Button>
         </div>
 
+        {/* Right */}
         <div className="space-y-6">
           <Card className="p-6">
             <h3 className="font-semibold mb-4">Preview (best-effort)</h3>
@@ -289,9 +307,9 @@ export default function WordToPDF() {
           <Card className="p-6 bg-muted/50">
             <h3 className="font-semibold mb-2">Notes</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• This produces a high-fidelity “print-like” PDF from HTML</li>
-              <li>• Still not 100% Word-perfect (complex layouts can differ)</li>
-              <li>• Great for resumes, letters, essays</li>
+              <li>• Pagination avoids splitting images and large blocks where possible</li>
+              <li>• Complex Word layouts can still differ (columns, floating shapes, etc.)</li>
+              <li>• Best for resumes, letters, essays, reports</li>
             </ul>
           </Card>
         </div>
