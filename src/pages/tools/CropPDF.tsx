@@ -38,18 +38,21 @@ export default function CropPDF() {
 
   const { toast } = useToast();
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const file = acceptedFiles[0];
-    if (!file) return;
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      const file = acceptedFiles[0];
+      if (!file) return;
 
-    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-    if (!isPdf) {
-      toast({ title: "Only PDFs supported", description: "Upload a .pdf file.", variant: "destructive" });
-      return;
-    }
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (!isPdf) {
+        toast({ title: "Only PDFs supported", description: "Upload a .pdf file.", variant: "destructive" });
+        return;
+      }
 
-    setPdfFile({ file, name: file.name, size: file.size });
-  }, [toast]);
+      setPdfFile({ file, name: file.name, size: file.size });
+    },
+    [toast],
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -151,19 +154,51 @@ export default function CropPDF() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <div className="text-sm font-medium">Top (pt)</div>
-                <input type="number" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={top} min={0} max={500} onChange={(e) => setTop(Number(e.target.value))} disabled={working} />
+                <input
+                  type="number"
+                  className="w-full h-10 rounded-md border bg-background px-3 text-sm"
+                  value={top}
+                  min={0}
+                  max={500}
+                  onChange={(e) => setTop(Number(e.target.value))}
+                  disabled={working}
+                />
               </div>
               <div className="space-y-2">
                 <div className="text-sm font-medium">Right (pt)</div>
-                <input type="number" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={right} min={0} max={500} onChange={(e) => setRight(Number(e.target.value))} disabled={working} />
+                <input
+                  type="number"
+                  className="w-full h-10 rounded-md border bg-background px-3 text-sm"
+                  value={right}
+                  min={0}
+                  max={500}
+                  onChange={(e) => setRight(Number(e.target.value))}
+                  disabled={working}
+                />
               </div>
               <div className="space-y-2">
                 <div className="text-sm font-medium">Bottom (pt)</div>
-                <input type="number" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={bottom} min={0} max={500} onChange={(e) => setBottom(Number(e.target.value))} disabled={working} />
+                <input
+                  type="number"
+                  className="w-full h-10 rounded-md border bg-background px-3 text-sm"
+                  value={bottom}
+                  min={0}
+                  max={500}
+                  onChange={(e) => setBottom(Number(e.target.value))}
+                  disabled={working}
+                />
               </div>
               <div className="space-y-2">
                 <div className="text-sm font-medium">Left (pt)</div>
-                <input type="number" className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={left} min={0} max={500} onChange={(e) => setLeft(Number(e.target.value))} disabled={working} />
+                <input
+                  type="number"
+                  className="w-full h-10 rounded-md border bg-background px-3 text-sm"
+                  value={left}
+                  min={0}
+                  max={500}
+                  onChange={(e) => setLeft(Number(e.target.value))}
+                  disabled={working}
+                />
               </div>
             </div>
           </Card>

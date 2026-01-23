@@ -87,7 +87,7 @@ export default function EbookToPDF() {
         setLoading(false);
       }
     },
-    [toast]
+    [toast],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -101,7 +101,10 @@ export default function EbookToPDF() {
     setBook(null);
   };
 
-  const canExport = useMemo(() => !!book && !!uploaded && !loading && !generating, [book, uploaded, loading, generating]);
+  const canExport = useMemo(
+    () => !!book && !!uploaded && !loading && !generating,
+    [book, uploaded, loading, generating],
+  );
 
   const exportToPDF = async () => {
     if (!book || !uploaded) return;
@@ -224,7 +227,13 @@ export default function EbookToPDF() {
                     <div className="text-xs text-muted-foreground">{formatBytes(uploaded.size)}</div>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" onClick={clearFile} disabled={loading || generating} aria-label="Remove">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={clearFile}
+                  disabled={loading || generating}
+                  aria-label="Remove"
+                >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
@@ -260,7 +269,8 @@ export default function EbookToPDF() {
             </div>
 
             <div className="text-xs text-muted-foreground">
-              Note: This exports text as a readable PDF. Complex layouts, images, and special typography may not be preserved.
+              Note: This exports text as a readable PDF. Complex layouts, images, and special typography may not be
+              preserved.
             </div>
           </Card>
 
@@ -285,15 +295,21 @@ export default function EbookToPDF() {
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
               <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">1</span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  1
+                </span>
                 <span>Upload an EPUB file</span>
               </li>
               <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">2</span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  2
+                </span>
                 <span>We extract chapters and text</span>
               </li>
               <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">3</span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  3
+                </span>
                 <span>Download a clean multi-page PDF</span>
               </li>
             </ol>
