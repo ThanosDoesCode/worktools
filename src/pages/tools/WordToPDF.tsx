@@ -166,27 +166,47 @@ export default function WordToPDF() {
 
       // Create PDF (A4)
       const pdf = new jsPDF("p", "pt", "a4");
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
+      const pageWidthPt = pdf.internal.pageSize.getWidth();
+      const pageHeightPt = pdf.internal.pageSize.getHeight();
 
-      const imgData = canvas.toDataURL("image/png");
+      // Convert canvas pixels -> "page slice height in pixels" based on A4 ratio
+      const pageHeightPx = Math.floor((canvas.width * pageHeightPt) / pageWidthPt);
 
-      // Fit image to page width
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let pageIndex = 0;
+      for (let y = 0; y < canvas.height; y += pageHeightPx) {
+        // Create a slice canvas for this page
+        const sliceCanvas = document.createElement("canvas");
+        sliceCanvas.width = canvas.width;
+        sliceCanvas.height = Math.min(pageHeightPx, canvas.height - y);
 
-      // Multi-page logic
-      let heightLeft = imgHeight;
-      let position = 0;
+        const sliceCtx = sliceCanvas.getContext("2d");
+        if (!sliceCtx) throw new Error("Could not create slice canvas context.");
 
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight, undefined, "FAST");
-      heightLeft -= pageHeight;
+        // Draw part of the big canvas onto the slice
+        sliceCtx.drawImage(
+          canvas,
+          0,
+          y,
+          sliceCanvas.width,
+          sliceCanvas.height, // source rect
+          0,
+          0,
+          sliceCanvas.width,
+          sliceCanvas.height, // dest rect
+        );
 
-      while (heightLeft > 0) {
-        pdf.addPage();
-        position = -(imgHeight - heightLeft);
-        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight, undefined, "FAST");
-        heightLeft -= pageHeight;
+        // Use JPEG to reduce size + avoid transparency issues
+        const imgData = sliceCanvas.toDataURL("image/jpeg", 0.92);
+
+        if (pageIndex > 0) pdf.addPage();
+
+        // Fit slice to PDF page
+        const imgWidthPt = pageWidthPt;
+        const imgHeightPt = (sliceCanvas.height * imgWidthPt) / sliceCanvas.width;
+
+        pdf.addImage(imgData, "JPEG", 0, 0, imgWidthPt, imgHeightPt);
+
+        pageIndex++;
       }
 
       pdf.save(`${baseName(docx.name)}.pdf`);
