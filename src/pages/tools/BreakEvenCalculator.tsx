@@ -42,7 +42,7 @@ export default function BreakEvenCalculator() {
   }, [fixedCosts, variableCost, sellingPrice]);
 
   const formatCurrency = (amount: number) => {
-    return `${currencySymbol}${amount.toLocalStrings("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currencySymbol}${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const handleCopy = () => {
