@@ -33,6 +33,7 @@ import WordToPDF from "./pages/tools/WordToPDF";
 import ExcelToPDF from "./pages/tools/ExcelToPDF";
 import TextToPDF from "./pages/tools/TextToPDF";
 import EbookToPDF from "./pages/tools/EbookToPDF";
+import ScanToPDF from "./pages/tools/ScanToPDF";
 
 const queryClient = new QueryClient();
 
@@ -72,6 +73,7 @@ const App = () => (
           <Route path="/tools/excel-to-pdf" element={<ExcelToPDF />} />
           <Route path="/tools/text-to-pdf" element={<TextToPDF />} />
           <Route path="/tools/ebook-to-pdf" element={<EbookToPDF />} />
+          <Route path="/tools/scan-to-pdf" element={<ScanToPDF />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
