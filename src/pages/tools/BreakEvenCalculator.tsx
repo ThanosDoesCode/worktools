@@ -1,26 +1,26 @@
-import { useState, useMemo } from 'react';
-import { ToolLayout } from '@/components/layout/ToolLayout';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Copy, RotateCcw, TrendingUp, DollarSign, Package } from 'lucide-react';
-import { toast } from 'sonner';
+import { useState, useMemo } from "react";
+import { ToolLayout } from "@/components/layout/ToolLayout";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Copy, RotateCcw, TrendingUp, DollarSign, Package } from "lucide-react";
+import { toast } from "sonner";
 
 const currencies = [
-  { code: 'EUR', symbol: '€' },
-  { code: 'USD', symbol: '$' },
-  { code: 'GBP', symbol: '£' },
-  { code: 'CHF', symbol: 'CHF' },
+  { code: "EUR", symbol: "€" },
+  { code: "USD", symbol: "$" },
+  { code: "GBP", symbol: "£" },
+  { code: "CHF", symbol: "CHF" },
 ];
 
 export default function BreakEvenCalculator() {
-  const [fixedCosts, setFixedCosts] = useState<string>('5000');
-  const [variableCost, setVariableCost] = useState<string>('25');
-  const [sellingPrice, setSellingPrice] = useState<string>('50');
-  const [currency, setCurrency] = useState('EUR');
+  const [fixedCosts, setFixedCosts] = useState<string>("5000");
+  const [variableCost, setVariableCost] = useState<string>("25");
+  const [sellingPrice, setSellingPrice] = useState<string>("50");
+  const [currency, setCurrency] = useState("EUR");
 
-  const currencySymbol = currencies.find(c => c.code === currency)?.symbol || '€';
+  const currencySymbol = currencies.find((c) => c.code === currency)?.symbol || "€";
 
   const calculations = useMemo(() => {
     const fixed = parseFloat(fixedCosts) || 0;
@@ -37,12 +37,12 @@ export default function BreakEvenCalculator() {
       breakEvenUnits,
       breakEvenRevenue,
       contributionMarginRatio,
-      isValid: contributionMargin > 0
+      isValid: contributionMargin > 0,
     };
   }, [fixedCosts, variableCost, sellingPrice]);
 
   const formatCurrency = (amount: number) => {
-    return `${currencySymbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currencySymbol}${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const handleCopy = () => {
@@ -56,16 +56,16 @@ Break-Even Point: ${calculations.breakEvenUnits.toLocaleString()} units
 Break-Even Revenue: ${formatCurrency(calculations.breakEvenRevenue)}
 Contribution Margin: ${formatCurrency(calculations.contributionMargin)} per unit
 Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
-    
+
     navigator.clipboard.writeText(text);
-    toast.success('Results copied to clipboard');
+    toast.success("Results copied to clipboard");
   };
 
   const handleReset = () => {
-    setFixedCosts('5000');
-    setVariableCost('25');
-    setSellingPrice('50');
-    toast.success('Calculator reset');
+    setFixedCosts("5000");
+    setVariableCost("25");
+    setSellingPrice("50");
+    toast.success("Calculator reset");
   };
 
   // Generate data points for the chart
@@ -74,29 +74,26 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
     const variable = parseFloat(variableCost) || 0;
     const price = parseFloat(sellingPrice) || 0;
     const breakEven = calculations.breakEvenUnits;
-    
+
     const maxUnits = Math.max(breakEven * 2, 100);
     const points = [];
-    
+
     for (let units = 0; units <= maxUnits; units += Math.ceil(maxUnits / 20)) {
       points.push({
         units,
-        totalCost: fixed + (variable * units),
+        totalCost: fixed + variable * units,
         revenue: price * units,
-        profit: (price * units) - (fixed + (variable * units))
+        profit: price * units - (fixed + variable * units),
       });
     }
-    
+
     return points;
   }, [fixedCosts, variableCost, sellingPrice, calculations.breakEvenUnits]);
 
-  const maxValue = Math.max(...chartData.map(d => Math.max(d.totalCost, d.revenue)));
+  const maxValue = Math.max(...chartData.map((d) => Math.max(d.totalCost, d.revenue)));
 
   return (
-    <ToolLayout
-      title="Break-Even Calculator"
-      description="Find your break-even point in units and revenue"
-    >
+    <ToolLayout title="Break-Even Calculator" description="Find your break-even point in units and revenue">
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Input Panel */}
         <div className="space-y-6">
@@ -109,7 +106,7 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {currencies.map(c => (
+                    {currencies.map((c) => (
                       <SelectItem key={c.code} value={c.code}>
                         {c.symbol} {c.code}
                       </SelectItem>
@@ -129,9 +126,7 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
                   onChange={(e) => setFixedCosts(e.target.value)}
                   placeholder="5000"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Rent, salaries, insurance, etc.
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">Rent, salaries, insurance, etc.</p>
               </div>
 
               <div>
@@ -145,9 +140,7 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
                   onChange={(e) => setVariableCost(e.target.value)}
                   placeholder="25"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Materials, labor per unit, shipping
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">Materials, labor per unit, shipping</p>
               </div>
 
               <div>
@@ -193,9 +186,7 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
                     <Package className="h-5 w-5" />
                     <span className="text-sm font-medium">Break-Even Units</span>
                   </div>
-                  <p className="text-3xl font-bold text-foreground">
-                    {calculations.breakEvenUnits.toLocaleString()}
-                  </p>
+                  <p className="text-3xl font-bold text-foreground">{calculations.breakEvenUnits.toLocaleString()}</p>
                   <p className="text-sm text-muted-foreground mt-1">units/month</p>
                 </div>
 
@@ -204,9 +195,7 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
                     <DollarSign className="h-5 w-5" />
                     <span className="text-sm font-medium">Break-Even Revenue</span>
                   </div>
-                  <p className="text-3xl font-bold text-foreground">
-                    {formatCurrency(calculations.breakEvenRevenue)}
-                  </p>
+                  <p className="text-3xl font-bold text-foreground">{formatCurrency(calculations.breakEvenRevenue)}</p>
                   <p className="text-sm text-muted-foreground mt-1">per month</p>
                 </div>
               </div>
@@ -228,7 +217,7 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
                     </span>
                   </div>
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-primary transition-all duration-300"
                       style={{ width: `${Math.min(calculations.contributionMarginRatio, 100)}%` }}
                     />
@@ -246,49 +235,53 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
                     <span>{formatCurrency(maxValue / 2)}</span>
                     <span>{currencySymbol}0</span>
                   </div>
-                  
+
                   {/* Chart Area */}
                   <div className="ml-16 h-full border-l border-b border-border relative">
                     {/* Break-even line */}
-                    <div 
+                    <div
                       className="absolute bottom-0 w-0.5 bg-primary/50"
-                      style={{ 
+                      style={{
                         left: `${(calculations.breakEvenUnits / (calculations.breakEvenUnits * 2)) * 100}%`,
-                        height: '100%'
+                        height: "100%",
                       }}
                     />
-                    
+
                     {/* Revenue line */}
                     <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
                       <polyline
                         fill="none"
                         stroke="hsl(var(--primary))"
                         strokeWidth="2"
-                        points={chartData.map((d, i) => 
-                          `${(i / (chartData.length - 1)) * 100}%,${100 - (d.revenue / maxValue) * 100}%`
-                        ).join(' ')}
+                        points={chartData
+                          .map(
+                            (d, i) => `${(i / (chartData.length - 1)) * 100}%,${100 - (d.revenue / maxValue) * 100}%`,
+                          )
+                          .join(" ")}
                       />
                       <polyline
                         fill="none"
                         stroke="hsl(var(--destructive))"
                         strokeWidth="2"
-                        points={chartData.map((d, i) => 
-                          `${(i / (chartData.length - 1)) * 100}%,${100 - (d.totalCost / maxValue) * 100}%`
-                        ).join(' ')}
+                        points={chartData
+                          .map(
+                            (d, i) => `${(i / (chartData.length - 1)) * 100}%,${100 - (d.totalCost / maxValue) * 100}%`,
+                          )
+                          .join(" ")}
                       />
                     </svg>
 
                     {/* Break-even point marker */}
-                    <div 
+                    <div
                       className="absolute w-3 h-3 bg-primary rounded-full border-2 border-white shadow-md"
-                      style={{ 
+                      style={{
                         left: `${(calculations.breakEvenUnits / (calculations.breakEvenUnits * 2)) * 100}%`,
                         bottom: `${(calculations.breakEvenRevenue / maxValue) * 100}%`,
-                        transform: 'translate(-50%, 50%)'
+                        transform: "translate(-50%, 50%)",
                       }}
                     />
                   </div>
-                  
+
                   {/* X Axis */}
                   <div className="ml-16 flex justify-between text-xs text-muted-foreground mt-1">
                     <span>0</span>
@@ -296,7 +289,7 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
                     <span>{calculations.breakEvenUnits * 2}</span>
                   </div>
                 </div>
-                
+
                 {/* Legend */}
                 <div className="flex gap-6 mt-4 justify-center">
                   <div className="flex items-center gap-2">
