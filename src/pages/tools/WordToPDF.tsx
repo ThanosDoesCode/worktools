@@ -116,7 +116,7 @@ export default function WordToPDF() {
 
       // Extract raw text from DOCX
       const result = await mammoth.extractRawText({ arrayBuffer });
-      const raw = (result.value || "").trim();
+      const raw = sanitizeForWinAnsi((result.value || "").trim());
 
       if (!raw) {
         toast({
