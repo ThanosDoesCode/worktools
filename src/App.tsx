@@ -84,7 +84,7 @@ const App = () => (
           <Route path="/tools/organize-pdf" element={<OrganizePDF />} />
           <Route path="/tools/watermark-pdf" element={<WatermarkPDF />} />
           <Route path="/tools/crop-pdf" element={<CropPDF />} />
-          <Route path="/tools/zip-tools" element={<CompressOptimizeTools />} />
+          <Route path="/tools/zip-tools" element={<ZipTools />} />
           <Route path="/tools/minify-prettify" element={<CodeMinifyTools />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
