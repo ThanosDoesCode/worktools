@@ -9,6 +9,7 @@ export interface Tool {
 }
 
 export const tools: Tool[] = [
+  // Communication
   {
     id: "1",
     name: "Email Signature Generator",
@@ -18,6 +19,8 @@ export const tools: Tool[] = [
     keywords: ["email", "signature", "gmail", "outlook", "professional"],
     icon: "Mail",
   },
+
+  // Finance
   {
     id: "2",
     name: "Invoice Generator",
@@ -81,6 +84,8 @@ export const tools: Tool[] = [
     keywords: ["cash", "flow", "forecast", "runway", "projection"],
     icon: "LineChart",
   },
+
+  // HR
   {
     id: "9",
     name: "Headcount Cost Calculator",
@@ -99,7 +104,8 @@ export const tools: Tool[] = [
     keywords: ["meeting", "cost", "time", "productivity"],
     icon: "Clock",
   },
-  // PDF Converters
+
+  // PDFs — "to PDF"
   {
     id: "11",
     name: "Images to PDF",
@@ -154,6 +160,8 @@ export const tools: Tool[] = [
     keywords: ["ebook", "epub", "mobi", "kindle", "pdf", "convert", "book"],
     icon: "BookOpen",
   },
+
+  // PDFs — other tools
   {
     id: "17",
     name: "Scan to PDF",
@@ -163,7 +171,17 @@ export const tools: Tool[] = [
     keywords: ["scan", "scanner", "clean", "document", "pdf", "ocr", "image"],
     icon: "ScanLine",
   },
-  // PDF to Other Formats
+  {
+    id: "28",
+    name: "Merge PDFs",
+    description: "Combine multiple PDF files into one — client-side",
+    category: "pdfs",
+    slug: "merge-pdfs",
+    keywords: ["merge", "pdf", "combine", "join"],
+    icon: "Merge",
+  },
+
+  // PDFs — "PDF to ..."
   {
     id: "18",
     name: "PDF to Images",
@@ -254,122 +272,24 @@ export const tools: Tool[] = [
     keywords: ["pdf", "ocr", "searchable", "scan", "text", "recognition"],
     icon: "ScanSearch",
   },
-  {
-    id: "28",
-    name: "Merge PDFs",
-    description: "Combine multiple PDF files into a single PDF",
-    category: "pdfs",
-    slug: "merge-pdfs",
-    keywords: ["pdf", "merge", "combine", "join", "documents"],
-    icon: "Merge",
-  },
-  {
-    id: "29",
-    name: "Split PDF",
-    description: "Split a PDF by page ranges or every N pages",
-    category: "pdfs",
-    slug: "split-pdf",
-    keywords: ["pdf", "split", "pages", "ranges", "extract", "zip"],
-    icon: "Scissors",
-  },
-  {
-    id: "30",
-    name: "Extract PDF Pages",
-    description: "Pick only the pages you need and download a new PDF",
-    category: "pdfs",
-    slug: "extract-pdf-pages",
-    keywords: ["pdf", "extract", "pages", "split", "range"],
-    icon: "Scissors",
-  },
-  {
-    id: "31",
-    name: "Organize PDF",
-    description: "Reorder, rotate, and delete pages, then download",
-    category: "pdfs",
-    slug: "organize-pdf",
-    keywords: ["pdf", "organize", "reorder", "rotate", "delete", "pages"],
-    icon: "Layers",
-  },
-  {
-    id: "32",
-    name: "Watermark PDF",
-    description: "Add a text watermark to every page",
-    category: "pdfs",
-    slug: "watermark-pdf",
-    keywords: ["pdf", "watermark", "stamp", "confidential"],
-    icon: "Stamp",
-  },
-  {
-    id: "33",
-    name: "Crop PDF",
-    description: "Crop margins on every page of your PDF",
-    category: "pdfs",
-    slug: "crop-pdf",
-    keywords: ["pdf", "crop", "trim", "margins"],
-    icon: "Crop",
-  },
 
+  // Files — consolidated pages (instead of many tiny tool pages)
   {
-    id: "34",
-    name: "ZIP Creator",
-    description: "Create ZIP files from any files — client-side",
+    id: "101",
+    name: "ZIP Tools",
+    description: "Create ZIP files or extract ZIP archives — client-side",
     category: "files",
-    slug: "zip-creator",
-    keywords: ["zip", "compress", "archive", "files"],
-    icon: "FileText",
+    slug: "zip-tools",
+    keywords: ["zip", "extract", "archive", "compress"],
+    icon: "FileArchive",
   },
   {
-    id: "35",
-    name: "ZIP Extractor",
-    description: "Extract files from ZIP archives — client-side",
+    id: "102",
+    name: "Minify & Prettify",
+    description: "JSON prettifier + HTML/CSS/JS minifiers — client-side",
     category: "files",
-    slug: "zip-extractor",
-    keywords: ["zip", "extract", "unzip", "archive"],
-    icon: "FileText",
-  },
-  {
-    id: "36",
-    name: "Image Compressor",
-    description: "Compress JPG/PNG/WebP images and download",
-    category: "files",
-    slug: "image-compressor",
-    keywords: ["image", "compress", "jpg", "png", "webp", "optimize"],
-    icon: "Image",
-  },
-  {
-    id: "37",
-    name: "SVG Optimizer",
-    description: "Optimize SVG files to reduce size",
-    category: "files",
-    slug: "svg-optimizer",
-    keywords: ["svg", "optimize", "minify", "vector"],
-    icon: "Shapes",
-  },
-  {
-    id: "38",
-    name: "JSON Minifier / Prettifier",
-    description: "Minify JSON or format it nicely",
-    category: "files",
-    slug: "json-minifier-prettifier",
-    keywords: ["json", "minify", "prettify", "format"],
-    icon: "FileCode",
-  },
-  {
-    id: "39",
-    name: "CSS/JS Minifier",
-    description: "Minify CSS or JavaScript instantly (WASM)",
-    category: "files",
-    slug: "css-js-minifier",
-    keywords: ["css", "js", "minify", "javascript", "esbuild"],
-    icon: "Code",
-  },
-  {
-    id: "40",
-    name: "HTML Minifier",
-    description: "Minify HTML (remove whitespace & extra bytes)",
-    category: "files",
-    slug: "html-minifier",
-    keywords: ["html", "minify", "optimize"],
+    slug: "minify-prettify",
+    keywords: ["json", "prettify", "minify", "css", "js", "html"],
     icon: "Code",
   },
 ];
