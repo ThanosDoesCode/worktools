@@ -31,6 +31,8 @@ import MergePDFs from "./pages/tools/MergePDFs";
 import SplitPDF from "./pages/tools/SplitPDF";
 import WordToPDF from "./pages/tools/WordToPDF";
 import ExcelToPDF from "./pages/tools/ExcelToPDF";
+import TextToPDF from "./pages/tools/TextToPDF";
+import EbookToPDF from "./pages/tools/EbookToPDF";
 
 const queryClient = new QueryClient();
 
@@ -68,6 +70,8 @@ const App = () => (
           <Route path="/tools/split-pdf" element={<SplitPDF />} />
           <Route path="/tools/word-to-pdf" element={<WordToPDF />} />
           <Route path="/tools/excel-to-pdf" element={<ExcelToPDF />} />
+          <Route path="/tools/text-to-pdf" element={<TextToPDF />} />
+          <Route path="/tools/ebook-to-pdf" element={<EbookToPDF />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
