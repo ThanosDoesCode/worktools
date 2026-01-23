@@ -4,32 +4,49 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Copy, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { minify } from "html-minifier-terser";
+
+// Browser-compatible HTML minifier using regex
+function minifyHtml(html: string): string {
+  return html
+    // Remove HTML comments (but keep conditional comments)
+    .replace(/<!--(?!\[if)[\s\S]*?-->/g, "")
+    // Collapse whitespace between tags
+    .replace(/>\s+</g, "><")
+    // Collapse multiple spaces/newlines to single space
+    .replace(/\s+/g, " ")
+    // Remove spaces around = in attributes
+    .replace(/\s*=\s*/g, "=")
+    // Remove unnecessary quotes around simple attribute values
+    .replace(/="([^"'\s>]+)"/g, (_, val) => {
+      // Only remove quotes if value doesn't need them
+      if (/^[a-zA-Z0-9_-]+$/.test(val)) return `=${val}`;
+      return `="${val}"`;
+    })
+    // Remove trailing spaces before >
+    .replace(/\s+>/g, ">")
+    // Remove leading spaces after <
+    .replace(/<\s+/g, "<")
+    .trim();
+}
 
 export default function HtmlMinifier() {
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
   const { toast } = useToast();
 
-  const run = async () => {
+  const run = () => {
     if (!input.trim()) {
       toast({ title: "Add HTML", description: "Paste HTML to minify.", variant: "destructive" });
       return;
     }
 
     try {
-      const out = await minify(input, {
-        collapseWhitespace: true,
-        removeComments: true,
-        removeRedundantAttributes: true,
-        removeEmptyAttributes: true,
-        minifyCSS: true,
-        minifyJS: true,
-        keepClosingSlash: true,
-      });
-
+      const out = minifyHtml(input);
       setOutput(out);
-      toast({ title: "Minified", description: "HTML minified successfully." });
+
+      const saved = input.length - out.length;
+      const pct = input.length > 0 ? ((saved / input.length) * 100).toFixed(1) : "0";
+      toast({ title: "Minified", description: `Reduced by ${saved} chars (${pct}%)` });
     } catch (e: any) {
       toast({ title: "Minify failed", description: e?.message ? String(e.message) : "Error minifying HTML.", variant: "destructive" });
     }
@@ -88,6 +105,11 @@ export default function HtmlMinifier() {
             readOnly
             placeholder="Minified HTML appears here"
           />
+          {output && (
+            <div className="text-xs text-muted-foreground">
+              Original: {input.length} chars • Minified: {output.length} chars • Saved: {input.length - output.length} chars
+            </div>
+          )}
         </Card>
       </div>
     </ToolLayout>
