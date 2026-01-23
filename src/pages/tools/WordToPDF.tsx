@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import mammoth from "mammoth";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import DOMPurify from "dompurify";
 
 interface DocxFile {
   file: File;
@@ -73,9 +74,17 @@ export default function WordToPDF() {
           },
         );
 
-        setPreviewHtml(result.value || "");
+        // Sanitize HTML to prevent XSS from malicious DOCX files
+        const sanitizedHtml = DOMPurify.sanitize(result.value || "", {
+          ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'strong', 'em', 'b', 'i', 'u', 
+            'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'a', 'img', 'blockquote', 
+            'pre', 'code', 'figure', 'figcaption', 'span', 'div', 'sup', 'sub'],
+          ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'style', 'colspan', 'rowspan'],
+          ALLOW_DATA_ATTR: false,
+        });
+        setPreviewHtml(sanitizedHtml);
 
-        if (!result.value) {
+        if (!sanitizedHtml) {
           toast({
             title: "No content extracted",
             description: "Could not extract visible content from this DOCX.",
