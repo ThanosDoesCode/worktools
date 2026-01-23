@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
+import JSZip from "jszip";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -7,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, X, Download, Image as ImageIcon, Loader2, Wand2 } from "lucide-react";
+import { Upload, X, Download, Image as ImageIcon, Loader2, Wand2, FileArchive } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type MimeOut = "image/jpeg" | "image/webp";
@@ -37,6 +38,7 @@ interface ImgItem {
   outWidth?: number;
   outHeight?: number;
   qualityUsed?: number;
+  outBlob?: Blob; // <-- added for ZIP
 }
 
 function safeId() {
@@ -98,20 +100,20 @@ type Preset = {
   description: string;
   targetBytes?: number; // if present, try to hit size
   maxWidth?: number; // scale down to this width (keep aspect)
-  exactSize?: { w: number; h: number }; // for story (optional crop not implemented)
+  exactSize?: { w: number; h: number }; // informational
 };
 
 const PRESETS: Preset[] = [
   {
     id: "email-1mb",
-    name: "Email (≤ 1MB)",
+    name: "Email (≤ 1MB each)",
     description: "Good for quick attachments and fast sending",
     targetBytes: 1 * 1024 * 1024,
     maxWidth: 1600,
   },
   {
     id: "email-5mb",
-    name: "Email (≤ 5MB)",
+    name: "Email (≤ 5MB each)",
     description: "Safer for larger images / multiple attachments",
     targetBytes: 5 * 1024 * 1024,
     maxWidth: 2400,
@@ -119,14 +121,14 @@ const PRESETS: Preset[] = [
   {
     id: "instagram-post",
     name: "Instagram Post (1080px)",
-    description: "Resizes to 1080px wide (best practice)",
+    description: "Resizes to ~1080px wide (best practice)",
     maxWidth: 1080,
-    targetBytes: 900 * 1024, // aim around <1MB
+    targetBytes: 900 * 1024,
   },
   {
     id: "instagram-story",
     name: "Instagram Story/Reel (1080×1920)",
-    description: "Resizes to fit 1080×1920 (no cropping)",
+    description: "Fits to 1080px wide (no cropping)",
     maxWidth: 1080,
     targetBytes: 1200 * 1024,
     exactSize: { w: 1080, h: 1920 },
@@ -165,7 +167,6 @@ async function canvasEncode(
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas not supported");
 
-  // draw
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
   const blob: Blob | null = await new Promise((resolve) => {
@@ -180,15 +181,6 @@ async function canvasEncode(
   return blob;
 }
 
-/**
- * Attempts to hit a target byte size by searching over quality
- * and (if needed) scaling down.
- *
- * Strategy:
- * - Start with maxWidth (or original width if smaller)
- * - Binary search quality in [minQ..maxQ]
- * - If still too big at minQ, scale width down and retry
- */
 async function compressToTarget(params: {
   img: HTMLImageElement;
   outType: MimeOut;
@@ -207,15 +199,12 @@ async function compressToTarget(params: {
 
   const encodeAt = async (q: number) => canvasEncode(img, outType, w, h, q);
 
-  // If no targetBytes, just encode at maxQ
   if (!targetBytes) {
     const blob = await encodeAt(maxQ);
     return { blob, w, h, q: maxQ };
   }
 
-  // Outer loop: reduce dimensions if needed
   for (let attempt = 0; attempt < 8; attempt++) {
-    // First try: binary search quality to meet target
     let lo = minQ;
     let hi = maxQ;
     let bestBlob: Blob | null = null;
@@ -226,34 +215,27 @@ async function compressToTarget(params: {
       const blob = await encodeAt(mid);
 
       if (blob.size <= targetBytes) {
-        // good: try higher quality
         bestBlob = blob;
         bestQ = mid;
         lo = mid;
       } else {
-        // too big: lower quality
         hi = mid;
       }
     }
 
-    // If we found a blob within target, return it
     if (bestBlob) {
       return { blob: bestBlob, w, h, q: bestQ };
     }
 
-    // Even min quality is too big -> reduce dimensions
-    // scale down by 85% each attempt
     w = Math.max(320, Math.round(w * 0.85));
     h = Math.round(w * aspect);
 
-    // If we’re already very small, just return minQ result
     if (w <= 340) {
       const blob = await canvasEncode(img, outType, w, h, minQ);
       return { blob, w, h, q: minQ };
     }
   }
 
-  // Fallback
   const blob = await canvasEncode(img, outType, w, h, minQ);
   return { blob, w, h, q: minQ };
 }
@@ -263,6 +245,7 @@ export default function ImageCompressor() {
 
   const [items, setItems] = useState<ImgItem[]>([]);
   const [compressing, setCompressing] = useState(false);
+  const [zipping, setZipping] = useState(false);
 
   const [presetId, setPresetId] = useState<PresetId>("email-1mb");
   const preset = useMemo(() => PRESETS.find((p) => p.id === presetId)!, [presetId]);
@@ -270,14 +253,12 @@ export default function ImageCompressor() {
   const [outType, setOutType] = useState<MimeOut>("image/webp");
   const [webpSupported, setWebpSupported] = useState(true);
 
-  // Custom controls
   const [customTargetMB, setCustomTargetMB] = useState<number>(1);
   const [customMaxWidth, setCustomMaxWidth] = useState<number>(1600);
-  const [minQuality, setMinQuality] = useState<number>(55); // %
-  const [maxQuality, setMaxQuality] = useState<number>(90); // %
+  const [minQuality, setMinQuality] = useState<number>(55);
+  const [maxQuality, setMaxQuality] = useState<number>(90);
   const [renameToCompressed, setRenameToCompressed] = useState(true);
 
-  // detect webp encoding support once
   useMemo(() => {
     (async () => {
       const w = await supportsEncoding("image/webp");
@@ -289,9 +270,10 @@ export default function ImageCompressor() {
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
-      const allowed = acceptedFiles.filter((f) =>
-        ["image/jpeg", "image/png", "image/webp", "image/avif"].includes(f.type) ||
-        /\.(jpg|jpeg|png|webp|avif)$/i.test(f.name)
+      const allowed = acceptedFiles.filter(
+        (f) =>
+          ["image/jpeg", "image/png", "image/webp", "image/avif"].includes(f.type) ||
+          /\.(jpg|jpeg|png|webp|avif)$/i.test(f.name)
       );
 
       if (allowed.length === 0) {
@@ -313,13 +295,10 @@ export default function ImageCompressor() {
 
       setItems((prev) => [...prev, ...newItems]);
 
-      // read dimensions
       try {
         for (const it of newItems) {
           const img = await loadImageFromFile(it.file);
-          setItems((prev) =>
-            prev.map((p) => (p.id === it.id ? { ...p, width: img.width, height: img.height } : p))
-          );
+          setItems((prev) => prev.map((p) => (p.id === it.id ? { ...p, width: img.width, height: img.height } : p)));
         }
       } catch {
         // ignore
@@ -375,14 +354,10 @@ export default function ImageCompressor() {
     try {
       const updated: ImgItem[] = [];
 
-      // derive settings from preset/custom
       const targetBytes =
         presetId === "custom" ? Math.max(0, customTargetMB) * 1024 * 1024 : preset.targetBytes;
 
-      const maxWidth =
-        presetId === "custom"
-          ? Math.max(320, customMaxWidth)
-          : preset.maxWidth ?? 1600;
+      const maxWidth = presetId === "custom" ? Math.max(320, customMaxWidth) : preset.maxWidth ?? 1600;
 
       const minQ = clamp(minQuality / 100, 0.1, 0.95);
       const maxQ = clamp(maxQuality / 100, minQ, 0.98);
@@ -407,9 +382,7 @@ export default function ImageCompressor() {
 
         const base = it.name.replace(/\.[^.]+$/, "");
         const outExt = extFromMime(outType);
-        const outName = renameToCompressed
-          ? `${base}-compressed.${outExt}`
-          : `${base}.${outExt}`;
+        const outName = renameToCompressed ? `${base}-compressed.${outExt}` : `${base}.${outExt}`;
 
         const outUrl = URL.createObjectURL(blob);
 
@@ -422,6 +395,7 @@ export default function ImageCompressor() {
           outWidth: w,
           outHeight: h,
           qualityUsed: Math.round(q * 100),
+          outBlob: blob,
         });
       }
 
@@ -463,6 +437,61 @@ export default function ImageCompressor() {
       return;
     }
     ready.forEach(downloadOne);
+  };
+
+  const downloadZip = async () => {
+    const ready = items.filter((x) => x.outBlob && x.outName);
+    if (ready.length === 0) {
+      toast({
+        title: "Nothing to zip",
+        description: "Compress your images first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setZipping(true);
+
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder("compressed-images") ?? zip;
+
+      for (const it of ready) {
+        // Ensure unique names inside zip
+        let name = it.outName!;
+        if (folder.file(name)) {
+          const base = name.replace(/\.[^.]+$/, "");
+          const ext = name.split(".").pop()!;
+          name = `${base}-${it.id.slice(-4)}.${ext}`;
+        }
+        folder.file(name, it.outBlob!);
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(zipBlob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `compressed-images-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+      toast({
+        title: "ZIP ready!",
+        description: "Downloaded a ZIP with all compressed images.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "ZIP failed",
+        description: e?.message ? String(e.message) : "Could not create ZIP.",
+        variant: "destructive",
+      });
+    } finally {
+      setZipping(false);
+    }
   };
 
   return (
@@ -585,12 +614,7 @@ export default function ImageCompressor() {
 
           {/* Actions */}
           <div className="grid gap-3 sm:grid-cols-2">
-            <Button
-              onClick={compressAll}
-              disabled={items.length === 0 || compressing}
-              className="w-full"
-              size="lg"
-            >
+            <Button onClick={compressAll} disabled={items.length === 0 || compressing} className="w-full" size="lg">
               {compressing ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -616,21 +640,30 @@ export default function ImageCompressor() {
             </Button>
           </div>
 
+          <Button
+            onClick={downloadZip}
+            disabled={items.every((x) => !x.outBlob) || zipping}
+            className="w-full"
+            size="lg"
+            variant="outline"
+          >
+            {zipping ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Creating ZIP...
+              </>
+            ) : (
+              <>
+                <FileArchive className="h-4 w-4 mr-2" />
+                Download ZIP
+              </>
+            )}
+          </Button>
+
           {items.length > 0 && (
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Button variant="ghost" onClick={clearAll} className="w-full">
-                <Trash2Icon />
-                Clear all
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => toast({ title: "Tip", description: "If you need smaller, choose WebP + Email ≤1MB." })}
-                className="w-full"
-              >
-                <ImageIcon className="h-4 w-4 mr-2" />
-                Quick tip
-              </Button>
-            </div>
+            <Button variant="ghost" onClick={clearAll} className="w-full">
+              Clear all
+            </Button>
           )}
         </div>
 
@@ -650,11 +683,7 @@ export default function ImageCompressor() {
                 {items.map((it) => (
                   <div key={it.id} className="flex items-center justify-between gap-3 rounded-md border p-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <img
-                        src={it.previewUrl}
-                        alt={it.name}
-                        className="h-12 w-12 rounded-md object-cover border"
-                      />
+                      <img src={it.previewUrl} alt={it.name} className="h-12 w-12 rounded-md object-cover border" />
                       <div className="min-w-0">
                         <div className="font-medium truncate">{it.name}</div>
                         <div className="text-xs text-muted-foreground">
@@ -707,7 +736,7 @@ export default function ImageCompressor() {
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                   3
                 </span>
-                <span>Compress and download — runs locally in your browser</span>
+                <span>Compress, then download individually or as a ZIP</span>
               </li>
             </ol>
           </Card>
@@ -717,16 +746,11 @@ export default function ImageCompressor() {
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>• WebP usually gives the smallest size (if supported).</li>
               <li>• PNG → JPG/WebP will remove transparency.</li>
-              <li>• “Instagram Story” preset fits 1080×1920 (no cropping).</li>
+              <li>• ZIP is created locally in your browser.</li>
             </ul>
           </Card>
         </div>
       </div>
     </ToolLayout>
   );
-}
-
-// Small inline icon helper to avoid importing another lucide icon just for trash
-function Trash2Icon() {
-  return <span className="mr-2 inline-block h-4 w-4">🗑️</span>;
 }
