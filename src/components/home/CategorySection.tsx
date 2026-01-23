@@ -1,6 +1,6 @@
 import { categories, getToolsByCategory } from "@/lib/tools";
 import { ToolCard } from "@/components/ui/tool-card";
-import { Mail, DollarSign, Settings, Users, FileText } from "lucide-react";
+import { Mail, DollarSign, Settings, Users, FileText, Code } from "lucide-react";
 
 const categoryIcons: Record<string, React.ReactNode> = {
   communication: <Mail className="h-5 w-5" />,
