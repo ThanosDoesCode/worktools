@@ -113,7 +113,7 @@ export default function CompressPDF() {
         setPages(0);
       }
     },
-    [toast, outUrl]
+    [toast, outUrl],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -365,12 +365,7 @@ export default function CompressPDF() {
           </Card>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <Button
-              onClick={compress}
-              disabled={!file || working}
-              className="w-full"
-              size="lg"
-            >
+            <Button onClick={compress} disabled={!file || working} className="w-full" size="lg">
               {working ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -384,13 +379,7 @@ export default function CompressPDF() {
               )}
             </Button>
 
-            <Button
-              onClick={download}
-              disabled={!outUrl}
-              variant="secondary"
-              className="w-full"
-              size="lg"
-            >
+            <Button onClick={download} disabled={!outUrl} variant="secondary" className="w-full" size="lg">
               <Download className="h-4 w-4 mr-2" />
               Download
             </Button>
@@ -411,7 +400,8 @@ export default function CompressPDF() {
                 <div className="min-w-0">
                   <div className="font-medium truncate">{file.name}</div>
                   <div className="text-xs text-muted-foreground">
-                    {formatBytes(origBytes)}{pages ? ` • ${pages} page${pages === 1 ? "" : "s"}` : ""}
+                    {formatBytes(origBytes)}
+                    {pages ? ` • ${pages} page${pages === 1 ? "" : "s"}` : ""}
                   </div>
                 </div>
 
@@ -435,7 +425,9 @@ export default function CompressPDF() {
                   </div>
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-muted-foreground">Change</span>
-                    <span className={`font-medium ${outBytes < origBytes ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                    <span
+                      className={`font-medium ${outBytes < origBytes ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}
+                    >
                       {savingsText}
                     </span>
                   </div>
@@ -445,12 +437,40 @@ export default function CompressPDF() {
           )}
 
           <Card className="p-6">
-            <h3 className="font-semibold mb-3">What you get</h3>
+            <h3 className="font-semibold mb-4">How it works</h3>
+            <ol className="space-y-3 text-sm text-muted-foreground">
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  1
+                </span>
+                <span>Upload a PDF</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  2
+                </span>
+                <span>
+                  Choose <span className="font-medium text-foreground">Safe Optimize</span> (keeps text) or{" "}
+                  <span className="font-medium text-foreground">Strong Compress</span> (smallest file)
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  3
+                </span>
+                <span>Compress and download — runs locally in your browser</span>
+              </li>
+            </ol>
+          </Card>
+
+          <Card className="p-6 bg-muted/50">
+            <h3 className="font-semibold mb-2">Notes</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Safe Optimize: keeps text selectable, best-effort stream optimization</li>
-              <li>• Strong Compress: smallest possible output (pages flattened)</li>
-              <li>• Adjustable DPI + quality + grayscale</li>
-              <li>• Runs locally — no uploads</li>
+              <li>• Safe Optimize keeps text selectable and is best-effort size reduction.</li>
+              <li>• Strong Compress flattens pages (text won’t be selectable/searchable) but can shrink more.</li>
+              <li>• Higher DPI and higher quality produce larger files.</li>
+              <li>• Grayscale often reduces size for document-style PDFs.</li>
+              <li>• No files are uploaded anywhere.</li>
             </ul>
           </Card>
         </div>
@@ -458,4 +478,3 @@ export default function CompressPDF() {
     </ToolLayout>
   );
 }
-
