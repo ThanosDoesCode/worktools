@@ -3,32 +3,12 @@ import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, FileType, Loader2, FileText } from "lucide-react";
+import { Upload, X, Download, FileText, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import mammoth from "mammoth";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-
-function sanitizeForWinAnsi(input: string) {
-  return (
-    (input || "")
-      // Hyphens & dashes
-      .replace(/\u2010|\u2011|\u2012|\u2013|\u2014|\u2212/g, "-")
-      // Quotes
-      .replace(/\u2018|\u2019|\u201A|\u201B/g, "'")
-      .replace(/\u201C|\u201D|\u201E|\u201F/g, '"')
-      // Ellipsis
-      .replace(/\u2026/g, "...")
-      // NBSP
-      .replace(/\u00A0/g, " ")
-      // Bullets
-      .replace(/\u2022/g, "*")
-      // Zero-width chars
-      .replace(/\u200B|\u200C|\u200D|\uFEFF/g, "")
-      // Fallback: strip any remaining non-WinAnsi characters
-      .replace(/[^\x00-\xFF]/g, "")
-  );
-}
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 interface DocxFile {
   file: File;
@@ -49,31 +29,14 @@ function baseName(name: string) {
   return name.replace(/\.(docx|doc)$/i, "") || "document";
 }
 
-// very small text wrapper
-function wrapText(text: string, maxChars: number) {
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let line = "";
-  for (const w of words) {
-    const test = line ? `${line} ${w}` : w;
-    if (test.length > maxChars) {
-      if (line) lines.push(line);
-      line = w;
-    } else {
-      line = test;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
 export default function WordToPDF() {
   const [docx, setDocx] = useState<DocxFile | null>(null);
   const [converting, setConverting] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string>("");
   const { toast } = useToast();
 
   const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
+    async (acceptedFiles: File[]) => {
       const file = acceptedFiles[0];
       if (!file) return;
 
@@ -91,6 +54,42 @@ export default function WordToPDF() {
       }
 
       setDocx({ file, name: file.name, size: file.size });
+      setPreviewHtml("");
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+
+        // Convert DOCX -> HTML (preserves basic styling)
+        const result = await mammoth.convertToHtml(
+          { arrayBuffer },
+          {
+            styleMap: [
+              "p[style-name='Title'] => h1:fresh",
+              "p[style-name='Heading 1'] => h1:fresh",
+              "p[style-name='Heading 2'] => h2:fresh",
+              "p[style-name='Heading 3'] => h3:fresh",
+              "p[style-name='Heading 4'] => h4:fresh",
+            ],
+          },
+        );
+
+        // Mammoth output is safe-ish, but we still keep it inside our own container
+        setPreviewHtml(result.value || "");
+
+        if (!result.value) {
+          toast({
+            title: "No content extracted",
+            description: "Could not extract visible content from this DOCX.",
+            variant: "destructive",
+          });
+        }
+      } catch (e: any) {
+        toast({
+          title: "Failed to read DOCX",
+          description: e?.message ? String(e.message) : "Could not process the DOCX file.",
+          variant: "destructive",
+        });
+      }
     },
     [toast],
   );
@@ -103,95 +102,94 @@ export default function WordToPDF() {
     maxFiles: 1,
   });
 
-  const clearFile = () => setDocx(null);
+  const clearFile = () => {
+    setDocx(null);
+    setPreviewHtml("");
+  };
 
-  const canConvert = useMemo(() => !!docx && !converting, [docx, converting]);
+  const canConvert = useMemo(() => !!docx && !!previewHtml && !converting, [docx, previewHtml, converting]);
 
   const convertNow = async () => {
-    if (!docx) return;
+    if (!docx || !previewHtml) return;
+
     setConverting(true);
 
     try {
-      const arrayBuffer = await docx.file.arrayBuffer();
+      // Create an offscreen container to render HTML consistently
+      const container = document.createElement("div");
+      container.style.position = "fixed";
+      container.style.left = "-10000px";
+      container.style.top = "0";
+      container.style.width = "794px"; // ~A4 at 96dpi
+      container.style.background = "white";
+      container.style.color = "black";
+      container.style.padding = "48px";
+      container.style.boxSizing = "border-box";
 
-      // Extract raw text from DOCX
-      const result = await mammoth.extractRawText({ arrayBuffer });
-      const raw = sanitizeForWinAnsi((result.value || "").trim());
-
-      if (!raw) {
-        toast({
-          title: "No text found",
-          description: "This DOCX appears empty or contains unsupported content.",
-          variant: "destructive",
-        });
-        setConverting(false);
-        return;
-      }
-
-      // Make a simple PDF (A4-ish)
-      const pdfDoc = await PDFDocument.create();
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-      const pageWidth = 595.28; // A4 points
-      const pageHeight = 841.89;
-
-      const margin = 50;
-      const fontSize = 11;
-      const lineHeight = 16;
-
-      let page = pdfDoc.addPage([pageWidth, pageHeight]);
-      let y = pageHeight - margin;
-
-      const paragraphs = raw
-        .split(/\n{2,}/g)
-        .map((p) => p.replace(/\n/g, " ").trim())
-        .filter(Boolean);
-
-      // rough char limit for wrapping
-      const maxChars = 92;
-
-      for (const p of paragraphs) {
-        const lines = wrapText(p, maxChars);
-
-        // paragraph spacing
-        if (y - lineHeight < margin) {
-          page = pdfDoc.addPage([pageWidth, pageHeight]);
-          y = pageHeight - margin;
-        }
-
-        for (const line of lines) {
-          if (y - lineHeight < margin) {
-            page = pdfDoc.addPage([pageWidth, pageHeight]);
-            y = pageHeight - margin;
+      // Basic “document-like” styling
+      container.innerHTML = `
+        <style>
+          * { box-sizing: border-box; }
+          body { margin:0; }
+          .doc {
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
           }
+          h1 { font-size: 26px; margin: 18px 0 10px; line-height: 1.2; }
+          h2 { font-size: 20px; margin: 16px 0 8px; line-height: 1.25; }
+          h3 { font-size: 16px; margin: 14px 0 6px; line-height: 1.3; }
+          p { margin: 0 0 10px; }
+          ul, ol { margin: 0 0 10px 18px; padding: 0; }
+          li { margin: 0 0 6px; }
+          table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+          td, th { border: 1px solid #ddd; padding: 6px; vertical-align: top; }
+          a { color: #0b57d0; text-decoration: underline; }
+          img { max-width: 100%; height: auto; }
+          blockquote { border-left: 3px solid #ddd; margin: 10px 0; padding-left: 10px; color: #444; }
+        </style>
+        <div class="doc">${previewHtml}</div>
+      `;
 
-          page.drawText(line, {
-            x: margin,
-            y: y - fontSize,
-            size: fontSize,
-            font,
-            color: rgb(0, 0, 0),
-          });
+      document.body.appendChild(container);
 
-          y -= lineHeight;
-        }
+      // Render to canvas
+      const canvas = await html2canvas(container, {
+        scale: 2, // sharper
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        windowWidth: 794,
+      });
 
-        y -= 8; // extra space between paragraphs
+      // Remove offscreen container
+      container.remove();
+
+      // Create PDF (A4)
+      const pdf = new jsPDF("p", "pt", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      const imgData = canvas.toDataURL("image/png");
+
+      // Fit image to page width
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      // Multi-page logic
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight, undefined, "FAST");
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        pdf.addPage();
+        position = -(imgHeight - heightLeft);
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight, undefined, "FAST");
+        heightLeft -= pageHeight;
       }
 
-      const pdfBytes = await pdfDoc.save();
-      const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-
-      const filename = `${baseName(docx.name)}.pdf`;
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      pdf.save(`${baseName(docx.name)}.pdf`);
 
       toast({ title: "Converted!", description: "Your PDF has been downloaded." });
     } catch (e: any) {
@@ -206,7 +204,7 @@ export default function WordToPDF() {
   };
 
   return (
-    <ToolLayout title="Word to PDF" description="Convert DOCX documents to a clean PDF (client-side, text-focused).">
+    <ToolLayout title="Word to PDF" description="Convert DOCX to a good-looking PDF (client-side, best-effort).">
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">
           <Card className="p-6">
@@ -258,35 +256,22 @@ export default function WordToPDF() {
 
         <div className="space-y-6">
           <Card className="p-6">
-            <h3 className="font-semibold mb-4">How it works</h3>
-            <ol className="space-y-3 text-sm text-muted-foreground">
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                  1
-                </span>
-                <span>Upload a DOCX file</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                  2
-                </span>
-                <span>We extract the text in your browser</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                  3
-                </span>
-                <span>We generate and download a PDF</span>
-              </li>
-            </ol>
+            <h3 className="font-semibold mb-4">Preview (best-effort)</h3>
+            {previewHtml ? (
+              <div className="prose prose-sm max-w-none">
+                <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Upload a DOCX to see a preview here.</p>
+            )}
           </Card>
 
           <Card className="p-6 bg-muted/50">
             <h3 className="font-semibold mb-2">Notes</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Best for text documents (letters, essays, CVs)</li>
-              <li>• Complex layouts, tables, and images may not match perfectly</li>
-              <li>• For perfect conversion you’d use a backend (LibreOffice/CloudConvert/etc.)</li>
+              <li>• This produces a high-fidelity “print-like” PDF from HTML</li>
+              <li>• Still not 100% Word-perfect (complex layouts can differ)</li>
+              <li>• Great for resumes, letters, essays</li>
             </ul>
           </Card>
         </div>
