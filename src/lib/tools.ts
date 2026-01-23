@@ -301,6 +301,15 @@ export const tools: Tool[] = [
     keywords: ["image", "convert", "jpg", "jpeg", "png", "webp", "avif"],
     icon: "Image",
   },
+  {
+    id: "31",
+    name: "Image Compressor",
+    description: "Compress images for email, Instagram, LinkedIn, and web — client-side",
+    category: "files",
+    slug: "image-compressor",
+    keywords: ["image", "compress", "email", "instagram", "linkedin", "webp", "jpg", "png"],
+    icon: "Wand2",
+  },
 ];
 
 export const categories = [

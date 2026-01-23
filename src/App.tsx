@@ -41,6 +41,7 @@ import CropPDF from "./pages/tools/CropPDF";
 import ZipTools from "./pages/tools/ZipTools";
 import CodeMinifyTools from "./pages/tools/CodeMinifyTools";
 import ImageConverter from "./pages/tools/ImageConverter";
+import ImageCompressor from "./pages/tools/ImageCompressor";
 
 const queryClient = new QueryClient();
 
@@ -88,6 +89,7 @@ const App = () => (
           <Route path="/tools/zip-tools" element={<ZipTools />} />
           <Route path="/tools/minify-prettify" element={<CodeMinifyTools />} />
           <Route path="/tools/image-converter" element={<ImageConverter />} />
+          <Route path="/tools/image-compressor" element={<ImageCompressor />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
