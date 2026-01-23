@@ -8,22 +8,6 @@ const categoryIcons: Record<string, React.ReactNode> = {
   operations: <Settings className="h-5 w-5" />,
   hr: <Users className="h-5 w-5" />,
   pdfs: <FileText className="h-5 w-5" />,
-};
-
-const categoryColors: Record<string, string> = {
-  communication: "bg-info-light text-info",
-  finance: "bg-success-light text-success",
-  operations: "bg-accent text-accent-foreground",
-  hr: "bg-warning-light text-warning",
-  pdfs: "bg-primary/10 text-primary",
-};
-
-const categoryIcons: Record<string, React.ReactNode> = {
-  communication: <Mail className="h-5 w-5" />,
-  finance: <DollarSign className="h-5 w-5" />,
-  operations: <Settings className="h-5 w-5" />,
-  hr: <Users className="h-5 w-5" />,
-  pdfs: <FileText className="h-5 w-5" />,
   files: <Code className="h-5 w-5" />,
 };
 
@@ -59,7 +43,7 @@ export function CategorySection() {
         const pdfToSomething = isPDFs ? categoryTools.filter(isPdfToSomething) : [];
         const somethingToPdf = isPDFs ? categoryTools.filter(isSomethingToPdf) : [];
 
-        // Fallback: anything not matching the patterns (in case you add future PDF tools like "Compress PDF")
+        // Anything not matching the patterns (e.g. Merge PDFs / Split PDF / Compress PDF / OCR etc.)
         const otherPdfTools = isPDFs ? categoryTools.filter((t) => !isPdfToSomething(t) && !isSomethingToPdf(t)) : [];
 
         return (
@@ -82,7 +66,6 @@ export function CategorySection() {
               </div>
             ) : (
               <div className="space-y-10">
-                {/* PDF -> Something */}
                 {pdfToSomething.length > 0 && (
                   <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-foreground">PDF → Other formats</h3>
@@ -94,7 +77,6 @@ export function CategorySection() {
                   </div>
                 )}
 
-                {/* Something -> PDF */}
                 {somethingToPdf.length > 0 && (
                   <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-foreground">Other formats → PDF</h3>
@@ -106,7 +88,6 @@ export function CategorySection() {
                   </div>
                 )}
 
-                {/* Other PDF tools (e.g., Merge PDFs, Split PDF, Compress PDF, OCR, etc.) */}
                 {otherPdfTools.length > 0 && (
                   <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-foreground">PDF tools</h3>
