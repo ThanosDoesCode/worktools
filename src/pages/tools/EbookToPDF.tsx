@@ -7,8 +7,8 @@ import { Upload, X, Download, BookOpen, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import jsPDF from "jspdf";
-import ePub, { Book } from "epubjs";
-
+import ePub from "epubjs";
+import type { Book } from "epubjs";
 type PageSize = "a4" | "letter";
 
 interface UploadFile {
@@ -68,7 +68,8 @@ export default function EbookToPDF() {
 
       setLoading(true);
       try {
-        const b = ePub(file);
+        const arrayBuffer = await file.arrayBuffer();
+        const b = ePub(arrayBuffer);
         await b.ready; // wait for metadata/resources
         setBook(b);
 
@@ -121,7 +122,7 @@ export default function EbookToPDF() {
 
       // Title (if available)
       let y = margin;
-      const metaTitle = (book.package?.metadata as any)?.title || baseName(uploaded.name);
+      const metaTitle = (book.packaging?.metadata as any)?.title || baseName(uploaded.name);
       doc.setFont("times", "bold");
       doc.setFontSize(Math.min(18, fontSize + 6));
       const titleLines = doc.splitTextToSize(String(metaTitle), maxWidth);
@@ -138,7 +139,8 @@ export default function EbookToPDF() {
       doc.setFontSize(fontSize);
 
       // Iterate spine (chapters)
-      const spineItems = book.spine?.spineItems || [];
+      const spine = book.spine as any;
+      const spineItems = spine?.items || spine?.spineItems || [];
       if (spineItems.length === 0) {
         throw new Error("No readable chapters found in this EPUB.");
       }
