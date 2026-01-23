@@ -310,6 +310,17 @@ export const tools: Tool[] = [
     keywords: ["image", "compress", "email", "instagram", "linkedin", "webp", "jpg", "png"],
     icon: "Wand2",
   },
+
+  {
+    id: 32,
+    name: "Compress PDF",
+    description:
+      "Compress PDFs locally in your browser — Safe Optimize or Strong Compress with DPI + quality controls.",
+    category: "pdfs",
+    slug: "compress-pdf",
+    keywords: ["compress pdf", "reduce pdf size", "pdf optimizer", "pdf shrink", "pdf compressor", "flatten pdf"],
+    icon: "FileText",
+  },
 ];
 
 export const categories = [
