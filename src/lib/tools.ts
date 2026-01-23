@@ -275,7 +275,7 @@ export const tools: Tool[] = [
 
   // Files — consolidated pages (instead of many tiny tool pages)
   {
-    id: "101",
+    id: "28",
     name: "Compress Optimize Tools",
     description: "Create ZIP files or extract ZIP archives — client-side",
     category: "files",
@@ -284,13 +284,22 @@ export const tools: Tool[] = [
     icon: "FileArchive",
   },
   {
-    id: "102",
+    id: "29",
     name: "Minify & Prettify",
     description: "JSON prettifier + HTML/CSS/JS minifiers — client-side",
     category: "files",
     slug: "minify-prettify",
     keywords: ["json", "prettify", "minify", "css", "js", "html"],
     icon: "Code",
+  },
+  {
+    id: "30",
+    name: "Image Converter",
+    description: "Convert JPG/PNG/WebP/AVIF images — client-side",
+    category: "files",
+    slug: "image-converter",
+    keywords: ["image", "convert", "jpg", "jpeg", "png", "webp", "avif"],
+    icon: "Image",
   },
 ];
 
