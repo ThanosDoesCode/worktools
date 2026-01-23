@@ -9,6 +9,27 @@ import { useToast } from "@/hooks/use-toast";
 import mammoth from "mammoth";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
+function sanitizeForWinAnsi(input: string) {
+  return (
+    (input || "")
+      // Hyphens & dashes
+      .replace(/\u2010|\u2011|\u2012|\u2013|\u2014|\u2212/g, "-")
+      // Quotes
+      .replace(/\u2018|\u2019|\u201A|\u201B/g, "'")
+      .replace(/\u201C|\u201D|\u201E|\u201F/g, '"')
+      // Ellipsis
+      .replace(/\u2026/g, "...")
+      // NBSP
+      .replace(/\u00A0/g, " ")
+      // Bullets
+      .replace(/\u2022/g, "*")
+      // Zero-width chars
+      .replace(/\u200B|\u200C|\u200D|\uFEFF/g, "")
+      // Fallback: strip any remaining non-WinAnsi characters
+      .replace(/[^\x00-\xFF]/g, "")
+  );
+}
+
 interface DocxFile {
   file: File;
   name: string;
@@ -71,7 +92,7 @@ export default function WordToPDF() {
 
       setDocx({ file, name: file.name, size: file.size });
     },
-    [toast]
+    [toast],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -121,7 +142,10 @@ export default function WordToPDF() {
       let page = pdfDoc.addPage([pageWidth, pageHeight]);
       let y = pageHeight - margin;
 
-      const paragraphs = raw.split(/\n{2,}/g).map(p => p.replace(/\n/g, " ").trim()).filter(Boolean);
+      const paragraphs = raw
+        .split(/\n{2,}/g)
+        .map((p) => p.replace(/\n/g, " ").trim())
+        .filter(Boolean);
 
       // rough char limit for wrapping
       const maxChars = 92;
@@ -237,15 +261,21 @@ export default function WordToPDF() {
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
               <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">1</span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  1
+                </span>
                 <span>Upload a DOCX file</span>
               </li>
               <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">2</span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  2
+                </span>
                 <span>We extract the text in your browser</span>
               </li>
               <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">3</span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  3
+                </span>
                 <span>We generate and download a PDF</span>
               </li>
             </ol>
