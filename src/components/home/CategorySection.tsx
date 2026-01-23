@@ -18,6 +18,24 @@ const categoryColors: Record<string, string> = {
   pdfs: "bg-primary/10 text-primary",
 };
 
+const categoryIcons: Record<string, React.ReactNode> = {
+  communication: <Mail className="h-5 w-5" />,
+  finance: <DollarSign className="h-5 w-5" />,
+  operations: <Settings className="h-5 w-5" />,
+  hr: <Users className="h-5 w-5" />,
+  pdfs: <FileText className="h-5 w-5" />,
+  files: <Code className="h-5 w-5" />,
+};
+
+const categoryColors: Record<string, string> = {
+  communication: "bg-info-light text-info",
+  finance: "bg-success-light text-success",
+  operations: "bg-accent text-accent-foreground",
+  hr: "bg-warning-light text-warning",
+  pdfs: "bg-primary/10 text-primary",
+  files: "bg-secondary text-secondary-foreground",
+};
+
 function isPdfToSomething(tool: { slug: string; name: string }) {
   const name = tool.name.toLowerCase();
   return tool.slug.startsWith("pdf-to-") || name.startsWith("pdf to");
