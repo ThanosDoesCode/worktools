@@ -2,7 +2,7 @@ export interface Tool {
   id: string;
   name: string;
   description: string;
-  category: "communication" | "finance" | "operations" | "hr" | "pdfs";
+  category: "communication" | "finance" | "operations" | "hr" | "pdfs" | "files";
   slug: string;
   keywords: string[];
   icon: string;
