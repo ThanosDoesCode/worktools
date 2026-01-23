@@ -79,7 +79,7 @@ export default function ZipExtractor() {
   };
 
   const downloadEntry = (e: ZipEntry) => {
-    const blob = new Blob([e.bytes]);
+    const blob = new Blob([e.bytes.buffer.slice(e.bytes.byteOffset, e.bytes.byteOffset + e.bytes.byteLength) as ArrayBuffer]);
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");

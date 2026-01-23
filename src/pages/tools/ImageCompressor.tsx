@@ -157,7 +157,7 @@ export default function ImageCompressor() {
     }
 
     const zipped = zipSync(entries, { level: 6 });
-    const blob = new Blob([zipped], { type: "application/zip" });
+    const blob = new Blob([zipped.buffer.slice(zipped.byteOffset, zipped.byteOffset + zipped.byteLength) as ArrayBuffer], { type: "application/zip" });
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
