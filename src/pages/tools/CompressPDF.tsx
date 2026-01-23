@@ -163,7 +163,7 @@ export default function CompressPDF() {
           // pdf-lib compresses streams by default
         });
 
-        const outBlob = new Blob([bytes], { type: "application/pdf" });
+        const outBlob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
         const url = URL.createObjectURL(outBlob);
 
         if (outUrl) URL.revokeObjectURL(outUrl);
@@ -233,7 +233,7 @@ export default function CompressPDF() {
       }
 
       const outBytesArr = await outPdf.save({ useObjectStreams: true });
-      const outBlob = new Blob([outBytesArr], { type: "application/pdf" });
+      const outBlob = new Blob([new Uint8Array(outBytesArr)], { type: "application/pdf" });
 
       const url = URL.createObjectURL(outBlob);
       if (outUrl) URL.revokeObjectURL(outUrl);
