@@ -13,6 +13,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2",
     "pdf-lib": "^1.17.1",
     "html2canvas": "^1.4.1",
     "mammoth": "^1.6.0",
