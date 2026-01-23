@@ -203,7 +203,7 @@ export default function PDFOCR() {
       setProgress({ page: totalPages, total: totalPages, status: "Saving searchable PDF…" });
 
       const outBytes = await outPdf.save();
-      const blob = new Blob([outBytes], { type: "application/pdf" });
+      const blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
       saveAs(blob, `${baseName(pdfFile.name)}-searchable.pdf`);
 
       toast({
