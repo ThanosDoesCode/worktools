@@ -17,6 +17,16 @@ import CashFlowForecast from "./pages/tools/CashFlowForecast";
 import HeadcountCostCalculator from "./pages/tools/HeadcountCostCalculator";
 import ImageToPDF from "./pages/tools/ImageToPDF";
 import PowerPointToPDF from "./pages/tools/PowerPointToPDF";
+import PDFToImages from "./pages/tools/PDFToImages";
+import PDFToWord from "./pages/tools/PDFToWord";
+import PDFToPowerPoint from "./pages/tools/PDFToPowerPoint";
+import PDFToExcel from "./pages/tools/PDFToExcel";
+import PDFToCSV from "./pages/tools/PDFToCSV";
+import PDFToText from "./pages/tools/PDFToText";
+import PDFToHTML from "./pages/tools/PDFToHTML";
+import PDFToEPUB from "./pages/tools/PDFToEPUB";
+import PDFToSVG from "./pages/tools/PDFToSVG";
+import PDFOCR from "./pages/tools/PDFOCR";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +50,16 @@ const App = () => (
           <Route path="/tools/headcount-cost-calculator" element={<HeadcountCostCalculator />} />
           <Route path="/tools/images-to-pdf" element={<ImageToPDF />} />
           <Route path="/tools/powerpoint-to-pdf" element={<PowerPointToPDF />} />
+          <Route path="/tools/pdf-to-images" element={<PDFToImages />} />
+          <Route path="/tools/pdf-to-word" element={<PDFToWord />} />
+          <Route path="/tools/pdf-to-powerpoint" element={<PDFToPowerPoint />} />
+          <Route path="/tools/pdf-to-excel" element={<PDFToExcel />} />
+          <Route path="/tools/pdf-to-csv" element={<PDFToCSV />} />
+          <Route path="/tools/pdf-to-text" element={<PDFToText />} />
+          <Route path="/tools/pdf-to-html" element={<PDFToHTML />} />
+          <Route path="/tools/pdf-to-epub" element={<PDFToEPUB />} />
+          <Route path="/tools/pdf-to-svg" element={<PDFToSVG />} />
+          <Route path="/tools/pdf-ocr" element={<PDFOCR />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
