@@ -38,7 +38,7 @@ import ExtractPDFPages from "./pages/tools/ExtractPDFPages";
 import OrganizePDF from "./pages/tools/OrganizePDF";
 import WatermarkPDF from "./pages/tools/WatermarkPDF";
 import CropPDF from "./pages/tools/CropPDF";
-import ZipTools from "./pages/tools/ZipTools";
+import ZipTools from "./pages/tools/CompressOptimizeTools";
 import CodeMinifyTools from "./pages/tools/CodeMinifyTools";
 
 const queryClient = new QueryClient();
