@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,9 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PDFDocument, degrees } from "pdf-lib";
+import * as pdfjsLib from "pdfjs-dist";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface PDFFile {
   file: File;
@@ -29,6 +32,7 @@ interface PageItem {
   index: number; // original index (0-based)
   rotation: 0 | 90 | 180 | 270;
   deleted: boolean;
+  thumbnail?: string;
 }
 
 function safeId() {
@@ -48,10 +52,30 @@ function baseName(name: string) {
   return (name || "document").replace(/\.pdf$/i, "") || "document";
 }
 
+async function generateThumbnails(file: File): Promise<string[]> {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const thumbnails: string[] = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 0.3 });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d")!;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    thumbnails.push(canvas.toDataURL("image/jpeg", 0.7));
+  }
+
+  return thumbnails;
+}
+
 export default function OrganizePDF() {
   const [pdfFile, setPdfFile] = useState<PDFFile | null>(null);
   const [pages, setPages] = useState<PageItem[]>([]);
   const [working, setWorking] = useState(false);
+  const [loadingThumbnails, setLoadingThumbnails] = useState(false);
 
   const { toast } = useToast();
 
@@ -67,19 +91,27 @@ export default function OrganizePDF() {
 
     setPdfFile({ file, name: file.name, size: file.size });
     setWorking(true);
+    setLoadingThumbnails(true);
     try {
       const bytes = await file.arrayBuffer();
       const doc = await PDFDocument.load(bytes);
       const count = doc.getPageCount();
 
-      setPages(
-        Array.from({ length: count }).map((_, i) => ({
-          id: safeId(),
-          index: i,
-          rotation: 0,
-          deleted: false,
-        }))
-      );
+      const initialPages = Array.from({ length: count }).map((_, i) => ({
+        id: safeId(),
+        index: i,
+        rotation: 0 as const,
+        deleted: false,
+      }));
+      setPages(initialPages);
+
+      // Generate thumbnails in background
+      generateThumbnails(file).then((thumbs) => {
+        setPages((prev) =>
+          prev.map((p, i) => ({ ...p, thumbnail: thumbs[i] }))
+        );
+        setLoadingThumbnails(false);
+      }).catch(() => setLoadingThumbnails(false));
 
       toast({ title: "Loaded", description: `${count} pages ready to organize.` });
     } catch (e: any) {
@@ -219,32 +251,58 @@ export default function OrganizePDF() {
 
           {pages.length > 0 && (
             <Card className="p-4">
-              <div className="space-y-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {pages.map((p, idx) => (
-                  <div key={p.id} className={`flex items-center justify-between gap-3 rounded-md border p-3 ${p.deleted ? "opacity-50" : ""}`}>
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Layers className="h-5 w-5 text-primary shrink-0" />
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">
-                          Page {p.index + 1}
-                          {p.deleted ? " (deleted)" : ""}
+                  <div
+                    key={p.id}
+                    className={`relative rounded-lg border p-2 transition-opacity ${p.deleted ? "opacity-40" : ""}`}
+                  >
+                    {/* Thumbnail */}
+                    <div
+                      className="relative aspect-[3/4] bg-muted rounded overflow-hidden mb-2"
+                      style={{ transform: `rotate(${p.rotation}deg)` }}
+                    >
+                      {p.thumbnail ? (
+                        <img
+                          src={p.thumbnail}
+                          alt={`Page ${p.index + 1}`}
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          {loadingThumbnails ? (
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                          ) : (
+                            <Layers className="h-6 w-6 text-muted-foreground" />
+                          )}
                         </div>
-                        <div className="text-xs text-muted-foreground">Rotation: {p.rotation}°</div>
-                      </div>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button variant="ghost" size="icon" onClick={() => move(idx, -1)} disabled={idx === 0 || working}>
-                        <ArrowUp className="h-4 w-4" />
+                    {/* Page info */}
+                    <div className="text-center mb-2">
+                      <div className="text-sm font-medium">
+                        Page {p.index + 1}
+                        {p.deleted && <span className="text-destructive"> (deleted)</span>}
+                      </div>
+                      {p.rotation !== 0 && (
+                        <div className="text-xs text-muted-foreground">{p.rotation}° rotated</div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-center gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => move(idx, -1)} disabled={idx === 0 || working}>
+                        <ArrowUp className="h-3 w-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => move(idx, 1)} disabled={idx === pages.length - 1 || working}>
-                        <ArrowDown className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => move(idx, 1)} disabled={idx === pages.length - 1 || working}>
+                        <ArrowDown className="h-3 w-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => rotate(p.id)} disabled={working}>
-                        <RotateCw className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => rotate(p.id)} disabled={working}>
+                        <RotateCw className="h-3 w-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => toggleDelete(p.id)} disabled={working}>
-                        <Trash2 className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleDelete(p.id)} disabled={working}>
+                        <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
                   </div>
