@@ -38,6 +38,13 @@ import ExtractPDFPages from "./pages/tools/ExtractPDFPages";
 import OrganizePDF from "./pages/tools/OrganizePDF";
 import WatermarkPDF from "./pages/tools/WatermarkPDF";
 import CropPDF from "./pages/tools/CropPDF";
+import ZipCreator from "./pages/tools/ZipCreator";
+import ZipExtractor from "./pages/tools/ZipExtractor";
+import ImageCompressor from "./pages/tools/ImageCompressor";
+import SvgOptimizer from "./pages/tools/SvgOptimizer";
+import JsonMinifierPrettifier from "./pages/tools/JsonMinifierPrettifier";
+import CssJsMinifier from "./pages/tools/CssJsMinifier";
+import HtmlMinifier from "./pages/tools/HtmlMinifier";
 
 const queryClient = new QueryClient();
 
@@ -82,6 +89,13 @@ const App = () => (
           <Route path="/tools/organize-pdf" element={<OrganizePDF />} />
           <Route path="/tools/watermark-pdf" element={<WatermarkPDF />} />
           <Route path="/tools/crop-pdf" element={<CropPDF />} />
+          <Route path="/tools/zip-creator" element={<ZipCreator />} />
+          <Route path="/tools/zip-extractor" element={<ZipExtractor />} />
+          <Route path="/tools/image-compressor" element={<ImageCompressor />} />
+          <Route path="/tools/svg-optimizer" element={<SvgOptimizer />} />
+          <Route path="/tools/json-minifier-prettifier" element={<JsonMinifierPrettifier />} />
+          <Route path="/tools/css-js-minifier" element={<CssJsMinifier />} />
+          <Route path="/tools/html-minifier" element={<HtmlMinifier />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
