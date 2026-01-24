@@ -99,19 +99,15 @@ const PDFProtect: React.FC = () => {
 
         const qpdf = await createModule({
           locateFile: () => wasmModule.default,
-          noInitialRun: true,
-          preRun: [
-            (module: any) => {
-              // Prepare folders (best-effort)
-              try {
-                module.FS.mkdir("/in");
-              } catch {}
-              try {
-                module.FS.mkdir("/out");
-              } catch {}
-            },
-          ],
         });
+
+        // Prepare folders (best-effort)
+        try {
+          qpdf.FS.mkdir("/in");
+        } catch {}
+        try {
+          qpdf.FS.mkdir("/out");
+        } catch {}
 
         if (!mounted) return;
         qpdfRef.current = qpdf;
