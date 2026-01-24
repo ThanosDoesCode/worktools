@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,7 +65,7 @@ const PDFProtect: React.FC = () => {
 
   const [showPassword, setShowPassword] = useState(false);
 
-  // Permissions (protect mode)
+  // Permissions UI (NOTE: qpdf-wasm supports richer permission flags, but we keep UI now and can wire them next)
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [printLevel, setPrintLevel] = useState<PrintLevel>("full");
   const [modifyLevel, setModifyLevel] = useState<ModifyLevel>("all");
@@ -81,6 +81,40 @@ const PDFProtect: React.FC = () => {
   const [outputBlob, setOutputBlob] = useState<Blob | null>(null);
   const [outputName, setOutputName] = useState<string>("");
 
+  // QPDF WASM module (load once)
+  const qpdfRef = useRef<any | null>(null);
+  const [qpdfReady, setQpdfReady] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const [{ default: createModule }, wasmModule] = await Promise.all([
+          import("@neslinesli93/qpdf-wasm"),
+          import("@neslinesli93/qpdf-wasm/dist/qpdf.wasm?url"),
+        ]);
+
+        const qpdf = await createModule({
+          locateFile: () => wasmModule.default,
+          noInitialRun: true,
+        });
+
+        if (!mounted) return;
+        qpdfRef.current = qpdf;
+        setQpdfReady(true);
+      } catch (e) {
+        if (!mounted) return;
+        setQpdfReady(false);
+        toast.error("Failed to load PDF engine (QPDF). Check dependencies/build config.");
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const strength = useMemo(() => scorePassword(password), [password]);
   const passwordsMatch = password && confirmPassword && password === confirmPassword;
   const passwordMinOk = password.length >= 4;
@@ -88,21 +122,24 @@ const PDFProtect: React.FC = () => {
 
   const canProtect =
     !!file &&
+    qpdfReady &&
     !isProcessing &&
     passwordMinOk &&
     passwordsMatch &&
     (useSameOwnerPassword || ownerPassword.trim().length > 0) &&
     strongEnough;
 
-  const canUnlock = !!file && !isProcessing && unlockPassword.trim().length > 0;
+  const canUnlock = !!file && qpdfReady && !isProcessing && unlockPassword.trim().length > 0;
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    const pdfFile = acceptedFiles.find((f) => f.type === "application/pdf");
+    const pdfFile = acceptedFiles.find((f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
+
     if (pdfFile) {
       setFile(pdfFile);
       setOutputBlob(null);
       setOutputName("");
       setProgress(0);
+      toast.success("PDF loaded.");
     } else {
       toast.error("Please upload a PDF file.");
     }
@@ -113,18 +150,6 @@ const PDFProtect: React.FC = () => {
     accept: { "application/pdf": [".pdf"] },
     maxFiles: 1,
   });
-
-  const buildPermissions = () => {
-    return {
-      printing: printLevel === "full" ? "highResolution" as const : printLevel === "low" ? "lowResolution" as const : false as const,
-      modifying: modifyLevel !== "none",
-      copying: allowExtract,
-      annotating: allowAnnotate,
-      fillingForms: allowFormFill,
-      contentAccessibility: allowExtract,
-      documentAssembly: allowAssemble,
-    };
-  };
 
   const resetAll = () => {
     setFile(null);
@@ -138,104 +163,82 @@ const PDFProtect: React.FC = () => {
     setProgress(0);
     setIsProcessing(false);
     setShowPassword(false);
-
-    // keep mode/advanced as user preference
   };
 
+  // NOTE: Permission flags are shown in UI but not applied yet in the qpdf call.
+  // We will wire them next once we confirm qpdf is working end-to-end in your build.
   const handleProcess = async () => {
     if (!file) {
       toast.error("Please upload a PDF file first.");
       return;
     }
+    if (!qpdfReady || !qpdfRef.current) {
+      toast.error("PDF engine is still loading. Try again in a moment.");
+      return;
+    }
 
-    if (mode === "protect") {
-      if (!canProtect) {
-        toast.error("Check password rules and try again.");
-        return;
-      }
-    } else {
-      if (!canUnlock) {
-        toast.error("Enter the current password to unlock.");
-        return;
-      }
+    if (mode === "protect" && !canProtect) {
+      toast.error("Check password rules and try again.");
+      return;
+    }
+    if (mode === "unlock" && !canUnlock) {
+      toast.error("Enter the current password to unlock.");
+      return;
     }
 
     setIsProcessing(true);
     setProgress(10);
 
     try {
-      // Dynamic import for code splitting
-      const { PDFDocument } = await import("pdf-lib-with-encrypt");
-      
+      const qpdf = qpdfRef.current;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const FS = (qpdf as any).FS;
+
+      // cleanup old files
+      try {
+        FS.unlink("input.pdf");
+      } catch {}
+      try {
+        FS.unlink("output.pdf");
+      } catch {}
+
       setProgress(25);
-      
+
       const arrayBuffer = await file.arrayBuffer();
-      
-      setProgress(45);
+      const inputBytes = new Uint8Array(arrayBuffer);
+      FS.writeFile("input.pdf", inputBytes);
+
+      setProgress(55);
 
       if (mode === "protect") {
         const userPw = password;
         const ownerPw = useSameOwnerPassword ? password : ownerPassword;
 
-        // Load the PDF
-        const pdfDoc = await PDFDocument.load(arrayBuffer);
-        
-        setProgress(65);
-
-        // Save with encryption - use type assertion as the library extends SaveOptions
-        const permissions = buildPermissions();
-        const encryptedPdfBytes = await (pdfDoc as any).save({
-          userPassword: userPw,
-          ownerPassword: ownerPw,
-          permissions,
-        });
-
-        setProgress(85);
-
-        const blob = new Blob([new Uint8Array(encryptedPdfBytes)], { type: "application/pdf" });
-        const name = `${baseName(file.name)}_protected.pdf`;
-
-        setOutputBlob(blob);
-        setOutputName(name);
-        setProgress(100);
-
-        toast.success("PDF protected successfully!");
+        // Encrypt with AES-256
+        qpdf.callMain(["--encrypt", userPw, ownerPw, "256", "--", "input.pdf", "output.pdf"]);
       } else {
-        // Unlock mode - try to load with password and save without encryption
-        try {
-          const pdfDoc = await PDFDocument.load(arrayBuffer, {
-            password: unlockPassword,
-          });
-
-          setProgress(65);
-
-          // Save without encryption (no password options)
-          const decryptedPdfBytes = await pdfDoc.save();
-
-          setProgress(85);
-
-          const blob = new Blob([new Uint8Array(decryptedPdfBytes)], { type: "application/pdf" });
-          const name = `${baseName(file.name)}_unlocked.pdf`;
-
-          setOutputBlob(blob);
-          setOutputName(name);
-          setProgress(100);
-
-          toast.success("PDF unlocked successfully!");
-        } catch (unlockError: any) {
-          // Check if it's a password error
-          if (unlockError?.message?.includes("password") || unlockError?.message?.includes("decrypt")) {
-            throw new Error("Incorrect password. Please check and try again.");
-          }
-          throw unlockError;
-        }
+        // Decrypt (requires current password)
+        qpdf.callMain([`--password=${unlockPassword}`, "--decrypt", "--", "input.pdf", "output.pdf"]);
       }
+
+      setProgress(85);
+
+      const outBytes = FS.readFile("output.pdf");
+      const blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
+
+      const name = mode === "protect" ? `${baseName(file.name)}_protected.pdf` : `${baseName(file.name)}_unlocked.pdf`;
+
+      setOutputBlob(blob);
+      setOutputName(name);
+
+      setProgress(100);
+      toast.success(mode === "protect" ? "PDF protected successfully!" : "PDF unlocked successfully!");
     } catch (error: any) {
       console.error("PDF processing failed:", error);
       toast.error(
-        error?.message || (mode === "protect"
+        mode === "protect"
           ? "Failed to protect PDF. Please try again."
-          : "Failed to unlock PDF. Password may be wrong or PDF may be unsupported."),
+          : "Failed to unlock PDF. Password may be wrong or PDF may be unsupported.",
       );
     } finally {
       setIsProcessing(false);
@@ -244,7 +247,6 @@ const PDFProtect: React.FC = () => {
 
   const handleDownload = () => {
     if (!outputBlob) return;
-
     const url = URL.createObjectURL(outputBlob);
     const a = document.createElement("a");
     a.href = url;
@@ -253,7 +255,6 @@ const PDFProtect: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-
     toast.success("Downloaded!");
   };
 
@@ -282,7 +283,7 @@ const PDFProtect: React.FC = () => {
                     <p className="font-medium">{file.name}</p>
                     <p className="text-sm text-muted-foreground">{formatMB(file.size)}</p>
                     <p className="text-xs text-muted-foreground mt-2">
-                      Ready for encryption
+                      {qpdfReady ? "Encryption engine loaded" : "Loading encryption engine…"}
                     </p>
                   </div>
                 ) : (
@@ -292,7 +293,7 @@ const PDFProtect: React.FC = () => {
                     </p>
                     <p className="text-sm text-muted-foreground mt-2">or click to browse</p>
                     <p className="text-xs text-muted-foreground mt-3">
-                      All processing happens locally in your browser
+                      {qpdfReady ? "Encryption engine loaded" : "Loading encryption engine…"}
                     </p>
                   </>
                 )}
@@ -339,7 +340,7 @@ const PDFProtect: React.FC = () => {
                 <div className="rounded-lg border p-4 space-y-4">
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-primary" />
-                    <div className="font-medium">Permissions</div>
+                    <div className="font-medium">Permissions (UI)</div>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -416,7 +417,7 @@ const PDFProtect: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Protect / Unlock Inputs */}
+          {/* Protect Inputs */}
           {file && !outputBlob && mode === "protect" && (
             <Card>
               <CardContent className="p-6 space-y-4">
@@ -464,7 +465,6 @@ const PDFProtect: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Strength meter */}
                   <div className="space-y-1">
                     <Progress value={(strength.level / 4) * 100} className="h-2" />
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -540,6 +540,7 @@ const PDFProtect: React.FC = () => {
             </Card>
           )}
 
+          {/* Unlock Inputs */}
           {file && !outputBlob && mode === "unlock" && (
             <Card>
               <CardContent className="p-6 space-y-4">
@@ -658,7 +659,7 @@ const PDFProtect: React.FC = () => {
             <h3 className="font-semibold mb-2">Notes</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>• Everything runs locally in your browser — your PDF is not uploaded anywhere.</li>
-              <li>• Protect uses AES-256 encryption.</li>
+              <li>• Protect uses AES-256 encryption (QPDF).</li>
               <li>• Unlock requires the current password; it cannot bypass unknown passwords.</li>
               <li>• Permission restrictions can be ignored by some PDF viewers.</li>
               <li>• Large PDFs may take longer depending on device memory.</li>
