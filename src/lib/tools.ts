@@ -330,6 +330,16 @@ export const tools: Tool[] = [
     keywords: ["compress pdf", "reduce pdf size", "pdf optimizer", "pdf shrink", "pdf compressor", "flatten pdf"],
     icon: "FileText",
   },
+
+  {
+    id: 33,
+    name: "Split PDF",
+    description: "Split, extract, or chunk pages from a PDF — client-side, fast, private.",
+    category: "pdfs",
+    slug: "split-pdf",
+    keywords: ["split pdf", "extract pdf pages", "pdf page range", "separate pdf", "chunk pdf"],
+    icon: "Scissors",
+  },
 ];
 
 export const categories = [
