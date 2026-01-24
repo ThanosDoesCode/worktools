@@ -13,7 +13,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@neslinesli93/qpdf-wasm": "^0.3.0",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -67,7 +66,6 @@
     "mammoth": "^1.6.0",
     "next-themes": "^0.3.0",
     "pdf-lib": "^1.17.1",
-    "pdf-lib-with-encrypt": "^1.2.1",
     "pdfjs-dist": "^4.0.0",
     "pptxgenjs": "^3.12.0",
     "react": "^18.3.1",
