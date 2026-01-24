@@ -332,7 +332,7 @@ export const tools: Tool[] = [
   },
 
   {
-    id: 33,
+    id: "34",
     name: "Split PDF",
     description: "Split, extract, or chunk pages from a PDF — client-side, fast, private.",
     category: "pdfs",
