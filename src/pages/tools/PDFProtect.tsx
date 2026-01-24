@@ -9,7 +9,41 @@ import { Upload, Lock, Download, FileText, Shield, Eye, EyeOff } from "lucide-re
 import { toast } from "sonner";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 
+function scorePassword(pw: string) {
+  const p = pw || "";
+  let score = 0;
+
+  if (p.length >= 8) score += 1;
+  if (p.length >= 12) score += 1;
+  if (/[A-Z]/.test(p)) score += 1;
+  if (/[a-z]/.test(p)) score += 1;
+  if (/\d/.test(p)) score += 1;
+  if (/[^A-Za-z0-9]/.test(p)) score += 1;
+
+  // normalize to 0..4
+  if (score <= 2) return { level: 1, label: "Weak" };
+  if (score <= 4) return { level: 2, label: "OK" };
+  if (score === 5) return { level: 3, label: "Strong" };
+  return { level: 4, label: "Very strong" };
+}
+
+function generatePassword(length = 16) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()-_=+[]{};:,.?";
+  const arr = new Uint32Array(length);
+  crypto.getRandomValues(arr);
+  let out = "";
+  for (let i = 0; i < length; i++) out += chars[arr[i] % chars.length];
+  return out;
+}
+
 const PDFProtect: React.FC = () => {
+  const strength = useMemo(() => scorePassword(password), [password]);
+  const passwordsMatch = password && confirmPassword && password === confirmPassword;
+  const passwordMinOk = password.length >= 4;
+  const strongEnough = password.length >= 8 && strength.level >= 2; // not strict, but better default
+
+  const canProtect = !!file && passwordMinOk && passwordsMatch && strongEnough && !isProcessing;
+
   const [file, setFile] = useState<File | null>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -79,15 +113,7 @@ const PDFProtect: React.FC = () => {
 
       setProgress(70);
 
-      qpdf.callMain([
-        "--encrypt",
-        password,
-        password,
-        "256",
-        "--",
-        "input.pdf",
-        "output.pdf",
-      ]);
+      qpdf.callMain(["--encrypt", password, password, "256", "--", "input.pdf", "output.pdf"]);
 
       setProgress(90);
 
@@ -142,9 +168,7 @@ const PDFProtect: React.FC = () => {
               <div
                 {...getRootProps()}
                 className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                  isDragActive
-                    ? "border-primary bg-primary/5"
-                    : "border-muted-foreground/25 hover:border-primary/50"
+                  isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
                 }`}
               >
                 <input {...getInputProps()} />
@@ -153,20 +177,14 @@ const PDFProtect: React.FC = () => {
                   <div className="space-y-2">
                     <FileText className="w-8 h-8 mx-auto text-primary" />
                     <p className="font-medium">{file.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
+                    <p className="text-sm text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
                   </div>
                 ) : (
                   <>
                     <p className="text-lg font-medium">
-                      {isDragActive
-                        ? "Drop your PDF here..."
-                        : "Drag & drop a PDF file here"}
+                      {isDragActive ? "Drop your PDF here..." : "Drag & drop a PDF file here"}
                     </p>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      or click to browse
-                    </p>
+                    <p className="text-sm text-muted-foreground mt-2">or click to browse</p>
                   </>
                 )}
               </div>
@@ -174,12 +192,30 @@ const PDFProtect: React.FC = () => {
           </Card>
 
           {/* Password Input */}
+
           {file && !protectedBlob && (
             <Card>
               <CardContent className="p-6 space-y-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <Shield className="w-5 h-5 text-primary" />
-                  <h3 className="font-semibold">Set Password Protection</h3>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-primary" />
+                    <h3 className="font-semibold">Set Password Protection</h3>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isProcessing}
+                    onClick={() => {
+                      const pw = generatePassword(16);
+                      setPassword(pw);
+                      setConfirmPassword(pw);
+                      setShowPassword(true);
+                    }}
+                  >
+                    Generate
+                  </Button>
                 </div>
 
                 <div className="space-y-2">
@@ -190,20 +226,31 @@ const PDFProtect: React.FC = () => {
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter password (min 4 characters)"
+                      placeholder="Use 8+ characters for better security"
                       className="pr-10"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                     >
-                      {showPassword ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
+                  </div>
+
+                  {/* Strength meter */}
+                  <div className="space-y-1">
+                    <Progress value={(strength.level / 4) * 100} className="h-2" />
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>
+                        Strength: <span className="font-medium text-foreground">{strength.label}</span>
+                      </span>
+                      <span>{password.length} chars</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Recommendation: 12+ chars, mix letters, numbers and symbols.
+                    </p>
                   </div>
                 </div>
 
@@ -216,25 +263,36 @@ const PDFProtect: React.FC = () => {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Confirm your password"
                   />
+
+                  {/* Inline validation (clean) */}
+                  {!passwordMinOk && password.length > 0 && (
+                    <p className="text-xs text-destructive">Password must be at least 4 characters.</p>
+                  )}
+                  {confirmPassword.length > 0 && !passwordsMatch && (
+                    <p className="text-xs text-destructive">Passwords do not match.</p>
+                  )}
+                  {passwordMinOk && passwordsMatch && password.length > 0 && !strongEnough && (
+                    <p className="text-xs text-muted-foreground">
+                      Password is valid, but weak. Use 8+ characters for better security.
+                    </p>
+                  )}
                 </div>
 
                 {isProcessing && (
                   <div className="space-y-2">
                     <Progress value={progress} className="h-2" />
-                    <p className="text-sm text-muted-foreground text-center">
-                      Encrypting PDF... {progress}%
-                    </p>
+                    <p className="text-sm text-muted-foreground text-center">Encrypting PDF... {progress}%</p>
                   </div>
                 )}
 
-                <Button
-                  onClick={handleProtect}
-                  disabled={isProcessing || !password || !confirmPassword}
-                  className="w-full"
-                >
+                <Button onClick={handleProtect} disabled={!canProtect} className="w-full">
                   <Lock className="w-4 h-4 mr-2" />
                   {isProcessing ? "Protecting..." : "Protect PDF"}
                 </Button>
+
+                <p className="text-xs text-muted-foreground">
+                  Important: if you forget the password, this PDF cannot be opened.
+                </p>
               </CardContent>
             </Card>
           )}
@@ -247,9 +305,7 @@ const PDFProtect: React.FC = () => {
                   <Shield className="w-8 h-8 text-green-600 dark:text-green-400" />
                 </div>
                 <h3 className="text-xl font-semibold">PDF Protected!</h3>
-                <p className="text-muted-foreground">
-                  Your PDF is now password-protected with 256-bit AES encryption.
-                </p>
+                <p className="text-muted-foreground">Your PDF is now password-protected with 256-bit AES encryption.</p>
                 <div className="flex gap-3 justify-center">
                   <Button onClick={handleDownload}>
                     <Download className="w-4 h-4 mr-2" />
