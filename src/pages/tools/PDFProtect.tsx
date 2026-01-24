@@ -60,15 +60,18 @@ type QpdfModule = {
 };
 
 async function loadQpdf(): Promise<QpdfModule> {
-  const [{ default: createModule }, wasmModule] = await Promise.all([
+  const [qpdfModule, wasmModule] = await Promise.all([
     import("@neslinesli93/qpdf-wasm"),
     import("@neslinesli93/qpdf-wasm/dist/qpdf.wasm?url"),
   ]);
 
-  // NOTE: keep it simple to satisfy TS typings
-  const qpdf = (await createModule({
-    locateFile: () => (wasmModule as any).default,
-  })) as unknown as QpdfModule;
+  // Handle both ESM default export and CommonJS module.exports
+  const createModule = (qpdfModule.default || qpdfModule) as unknown as (opts: { locateFile: () => string }) => Promise<QpdfModule>;
+  const wasmUrl = (wasmModule as any).default || wasmModule;
+
+  const qpdf = await createModule({
+    locateFile: () => wasmUrl,
+  });
 
   return qpdf;
 }
