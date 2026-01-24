@@ -60,20 +60,35 @@ type QpdfModule = {
 };
 
 async function loadQpdf(): Promise<QpdfModule> {
-  const [qpdfModule, wasmModule] = await Promise.all([
+  const [mod, wasm] = await Promise.all([
     import("@neslinesli93/qpdf-wasm"),
     import("@neslinesli93/qpdf-wasm/dist/qpdf.wasm?url"),
   ]);
 
-  // Handle both ESM default export and CommonJS module.exports
-  const createModule = (qpdfModule.default || qpdfModule) as unknown as (opts: { locateFile: () => string }) => Promise<QpdfModule>;
-  const wasmUrl = (wasmModule as any).default || wasmModule;
+  const wasmUrl = (wasm as any).default ?? wasm;
 
-  const qpdf = await createModule({
+  // Try all common export shapes (ESM/CJS wrappers)
+  const candidates = [
+    (mod as any).default,
+    (mod as any).QPDF,
+    (mod as any).Module,
+    (mod as any).createModule,
+    (mod as any).createQpdf,
+    (mod as any).default?.default,
+  ];
+
+  const factory = candidates.find((x) => typeof x === "function");
+
+  if (!factory) {
+    const keys = Object.keys(mod as any);
+    throw new Error(`qpdf-wasm: Could not find module factory function. Available exports: ${keys.join(", ")}`);
+  }
+
+  const qpdf = await factory({
     locateFile: () => wasmUrl,
   });
 
-  return qpdf;
+  return qpdf as QpdfModule;
 }
 
 function safeUnlink(qpdf: QpdfModule, path: string) {
@@ -256,6 +271,14 @@ const PDFProtect: React.FC = () => {
 
         const runEncrypt = (extraArgs: string[]) => {
           qpdf.callMain([...baseArgs, ...extraArgs, "--", "input.pdf", "output.pdf"]);
+
+          // Verify output exists
+          try {
+            const out = qpdf.FS.readFile("output.pdf");
+            if (!out || out.length < 100) throw new Error("qpdf produced an invalid output file.");
+          } catch {
+            throw new Error("Encryption failed — output.pdf not created. Check qpdf-wasm build/flags.");
+          }
         };
 
         try {
