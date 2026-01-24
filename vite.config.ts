@@ -3,8 +3,6 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-assetsInclude: ["**/*.wasm"];
-
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
@@ -21,6 +19,7 @@ export default defineConfig(({ mode }) => ({
     },
     dedupe: ["react", "react-dom"],
   },
+  assetsInclude: ["**/*.wasm"],
   optimizeDeps: {
     exclude: ["@neslinesli93/qpdf-wasm"],
   },
