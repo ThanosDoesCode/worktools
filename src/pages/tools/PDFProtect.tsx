@@ -139,7 +139,9 @@ const PDFProtect: React.FC = () => {
       title="PDF Protect"
       description="Add password protection to your PDF files with 256-bit AES encryption. All processing happens in your browser - your files never leave your device."
     >
-      <div className="max-w-2xl mx-auto space-y-6">
+     <div className="grid lg:grid-cols-2 gap-8">
+      <div className="space-y-6">
+
         {/* File Upload */}
         <Card>
           <CardContent className="p-6">
@@ -176,6 +178,47 @@ const PDFProtect: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+           </div>
+
+      {/* Right column */}
+      <div className="space-y-6">
+        <Card className="p-6">
+          <h3 className="font-semibold mb-4">How it works</h3>
+          <ol className="space-y-3 text-sm text-muted-foreground">
+            <li className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                1
+              </span>
+              <span>Upload a PDF</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                2
+              </span>
+              <span>Set a password and click Protect</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                3
+              </span>
+              <span>Download the protected PDF</span>
+            </li>
+          </ol>
+        </Card>
+
+        <Card className="p-6 bg-muted/50">
+          <h3 className="font-semibold mb-2">Notes</h3>
+          <ul className="space-y-2 text-sm text-muted-foreground">
+            <li>• Everything runs locally in your browser — your PDF is not uploaded anywhere.</li>
+            <li>• Use a strong password (longer than 8 characters is recommended).</li>
+            <li>• If you forget the password, the PDF cannot be opened.</li>
+            <li>• Some PDF viewers may show limited permission enforcement depending on the app.</li>
+          </ul>
+        </Card>
+      </div>
+    </div>
+  </ToolLayout>
+
 
         {/* Password Input */}
         {file && !protectedBlob && (
