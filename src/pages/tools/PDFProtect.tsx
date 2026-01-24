@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,13 +37,6 @@ function generatePassword(length = 16) {
 }
 
 const PDFProtect: React.FC = () => {
-  const strength = useMemo(() => scorePassword(password), [password]);
-  const passwordsMatch = password && confirmPassword && password === confirmPassword;
-  const passwordMinOk = password.length >= 4;
-  const strongEnough = password.length >= 8 && strength.level >= 2; // not strict, but better default
-
-  const canProtect = !!file && passwordMinOk && passwordsMatch && strongEnough && !isProcessing;
-
   const [file, setFile] = useState<File | null>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -51,6 +44,12 @@ const PDFProtect: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [protectedBlob, setProtectedBlob] = useState<Blob | null>(null);
+
+  const strength = useMemo(() => scorePassword(password), [password]);
+  const passwordsMatch = password && confirmPassword && password === confirmPassword;
+  const passwordMinOk = password.length >= 4;
+  const strongEnough = password.length >= 8 && strength.level >= 2;
+  const canProtect = !!file && passwordMinOk && passwordsMatch && strongEnough && !isProcessing;
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const pdfFile = acceptedFiles.find((f) => f.type === "application/pdf");
