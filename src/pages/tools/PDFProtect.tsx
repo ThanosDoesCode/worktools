@@ -57,7 +57,6 @@ const PDFProtect: React.FC = () => {
     setProgress(10);
 
     try {
-      // Dynamic import for code splitting
       const [{ default: createModule }, wasmModule] = await Promise.all([
         import("@neslinesli93/qpdf-wasm"),
         import("@neslinesli93/qpdf-wasm/dist/qpdf.wasm?url"),
@@ -71,18 +70,15 @@ const PDFProtect: React.FC = () => {
 
       setProgress(50);
 
-      // Read the input PDF
       const arrayBuffer = await file.arrayBuffer();
       const inputBytes = new Uint8Array(arrayBuffer);
 
-      // Write to virtual filesystem using Emscripten FS
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const FS = (qpdf as any).FS;
       FS.writeFile("input.pdf", inputBytes);
 
       setProgress(70);
 
-      // Encrypt the PDF with 256-bit AES encryption
       qpdf.callMain([
         "--encrypt",
         password,
@@ -95,9 +91,8 @@ const PDFProtect: React.FC = () => {
 
       setProgress(90);
 
-      // Read the protected file
       const protectedBytes = FS.readFile("output.pdf");
-      const blob = new Blob([new Uint8Array(protectedBytes)], {
+      const blob = new Blob([new Uint8Array(protectedBytes).buffer], {
         type: "application/pdf",
       });
 
@@ -139,176 +134,172 @@ const PDFProtect: React.FC = () => {
       title="PDF Protect"
       description="Add password protection to your PDF files with 256-bit AES encryption. All processing happens in your browser - your files never leave your device."
     >
-     <div className="grid lg:grid-cols-2 gap-8">
-      <div className="space-y-6">
-
-        {/* File Upload */}
-        <Card>
-          <CardContent className="p-6">
-            <div
-              {...getRootProps()}
-              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                isDragActive
-                  ? "border-primary bg-primary/5"
-                  : "border-muted-foreground/25 hover:border-primary/50"
-              }`}
-            >
-              <input {...getInputProps()} />
-              <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-              {file ? (
-                <div className="space-y-2">
-                  <FileText className="w-8 h-8 mx-auto text-primary" />
-                  <p className="font-medium">{file.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {(file.size / 1024 / 1024).toFixed(2)} MB
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <p className="text-lg font-medium">
-                    {isDragActive
-                      ? "Drop your PDF here..."
-                      : "Drag & drop a PDF file here"}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    or click to browse
-                  </p>
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-           </div>
-
-      {/* Right column */}
-      <div className="space-y-6">
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4">How it works</h3>
-          <ol className="space-y-3 text-sm text-muted-foreground">
-            <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                1
-              </span>
-              <span>Upload a PDF</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                2
-              </span>
-              <span>Set a password and click Protect</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                3
-              </span>
-              <span>Download the protected PDF</span>
-            </li>
-          </ol>
-        </Card>
-
-        <Card className="p-6 bg-muted/50">
-          <h3 className="font-semibold mb-2">Notes</h3>
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            <li>• Everything runs locally in your browser — your PDF is not uploaded anywhere.</li>
-            <li>• Use a strong password (longer than 8 characters is recommended).</li>
-            <li>• If you forget the password, the PDF cannot be opened.</li>
-            <li>• Some PDF viewers may show limited permission enforcement depending on the app.</li>
-          </ul>
-        </Card>
-      </div>
-    </div>
-  </ToolLayout>
-
-
-        {/* Password Input */}
-        {file && !protectedBlob && (
+      <div className="grid lg:grid-cols-2 gap-8">
+        <div className="space-y-6">
+          {/* File Upload */}
           <Card>
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Shield className="w-5 h-5 text-primary" />
-                <h3 className="font-semibold">Set Password Protection</h3>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter password (min 4 characters)"
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <Input
-                  id="confirmPassword"
-                  type={showPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm your password"
-                />
-              </div>
-
-              {isProcessing && (
-                <div className="space-y-2">
-                  <Progress value={progress} className="h-2" />
-                  <p className="text-sm text-muted-foreground text-center">
-                    Encrypting PDF... {progress}%
-                  </p>
-                </div>
-              )}
-
-              <Button
-                onClick={handleProtect}
-                disabled={isProcessing || !password || !confirmPassword}
-                className="w-full"
+            <CardContent className="p-6">
+              <div
+                {...getRootProps()}
+                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                  isDragActive
+                    ? "border-primary bg-primary/5"
+                    : "border-muted-foreground/25 hover:border-primary/50"
+                }`}
               >
-                <Lock className="w-4 h-4 mr-2" />
-                {isProcessing ? "Protecting..." : "Protect PDF"}
-              </Button>
+                <input {...getInputProps()} />
+                <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                {file ? (
+                  <div className="space-y-2">
+                    <FileText className="w-8 h-8 mx-auto text-primary" />
+                    <p className="font-medium">{file.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {(file.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-lg font-medium">
+                      {isDragActive
+                        ? "Drop your PDF here..."
+                        : "Drag & drop a PDF file here"}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      or click to browse
+                    </p>
+                  </>
+                )}
+              </div>
             </CardContent>
           </Card>
-        )}
 
-        {/* Download Section */}
-        {protectedBlob && (
-          <Card>
-            <CardContent className="p-6 text-center space-y-4">
-              <div className="w-16 h-16 mx-auto bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                <Shield className="w-8 h-8 text-green-600 dark:text-green-400" />
-              </div>
-              <h3 className="text-xl font-semibold">PDF Protected!</h3>
-              <p className="text-muted-foreground">
-                Your PDF is now password-protected with 256-bit AES encryption.
-              </p>
-              <div className="flex gap-3 justify-center">
-                <Button onClick={handleDownload}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Download Protected PDF
+          {/* Password Input */}
+          {file && !protectedBlob && (
+            <Card>
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Shield className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold">Set Password Protection</h3>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter password (min 4 characters)"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <Input
+                    id="confirmPassword"
+                    type={showPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm your password"
+                  />
+                </div>
+
+                {isProcessing && (
+                  <div className="space-y-2">
+                    <Progress value={progress} className="h-2" />
+                    <p className="text-sm text-muted-foreground text-center">
+                      Encrypting PDF... {progress}%
+                    </p>
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleProtect}
+                  disabled={isProcessing || !password || !confirmPassword}
+                  className="w-full"
+                >
+                  <Lock className="w-4 h-4 mr-2" />
+                  {isProcessing ? "Protecting..." : "Protect PDF"}
                 </Button>
-                <Button variant="outline" onClick={handleReset}>
-                  Protect Another
-                </Button>
-              </div>
-            </CardContent>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Download Section */}
+          {protectedBlob && (
+            <Card>
+              <CardContent className="p-6 text-center space-y-4">
+                <div className="w-16 h-16 mx-auto bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                  <Shield className="w-8 h-8 text-green-600 dark:text-green-400" />
+                </div>
+                <h3 className="text-xl font-semibold">PDF Protected!</h3>
+                <p className="text-muted-foreground">
+                  Your PDF is now password-protected with 256-bit AES encryption.
+                </p>
+                <div className="flex gap-3 justify-center">
+                  <Button onClick={handleDownload}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Download Protected PDF
+                  </Button>
+                  <Button variant="outline" onClick={handleReset}>
+                    Protect Another
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Right column */}
+        <div className="space-y-6">
+          <Card className="p-6">
+            <h3 className="font-semibold mb-4">How it works</h3>
+            <ol className="space-y-3 text-sm text-muted-foreground">
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  1
+                </span>
+                <span>Upload a PDF</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  2
+                </span>
+                <span>Set a password and click Protect</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  3
+                </span>
+                <span>Download the protected PDF</span>
+              </li>
+            </ol>
           </Card>
-        )}
+
+          <Card className="p-6 bg-muted/50">
+            <h3 className="font-semibold mb-2">Notes</h3>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>• Everything runs locally in your browser — your PDF is not uploaded anywhere.</li>
+              <li>• Use a strong password (longer than 8 characters is recommended).</li>
+              <li>• If you forget the password, the PDF cannot be opened.</li>
+              <li>• Some PDF viewers may show limited permission enforcement depending on the app.</li>
+            </ul>
+          </Card>
+        </div>
       </div>
     </ToolLayout>
   );
