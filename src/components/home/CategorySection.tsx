@@ -2,6 +2,11 @@ import { categories, getToolsByCategory } from "@/lib/tools";
 import { ToolCard } from "@/components/ui/tool-card";
 import { Mail, DollarSign, Settings, Users, FileText, Code } from "lucide-react";
 
+const [qpdfJs, wasmUrlMod] = await Promise.all([
+  import("@neslinesli93/qpdf-wasm/dist/qpdf.js"),
+  import("@neslinesli93/qpdf-wasm/dist/qpdf.wasm?url"),
+]);
+
 const categoryIcons: Record<string, React.ReactNode> = {
   communication: <Mail className="h-5 w-5" />,
   finance: <DollarSign className="h-5 w-5" />,
