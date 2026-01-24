@@ -4,117 +4,182 @@ import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
 
 import { ToolLayout } from "@/components/layout/ToolLayout";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Upload, Download, Loader2, FileText, X, FileArchive, Scissors } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-import {
-  Upload,
-  X,
-  Scissors,
-  Loader2,
-  Download,
-  FileText,
-  Files,
-} from "lucide-react";
+type Mode = "extract" | "single" | "chunk";
 
-type SplitMode = "ranges" | "everyN";
-
-interface PDFFile {
-  file: File;
-  name: string;
+function safeId() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function safeBaseName(name: string) {
-  const base = name.replace(/\.pdf$/i, "");
-  return base.length ? base : "document";
+function formatBytes(bytes: number): string {
+  if (!bytes) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+  const value = bytes / Math.pow(k, i);
+  return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${sizes[i]}`;
+}
+
+function baseName(name: string) {
+  return (name || "document").replace(/\.pdf$/i, "") || "document";
 }
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function zeroPad(n: number, width: number) {
+  const s = String(n);
+  return s.length >= width ? s : "0".repeat(width - s.length) + s;
+}
+
 /**
- * Parse ranges like:
- * 1-3, 5, 7-10
- * Returns array of [start,end] inclusive, 1-based.
+ * Parses ranges like:
+ *  - "1-3, 6, 9-12"
+ * Returns a list of inclusive [start,end] pairs (1-based).
+ * Invalid tokens are ignored.
  */
-function parseRanges(input: string): Array<[number, number]> {
-  const cleaned = input
-    .replace(/\s+/g, "")
-    .replace(/;+$/g, "")
-    .trim();
+function parsePageRanges(input: string, maxPages: number): Array<[number, number]> {
+  const text = (input || "").trim();
+  if (!text) return [];
 
-  if (!cleaned) return [];
-
-  const parts = cleaned.split(",").filter(Boolean);
+  const parts = text.split(",").map((p) => p.trim()).filter(Boolean);
   const ranges: Array<[number, number]> = [];
 
-  for (const p of parts) {
-    if (p.includes("-")) {
-      const [a, b] = p.split("-");
-      const start = Number(a);
-      const end = Number(b);
-      if (!Number.isFinite(start) || !Number.isFinite(end)) throw new Error(`Invalid range: "${p}"`);
-      if (start < 1 || end < 1) throw new Error(`Pages must be >= 1: "${p}"`);
-      ranges.push([Math.min(start, end), Math.max(start, end)]);
-    } else {
-      const page = Number(p);
-      if (!Number.isFinite(page)) throw new Error(`Invalid page: "${p}"`);
-      if (page < 1) throw new Error(`Pages must be >= 1: "${p}"`);
-      ranges.push([page, page]);
+  for (const token of parts) {
+    if (/^\d+$/.test(token)) {
+      const n = clamp(parseInt(token, 10), 1, maxPages);
+      ranges.push([n, n]);
+      continue;
+    }
+    const m = token.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (m) {
+      let a = clamp(parseInt(m[1], 10), 1, maxPages);
+      let b = clamp(parseInt(m[2], 10), 1, maxPages);
+      if (a > b) [a, b] = [b, a];
+      ranges.push([a, b]);
     }
   }
 
-  // Merge overlaps to avoid duplicates
+  // Merge overlaps to keep output stable
   ranges.sort((r1, r2) => r1[0] - r2[0]);
   const merged: Array<[number, number]> = [];
   for (const r of ranges) {
     const last = merged[merged.length - 1];
-    if (!last || r[0] > last[1] + 1) merged.push([...r]);
-    else last[1] = Math.max(last[1], r[1]);
+    if (!last) merged.push(r);
+    else if (r[0] <= last[1] + 1) last[1] = Math.max(last[1], r[1]);
+    else merged.push(r);
   }
+
   return merged;
 }
 
-export default function SplitPDF() {
-  const [pdfFile, setPdfFile] = useState<PDFFile | null>(null);
-  const [mode, setMode] = useState<SplitMode>("ranges");
-  const [rangesInput, setRangesInput] = useState("1-3,5,7-10");
-  const [everyN, setEveryN] = useState("2");
-  const [splitting, setSplitting] = useState(false);
-  const [pageCount, setPageCount] = useState<number | null>(null);
+/** Convert inclusive 1-based range pairs to a flat 0-based unique index list */
+function rangesToIndices(ranges: Array<[number, number]>): number[] {
+  const set = new Set<number>();
+  for (const [a, b] of ranges) {
+    for (let p = a; p <= b; p++) set.add(p - 1);
+  }
+  return Array.from(set).sort((x, y) => x - y);
+}
 
+/** Intersect indices with a limit range (inclusive 1-based) */
+function applyLimit(indices: number[], limit: [number, number] | null): number[] {
+  if (!limit) return indices;
+  const [a, b] = limit;
+  const lo = a - 1;
+  const hi = b - 1;
+  return indices.filter((i) => i >= lo && i <= hi);
+}
+
+export default function SplitPDF() {
   const { toast } = useToast();
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    const file = acceptedFiles[0];
-    if (!file) return;
+  const [file, setFile] = useState<File | null>(null);
+  const [fileKey, setFileKey] = useState("");
+  const [origBytes, setOrigBytes] = useState(0);
+  const [pageCount, setPageCount] = useState<number>(0);
 
-    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-    if (!isPdf) {
-      toast({
-        title: "Only PDFs supported",
-        description: "Please upload a .pdf file.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const [mode, setMode] = useState<Mode>("extract");
 
-    setPdfFile({ file, name: file.name });
-    setPageCount(null);
+  // Extract mode
+  const [extractRanges, setExtractRanges] = useState<string>("1-1");
+  const [extractEachRangeAsSeparate, setExtractEachRangeAsSeparate] = useState<boolean>(false);
 
-    // Try to read page count (client-side)
-    try {
-      const bytes = await file.arrayBuffer();
-      const doc = await PDFDocument.load(bytes);
-      setPageCount(doc.getPageCount());
-    } catch {
-      // If a PDF is malformed, keep UX simple
-      setPageCount(null);
-    }
-  }, [toast]);
+  // Chunk mode
+  const [chunkSize, setChunkSize] = useState<number>(5);
+
+  // Optional limit to a sub-range of document
+  const [limitEnabled, setLimitEnabled] = useState<boolean>(false);
+  const [limitRangeText, setLimitRangeText] = useState<string>("");
+
+  // Naming
+  const [prefix, setPrefix] = useState<string>("");
+  const [padWidth, setPadWidth] = useState<number>(3);
+
+  const [working, setWorking] = useState(false);
+
+  const [outUrl, setOutUrl] = useState<string | null>(null);
+  const [outName, setOutName] = useState<string | null>(null);
+  const [outBytes, setOutBytes] = useState<number | null>(null);
+
+  const clear = () => {
+    if (outUrl) URL.revokeObjectURL(outUrl);
+    setOutUrl(null);
+    setOutName(null);
+    setOutBytes(null);
+
+    setFile(null);
+    setFileKey("");
+    setOrigBytes(0);
+    setPageCount(0);
+  };
+
+  const onDrop = useCallback(
+    async (accepted: File[]) => {
+      const f = accepted?.[0];
+      if (!f) return;
+
+      const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+      if (!isPdf) {
+        toast({ title: "Only PDFs supported", description: "Upload a .pdf file.", variant: "destructive" });
+        return;
+      }
+
+      clear();
+
+      setFile(f);
+      setFileKey(safeId());
+      setOrigBytes(f.size);
+
+      try {
+        const buf = await f.arrayBuffer();
+        const doc = await PDFDocument.load(buf);
+        const n = doc.getPageCount();
+        setPageCount(n);
+
+        setPrefix(baseName(f.name));
+        setExtractRanges(`1-${Math.min(3, n)}`);
+      } catch (e: any) {
+        setFile(null);
+        setPageCount(0);
+        toast({
+          title: "Failed to read PDF",
+          description: e?.message ? String(e.message) : "Could not open this PDF.",
+          variant: "destructive",
+        });
+      }
+    },
+    [toast] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -122,143 +187,201 @@ export default function SplitPDF() {
     maxFiles: 1,
   });
 
-  const clearFile = () => {
-    setPdfFile(null);
-    setPageCount(null);
+  const limitRange = useMemo<[number, number] | null>(() => {
+    if (!limitEnabled || !limitRangeText.trim() || !pageCount) return null;
+    const ranges = parsePageRanges(limitRangeText, pageCount);
+    if (ranges.length === 0) return null;
+    // If user enters multiple ranges, we take the merged total span (simple + not messy)
+    const a = ranges[0][0];
+    const b = ranges[ranges.length - 1][1];
+    return [a, b];
+  }, [limitEnabled, limitRangeText, pageCount]);
+
+  const canRun = useMemo(() => !!file && pageCount > 0 && !working, [file, pageCount, working]);
+
+  const downloadSingleBlob = (blob: Blob, name: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
   };
 
-  const planSummary = useMemo(() => {
-    if (!pdfFile) return null;
-    if (!pageCount) return null;
-
-    try {
-      if (mode === "ranges") {
-        const ranges = parseRanges(rangesInput);
-        if (ranges.length === 0) return "No ranges yet.";
-        const clipped = ranges.map(([a, b]) => [clamp(a, 1, pageCount), clamp(b, 1, pageCount)] as [number, number]);
-        const parts = clipped.filter(([a, b]) => a <= b);
-        return `${parts.length} output PDF(s) from ranges within 1–${pageCount}.`;
-      } else {
-        const n = Number(everyN);
-        if (!Number.isFinite(n) || n < 1) return "Enter N (>= 1).";
-        const outputs = Math.ceil(pageCount / n);
-        return `${outputs} output PDF(s) (${n} page(s) each, last may be smaller).`;
-      }
-    } catch (e: any) {
-      return e?.message ? String(e.message) : "Invalid input.";
-    }
-  }, [pdfFile, pageCount, mode, rangesInput, everyN]);
-
   const splitNow = async () => {
-    if (!pdfFile) return;
+    if (!file || pageCount <= 0) return;
 
-    setSplitting(true);
+    setWorking(true);
 
     try {
-      const bytes = await pdfFile.file.arrayBuffer();
-      const srcDoc = await PDFDocument.load(bytes);
-      const total = srcDoc.getPageCount();
+      const buf = await file.arrayBuffer();
+      const src = await PDFDocument.load(buf);
+      const n = src.getPageCount();
+
+      const namePrefix = (prefix || baseName(file.name) || "split").trim();
+      const pad = clamp(padWidth, 1, 6);
 
       const zip = new JSZip();
-      const base = safeBaseName(pdfFile.name);
 
-      if (mode === "ranges") {
-        const ranges = parseRanges(rangesInput);
+      if (mode === "extract") {
+        const ranges = parsePageRanges(extractRanges, n);
         if (ranges.length === 0) {
           toast({
-            title: "Add page ranges",
-            description: 'Example: "1-3,5,7-10"',
+            title: "Invalid range",
+            description: "Use formats like: 1-3, 6, 9-12",
             variant: "destructive",
           });
-          setSplitting(false);
           return;
         }
 
-        let partIndex = 1;
-        for (const [rawStart, rawEnd] of ranges) {
-          const start = clamp(rawStart, 1, total);
-          const end = clamp(rawEnd, 1, total);
-          if (start > end) continue;
+        if (!extractEachRangeAsSeparate) {
+          // Single output PDF containing all selected pages
+          let indices = rangesToIndices(ranges);
+          indices = applyLimit(indices, limitRange);
+
+          if (indices.length === 0) {
+            toast({
+              title: "No pages selected",
+              description: "Your selection results in 0 pages. Adjust the range/limit.",
+              variant: "destructive",
+            });
+            return;
+          }
 
           const out = await PDFDocument.create();
-          const indices = Array.from({ length: end - start + 1 }, (_, i) => start - 1 + i);
-          const pages = await out.copyPages(srcDoc, indices);
-          pages.forEach((p) => out.addPage(p));
+          const copied = await out.copyPages(src, indices);
+          copied.forEach((p) => out.addPage(p));
 
-          const outBytes = await out.save();
-          const filename = `${base}-part-${String(partIndex).padStart(2, "0")}-pages-${start}-${end}.pdf`;
-          zip.file(filename, outBytes);
-          partIndex += 1;
-        }
+          const outBytesArr = await out.save({ useObjectStreams: true });
+          const outBlob = new Blob([new Uint8Array(outBytesArr)], { type: "application/pdf" });
 
-        if (partIndex === 1) {
-          toast({
-            title: "No valid pages",
-            description: `Your ranges didn't match pages 1–${total}.`,
-            variant: "destructive",
-          });
-          setSplitting(false);
-          return;
-        }
-      } else {
-        const nRaw = Number(everyN);
-        if (!Number.isFinite(nRaw) || nRaw < 1) {
-          toast({
-            title: "Invalid N",
-            description: "N must be a number >= 1.",
-            variant: "destructive",
-          });
-          setSplitting(false);
+          const outFileName = `${namePrefix}-extract.pdf`;
+          if (outUrl) URL.revokeObjectURL(outUrl);
+          const url = URL.createObjectURL(outBlob);
+          setOutUrl(url);
+          setOutName(outFileName);
+          setOutBytes(outBlob.size);
+
+          toast({ title: "Done!", description: "Extracted PDF is ready to download." });
           return;
         }
 
-        const n = Math.floor(nRaw);
-        let partIndex = 1;
+        // Each range becomes its own PDF (ZIP)
+        let madeAny = false;
 
-        for (let start = 1; start <= total; start += n) {
-          const end = Math.min(start + n - 1, total);
+        for (let r = 0; r < ranges.length; r++) {
+          const [a, b] = ranges[r];
+
+          let indices = rangesToIndices([[a, b]]);
+          indices = applyLimit(indices, limitRange);
+          if (indices.length === 0) continue;
 
           const out = await PDFDocument.create();
-          const indices = Array.from({ length: end - start + 1 }, (_, i) => start - 1 + i);
-          const pages = await out.copyPages(srcDoc, indices);
-          pages.forEach((p) => out.addPage(p));
+          const copied = await out.copyPages(src, indices);
+          copied.forEach((p) => out.addPage(p));
 
-          const outBytes = await out.save();
-          const filename = `${base}-part-${String(partIndex).padStart(2, "0")}-pages-${start}-${end}.pdf`;
-          zip.file(filename, outBytes);
-          partIndex += 1;
+          const outBytesArr = await out.save({ useObjectStreams: true });
+          const outBlob = new Blob([new Uint8Array(outBytesArr)], { type: "application/pdf" });
+
+          const partName = `${namePrefix}-range-${zeroPad(r + 1, pad)}-p${a}-p${b}.pdf`;
+          zip.file(partName, outBlob);
+          madeAny = true;
         }
+
+        if (!madeAny) {
+          toast({
+            title: "No output created",
+            description: "Your selection/limit produced 0 pages.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        downloadSingleBlob(zipBlob, `${namePrefix}-ranges.zip`);
+        toast({ title: "Done!", description: "ZIP downloaded with the split PDFs." });
+        return;
+      }
+
+      if (mode === "single") {
+        // One PDF per page (ZIP)
+        const start = limitRange ? limitRange[0] : 1;
+        const end = limitRange ? limitRange[1] : n;
+
+        for (let p = start; p <= end; p++) {
+          const out = await PDFDocument.create();
+          const copied = await out.copyPages(src, [p - 1]);
+          out.addPage(copied[0]);
+
+          const outBytesArr = await out.save({ useObjectStreams: true });
+          const outBlob = new Blob([new Uint8Array(outBytesArr)], { type: "application/pdf" });
+
+          const fname = `${namePrefix}-page-${zeroPad(p, pad)}.pdf`;
+          zip.file(fname, outBlob);
+        }
+
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        downloadSingleBlob(zipBlob, `${namePrefix}-pages.zip`);
+        toast({ title: "Done!", description: "ZIP downloaded with one PDF per page." });
+        return;
+      }
+
+      // mode === "chunk"
+      const step = clamp(chunkSize, 1, 500);
+      const start = limitRange ? limitRange[0] : 1;
+      const end = limitRange ? limitRange[1] : n;
+
+      let chunkIndex = 1;
+      for (let p = start; p <= end; p += step) {
+        const a = p;
+        const b = Math.min(end, p + step - 1);
+
+        const indices: number[] = [];
+        for (let i = a; i <= b; i++) indices.push(i - 1);
+
+        const out = await PDFDocument.create();
+        const copied = await out.copyPages(src, indices);
+        copied.forEach((pg) => out.addPage(pg));
+
+        const outBytesArr = await out.save({ useObjectStreams: true });
+        const outBlob = new Blob([new Uint8Array(outBytesArr)], { type: "application/pdf" });
+
+        const fname = `${namePrefix}-chunk-${zeroPad(chunkIndex, pad)}-p${a}-p${b}.pdf`;
+        zip.file(fname, outBlob);
+
+        chunkIndex++;
       }
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(zipBlob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${safeBaseName(pdfFile.name)}-split.zip`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1500);
-
-      toast({
-        title: "Split complete!",
-        description: "Your ZIP file has been downloaded.",
-      });
+      downloadSingleBlob(zipBlob, `${namePrefix}-chunks.zip`);
+      toast({ title: "Done!", description: "ZIP downloaded with chunked PDFs." });
     } catch (e: any) {
       toast({
         title: "Split failed",
-        description: e?.message ? String(e.message) : "Something went wrong while splitting your PDF.",
+        description: e?.message ? String(e.message) : "Something went wrong splitting the PDF.",
         variant: "destructive",
       });
     } finally {
-      setSplitting(false);
+      setWorking(false);
     }
+  };
+
+  const downloadOutput = () => {
+    if (!outUrl || !outName) return;
+    const a = document.createElement("a");
+    a.href = outUrl;
+    a.download = outName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   return (
     <ToolLayout
       title="Split PDF"
-      description="Split a PDF into multiple files by page ranges or every N pages — fast, private, and client-side."
+      description="Split, extract, or chunk pages from a PDF — client-side, fast, private."
     >
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Left */}
@@ -272,102 +395,147 @@ export default function SplitPDF() {
             >
               <input {...getInputProps()} />
               <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-lg font-medium">Drop your PDF here</p>
+              <p className="text-lg font-medium">Drop a PDF here</p>
               <p className="text-sm text-muted-foreground mt-1">or click to browse</p>
+              <p className="text-xs text-muted-foreground mt-3">Split happens locally — no uploads</p>
             </div>
           </Card>
 
-          {pdfFile && (
+          {file && (
             <Card className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <FileText className="h-8 w-8 text-primary shrink-0" />
+                  <FileText className="h-7 w-7 text-primary shrink-0" />
                   <div className="min-w-0">
-                    <div className="font-medium truncate">{pdfFile.name}</div>
+                    <div className="font-medium truncate">{file.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {pageCount ? `${pageCount} pages` : "PDF loaded"} • Outputs download as ZIP
+                      {formatBytes(origBytes)} • {pageCount} pages
                     </div>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" onClick={clearFile} disabled={splitting}>
+                <Button variant="ghost" size="icon" onClick={clear} disabled={working} aria-label="Remove">
                   <X className="h-4 w-4" />
                 </Button>
               </div>
             </Card>
           )}
 
-          {/* Mode */}
-          <Card className="p-6 space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant={mode === "ranges" ? "default" : "outline"}
-                onClick={() => setMode("ranges")}
-                disabled={splitting}
-              >
-                <Scissors className="h-4 w-4 mr-2" />
-                By ranges
-              </Button>
-              <Button
-                type="button"
-                variant={mode === "everyN" ? "default" : "outline"}
-                onClick={() => setMode("everyN")}
-                disabled={splitting}
-              >
-                <Files className="h-4 w-4 mr-2" />
-                Every N pages
-              </Button>
+          <Card className="p-6 space-y-5">
+            <div className="space-y-2">
+              <Label>Mode</Label>
+              <Select value={mode} onValueChange={(v) => setMode(v as Mode)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="extract">Extract pages</SelectItem>
+                  <SelectItem value="single">Split into single pages</SelectItem>
+                  <SelectItem value="chunk">Split every N pages</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            {mode === "ranges" ? (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Page ranges</label>
-                <Input
-                  value={rangesInput}
-                  onChange={(e) => setRangesInput(e.target.value)}
-                  placeholder='Example: "1-3,5,7-10"'
-                  disabled={splitting}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Comma-separated. Use <span className="font-medium">1-3</span> for a range or <span className="font-medium">5</span> for a single page.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Pages per file (N)</label>
-                <Input
-                  value={everyN}
-                  onChange={(e) => setEveryN(e.target.value)}
-                  placeholder="2"
-                  inputMode="numeric"
-                  disabled={splitting}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Splits the PDF into chunks of N pages (last file may be smaller).
-                </p>
+            {mode === "extract" && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>Pages to extract</Label>
+                  <Input
+                    value={extractRanges}
+                    onChange={(e) => setExtractRanges(e.target.value)}
+                    placeholder="Example: 1-3, 6, 9-12"
+                  />
+                  <p className="text-xs text-muted-foreground">Use: 1-3, 6, 9-12</p>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label>Each range as separate PDF (ZIP)</Label>
+                    <p className="text-xs text-muted-foreground">Otherwise you get one extracted PDF</p>
+                  </div>
+                  <Switch checked={extractEachRangeAsSeparate} onCheckedChange={setExtractEachRangeAsSeparate} />
+                </div>
               </div>
             )}
 
-            {planSummary && (
-              <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-                {planSummary}
+            {mode === "chunk" && (
+              <div className="space-y-2">
+                <Label>Chunk size (pages)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={chunkSize}
+                  onChange={(e) => setChunkSize(Math.max(1, Number(e.target.value)))}
+                />
+                <p className="text-xs text-muted-foreground">Example: 5 = PDFs of 5 pages each</p>
               </div>
             )}
+
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label>Limit to a page span (optional)</Label>
+                  <p className="text-xs text-muted-foreground">Example: only operate within 10-50</p>
+                </div>
+                <Switch checked={limitEnabled} onCheckedChange={setLimitEnabled} />
+              </div>
+              <Input
+                value={limitRangeText}
+                onChange={(e) => setLimitRangeText(e.target.value)}
+                placeholder="Example: 10-50"
+                disabled={!limitEnabled}
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Filename prefix</Label>
+                <Input value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="my-document" />
+              </div>
+              <div className="space-y-2">
+                <Label>Zero padding</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={6}
+                  step={1}
+                  value={padWidth}
+                  onChange={(e) => setPadWidth(clamp(Number(e.target.value), 1, 6))}
+                />
+              </div>
+            </div>
           </Card>
 
-          <Button onClick={splitNow} disabled={!pdfFile || splitting} className="w-full" size="lg">
-            {splitting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Splitting...
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4 mr-2" />
-                Split & Download ZIP
-              </>
-            )}
-          </Button>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button onClick={splitNow} disabled={!canRun} className="w-full" size="lg">
+              {working ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Working...
+                </>
+              ) : (
+                <>
+                  <Scissors className="h-4 w-4 mr-2" />
+                  Split
+                </>
+              )}
+            </Button>
+
+            <Button onClick={downloadOutput} disabled={!outUrl} variant="secondary" className="w-full" size="lg">
+              <Download className="h-4 w-4 mr-2" />
+              Download
+            </Button>
+          </div>
+
+          {outBytes != null && outName && (
+            <Card className="p-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Output</span>
+                <span className="font-medium">{formatBytes(outBytes)}</span>
+              </div>
+              <div className="text-xs text-muted-foreground mt-1 truncate">{outName}</div>
+            </Card>
+          )}
         </div>
 
         {/* Right */}
@@ -379,30 +547,30 @@ export default function SplitPDF() {
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                   1
                 </span>
-                <span>Upload your PDF</span>
+                <span>Upload a PDF</span>
               </li>
               <li className="flex gap-3">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                   2
                 </span>
-                <span>Choose ranges or “every N pages”</span>
+                <span>Choose a split mode and (optionally) a page limit</span>
               </li>
               <li className="flex gap-3">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                   3
                 </span>
-                <span>Download a ZIP with all split PDFs</span>
+                <span>Download the result — extracted PDF or a ZIP</span>
               </li>
             </ol>
           </Card>
 
           <Card className="p-6 bg-muted/50">
-            <h3 className="font-semibold mb-2">Features</h3>
+            <h3 className="font-semibold mb-2">Notes</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Split by custom page ranges</li>
-              <li>• Split into chunks of N pages</li>
-              <li>• Output as ZIP download</li>
-              <li>• Private: client-side processing</li>
+              <li>• Use ranges like: <span className="font-medium text-foreground">1-3, 6, 9-12</span></li>
+              <li>• “Each range as separate” creates a ZIP with one PDF per range.</li>
+              <li>• For single pages and chunks, output is always a ZIP.</li>
+              <li>• Everything runs locally in your browser. No uploads.</li>
             </ul>
           </Card>
         </div>
