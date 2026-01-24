@@ -43,6 +43,7 @@ import CodeMinifyTools from "./pages/tools/CodeMinifyTools";
 import ImageConverter from "./pages/tools/ImageConverter";
 import ImageCompressor from "./pages/tools/ImageCompressor";
 import CompressPDF from "@/pages/tools/CompressPDF";
+import PDFProtect from "@/pages/tools/PDFProtect";
 
 const queryClient = new QueryClient();
 
@@ -92,6 +93,7 @@ const App = () => (
           <Route path="/tools/image-converter" element={<ImageConverter />} />
           <Route path="/tools/image-compressor" element={<ImageCompressor />} />
           <Route path="/tools/compress-pdf" element={<CompressPDF />} />
+          <Route path="/tools/pdf-protect" element={<PDFProtect />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

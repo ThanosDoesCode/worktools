@@ -340,6 +340,15 @@ export const tools: Tool[] = [
     keywords: ["split pdf", "extract pdf pages", "pdf page range", "separate pdf", "chunk pdf"],
     icon: "Scissors",
   },
+  {
+    id: 35,
+    name: "PDF Protect",
+    slug: "pdf-protect",
+    description: "Password-protect or unlock a PDF (client-side).",
+    category: "pdfs",
+    keywords: ["pdf", "protect", "password", "encrypt", "unlock", "decrypt", "security"],
+    icon: "Lock",
+  },
 ];
 
 export const categories = [
