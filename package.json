@@ -13,8 +13,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@neslinesli93/qpdf-wasm": "^1.0.0",
-    "heic2any": "^0.0.4",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -57,6 +55,7 @@
     "esbuild-wasm": "^0.24.2",
     "fflate": "^0.8.2",
     "file-saver": "^2.0.5",
+    "heic2any": "^0.0.4",
     "html-minifier-terser": "^7.2.0",
     "html2canvas": "^1.4.1",
     "input-otp": "^1.4.2",
