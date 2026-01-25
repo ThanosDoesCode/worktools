@@ -19,8 +19,4 @@ export default defineConfig(({ mode }) => ({
     },
     dedupe: ["react", "react-dom"],
   },
-  assetsInclude: ["**/*.wasm"],
-  optimizeDeps: {
-    exclude: ["@neslinesli93/qpdf-wasm"],
-  },
 }));
