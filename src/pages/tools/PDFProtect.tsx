@@ -1,5 +1,6 @@
-import React, { useMemo, useRef, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
+import { PDFDocument } from "pdf-lib-with-encrypt";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,13 +8,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Lock, Download, FileText, Shield, Eye, EyeOff, Loader2, Unlock, Settings2 } from "lucide-react";
+import { Upload, Lock, Download, FileText, Shield, Eye, EyeOff, Loader2, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { ToolLayout } from "@/components/layout/ToolLayout";
-
-type Mode = "protect" | "unlock";
-type PrintLevel = "full" | "low" | "none";
-type ModifyLevel = "all" | "annotate" | "form" | "assembly" | "none";
 
 function scorePassword(pw: string) {
   const p = pw || "";
@@ -49,81 +46,23 @@ function baseName(name: string) {
   return (name || "document").replace(/\.pdf$/i, "") || "document";
 }
 
-type QpdfModule = {
-  FS: {
-    writeFile: (path: string, data: Uint8Array) => void;
-    readFile: (path: string) => Uint8Array;
-    unlink: (path: string) => void;
-    analyzePath?: (path: string) => { exists: boolean };
-  };
-  callMain: (args: string[]) => void;
-};
-
-function safeUnlink(qpdf: QpdfModule, path: string) {
-  try {
-    if (qpdf.FS.analyzePath) {
-      const exists = qpdf.FS.analyzePath(path).exists;
-      if (exists) qpdf.FS.unlink(path);
-      return;
-    }
-    qpdf.FS.unlink(path);
-  } catch {
-    // ignore
-  }
-}
-
-/**
- * IMPORTANT FIX:
- * The factory is in dist/qpdf.js (NOT package root).
- * The wasm is dist/qpdf.wasm and must be provided via locateFile().
- */
-async function loadQpdf(): Promise<QpdfModule> {
-  const [qpdfJs, wasmUrlMod] = await Promise.all([
-    import("@neslinesli93/qpdf-wasm/dist/qpdf.js"),
-    import("@neslinesli93/qpdf-wasm/dist/qpdf.wasm?url"),
-  ]);
-
-  const createModule = (qpdfJs as any).default;
-  const wasmUrl = (wasmUrlMod as any).default;
-
-  if (typeof createModule !== "function") {
-    const keys = qpdfJs ? Object.keys(qpdfJs as any) : [];
-    throw new Error(`qpdf-wasm: factory function not found. Exports: ${keys.join(", ")}`);
-  }
-
-  const qpdf = (await createModule({
-    locateFile: () => wasmUrl,
-  })) as QpdfModule;
-
-  return qpdf;
-}
-
 export default function PDFProtect() {
-  const qpdfRef = useRef<QpdfModule | null>(null);
-  const qpdfLoadingRef = useRef<Promise<QpdfModule> | null>(null);
-
   const [file, setFile] = useState<File | null>(null);
-  const [mode, setMode] = useState<Mode>("protect");
 
-  // Protect
+  // Password fields
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [ownerPassword, setOwnerPassword] = useState("");
   const [useSameOwnerPassword, setUseSameOwnerPassword] = useState(true);
 
-  // Unlock
-  const [unlockPassword, setUnlockPassword] = useState("");
-
   const [showPassword, setShowPassword] = useState(false);
 
-  // Advanced (best-effort flags)
+  // Advanced permissions
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [printLevel, setPrintLevel] = useState<PrintLevel>("full");
-  const [modifyLevel, setModifyLevel] = useState<ModifyLevel>("all");
-  const [allowExtract, setAllowExtract] = useState(true);
-  const [allowAnnotate, setAllowAnnotate] = useState(true);
-  const [allowAssemble, setAllowAssemble] = useState(true);
-  const [allowFormFill, setAllowFormFill] = useState(true);
+  const [allowPrinting, setAllowPrinting] = useState(true);
+  const [allowModifying, setAllowModifying] = useState(false);
+  const [allowCopying, setAllowCopying] = useState(false);
+  const [allowAnnotating, setAllowAnnotating] = useState(true);
 
   // Processing
   const [isProcessing, setIsProcessing] = useState(false);
@@ -144,8 +83,6 @@ export default function PDFProtect() {
     passwordsMatch &&
     (useSameOwnerPassword || ownerPassword.trim().length > 0) &&
     strongEnough;
-
-  const canUnlock = !!file && !isProcessing && unlockPassword.trim().length > 0;
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const pdfFile = acceptedFiles.find((f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
@@ -171,7 +108,6 @@ export default function PDFProtect() {
     setConfirmPassword("");
     setOwnerPassword("");
     setUseSameOwnerPassword(true);
-    setUnlockPassword("");
     setOutputBlob(null);
     setOutputName("");
     setProgress(0);
@@ -179,102 +115,55 @@ export default function PDFProtect() {
     setShowPassword(false);
   };
 
-  function buildQpdfPermissionArgs(): string[] {
-    const args: string[] = [];
-
-    // These are best-effort; if unsupported by this build, we fallback to plain encrypt.
-    args.push(`--print=${printLevel === "full" ? "full" : printLevel === "low" ? "low" : "none"}`);
-    args.push(`--modify=${modifyLevel}`);
-    args.push(`--extract=${allowExtract ? "y" : "n"}`);
-    args.push(`--annotate=${allowAnnotate ? "y" : "n"}`);
-    args.push(`--assemble=${allowAssemble ? "y" : "n"}`);
-    args.push(`--form=${allowFormFill ? "y" : "n"}`);
-    args.push(`--accessibility=${allowExtract ? "y" : "n"}`);
-
-    return args;
-  }
-
-  async function getQpdf(): Promise<QpdfModule> {
-    if (qpdfRef.current) return qpdfRef.current;
-    if (!qpdfLoadingRef.current) qpdfLoadingRef.current = loadQpdf();
-    qpdfRef.current = await qpdfLoadingRef.current;
-    return qpdfRef.current;
-  }
-
   const handleProcess = async () => {
     if (!file) return toast.error("Please upload a PDF file first.");
-
-    if (mode === "protect" && !canProtect) {
-      return toast.error("Check password rules and try again.");
-    }
-    if (mode === "unlock" && !canUnlock) {
-      return toast.error("Enter the current password to unlock.");
-    }
+    if (!canProtect) return toast.error("Check password rules and try again.");
 
     setIsProcessing(true);
-    setProgress(8);
+    setProgress(10);
 
     try {
-      const qpdf = await getQpdf();
-      setProgress(22);
+      const arrayBuffer = await file.arrayBuffer();
+      setProgress(25);
 
-      safeUnlink(qpdf, "input.pdf");
-      safeUnlink(qpdf, "output.pdf");
+      const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+      setProgress(50);
 
-      const inputBytes = new Uint8Array(await file.arrayBuffer());
-      qpdf.FS.writeFile("input.pdf", inputBytes);
+      const userPw = password;
+      const ownerPw = useSameOwnerPassword ? password : ownerPassword;
 
-      setProgress(45);
-
-      if (mode === "protect") {
-        const userPw = password;
-        const ownerPw = useSameOwnerPassword ? password : ownerPassword;
-
-        const baseArgs = ["--encrypt", userPw, ownerPw, "256"];
-        const permissionArgs = showAdvanced ? buildQpdfPermissionArgs() : [];
-
-        const runEncrypt = (extra: string[]) => qpdf.callMain([...baseArgs, ...extra, "--", "input.pdf", "output.pdf"]);
-
-        try {
-          runEncrypt(permissionArgs);
-        } catch {
-          // fallback: encrypt without permissions flags
-          runEncrypt([]);
-        }
-
-        setProgress(78);
-
-        const outBytes = qpdf.FS.readFile("output.pdf");
-        const blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
-        const name = `${baseName(file.name)}_protected.pdf`;
-
-        setOutputBlob(blob);
-        setOutputName(name);
-        setProgress(100);
-
-        toast.success("PDF protected successfully! It should ask for a password when opened.");
-      } else {
-        try {
-          qpdf.callMain([`--password=${unlockPassword}`, "--decrypt", "--", "input.pdf", "output.pdf"]);
-        } catch {
-          throw new Error("Incorrect password (or unsupported encryption). Please check and try again.");
-        }
-
-        setProgress(78);
-
-        const outBytes = qpdf.FS.readFile("output.pdf");
-        const blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
-        const name = `${baseName(file.name)}_unlocked.pdf`;
-
-        setOutputBlob(blob);
-        setOutputName(name);
-        setProgress(100);
-
-        toast.success("PDF unlocked successfully!");
+      // Build permissions object for pdf-lib-with-encrypt
+      const permissions: Record<string, boolean> = {};
+      
+      if (showAdvanced) {
+        permissions.printing = allowPrinting;
+        permissions.modifying = allowModifying;
+        permissions.copying = allowCopying;
+        permissions.annotating = allowAnnotating;
       }
+
+      setProgress(70);
+
+      // Save with encryption - userPassword is what recipients will be asked for
+      const encryptedPdfBytes = await (pdfDoc as any).save({
+        userPassword: userPw,
+        ownerPassword: ownerPw,
+        permissions: showAdvanced ? permissions : undefined,
+      });
+
+      setProgress(90);
+
+      const blob = new Blob([encryptedPdfBytes], { type: "application/pdf" });
+      const name = `${baseName(file.name)}_protected.pdf`;
+
+      setOutputBlob(blob);
+      setOutputName(name);
+      setProgress(100);
+
+      toast.success("PDF protected successfully! Recipients will be asked for the password when opening.");
     } catch (err: any) {
       console.error(err);
-      toast.error(err?.message || "Failed to process PDF.");
+      toast.error(err?.message || "Failed to protect PDF. The file may already be encrypted or corrupted.");
     } finally {
       setIsProcessing(false);
     }
@@ -297,7 +186,7 @@ export default function PDFProtect() {
   return (
     <ToolLayout
       title="PDF Protect"
-      description="Password-protect (AES-256) a PDF — or remove a password if you know it. Everything runs in your browser."
+      description="Password-protect your PDF with AES encryption. Recipients will be prompted to enter the password when opening the file. Everything runs locally in your browser."
     >
       <div className="grid lg:grid-cols-2 gap-8">
         {/* LEFT */}
@@ -317,9 +206,7 @@ export default function PDFProtect() {
                     <FileText className="w-8 h-8 mx-auto text-primary" />
                     <p className="font-medium">{file.name}</p>
                     <p className="text-sm text-muted-foreground">{formatMB(file.size)}</p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      {mode === "protect" ? "Ready to protect" : "Ready to unlock"}
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">Ready to protect</p>
                   </div>
                 ) : (
                   <>
@@ -336,121 +223,67 @@ export default function PDFProtect() {
 
           <Card>
             <CardContent className="p-6 space-y-4">
-              <div className="space-y-2">
-                <Label>Mode</Label>
-                <Select value={mode} onValueChange={(v) => setMode(v as Mode)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose mode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="protect">
-                      <div className="flex items-center gap-2">
-                        <Lock className="w-4 h-4" /> Protect (add password)
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="unlock">
-                      <div className="flex items-center gap-2">
-                        <Unlock className="w-4 h-4" /> Unlock (remove password)
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Unlock only works if you know the current password.</p>
-              </div>
-
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div className="space-y-1">
                   <Label className="flex items-center gap-2">
                     <Settings2 className="w-4 h-4" /> Advanced permissions
                   </Label>
-                  <p className="text-xs text-muted-foreground">Printing, editing, extraction, etc.</p>
+                  <p className="text-xs text-muted-foreground">Control printing, editing, copying, etc.</p>
                 </div>
-                <Switch checked={showAdvanced} onCheckedChange={setShowAdvanced} disabled={mode !== "protect"} />
+                <Switch checked={showAdvanced} onCheckedChange={setShowAdvanced} />
               </div>
 
-              {mode === "protect" && showAdvanced && (
+              {showAdvanced && (
                 <div className="rounded-lg border p-4 space-y-4">
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-primary" />
                     <div className="font-medium">Permissions</div>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Printing</Label>
-                      <Select value={printLevel} onValueChange={(v) => setPrintLevel(v as PrintLevel)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="full">Full</SelectItem>
-                          <SelectItem value="low">Low-res only</SelectItem>
-                          <SelectItem value="none">None</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Modifying</Label>
-                      <Select value={modifyLevel} onValueChange={(v) => setModifyLevel(v as ModifyLevel)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All allowed</SelectItem>
-                          <SelectItem value="annotate">Only annotate</SelectItem>
-                          <SelectItem value="form">Forms only</SelectItem>
-                          <SelectItem value="assembly">Assembly only</SelectItem>
-                          <SelectItem value="none">None</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="flex items-center justify-between rounded-md border p-3">
                       <div className="space-y-0.5">
-                        <Label>Allow extract</Label>
+                        <Label>Allow printing</Label>
+                        <p className="text-xs text-muted-foreground">Print the document</p>
+                      </div>
+                      <Switch checked={allowPrinting} onCheckedChange={setAllowPrinting} />
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-md border p-3">
+                      <div className="space-y-0.5">
+                        <Label>Allow modifying</Label>
+                        <p className="text-xs text-muted-foreground">Edit content</p>
+                      </div>
+                      <Switch checked={allowModifying} onCheckedChange={setAllowModifying} />
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-md border p-3">
+                      <div className="space-y-0.5">
+                        <Label>Allow copying</Label>
                         <p className="text-xs text-muted-foreground">Copy text/images</p>
                       </div>
-                      <Switch checked={allowExtract} onCheckedChange={setAllowExtract} />
+                      <Switch checked={allowCopying} onCheckedChange={setAllowCopying} />
                     </div>
 
                     <div className="flex items-center justify-between rounded-md border p-3">
                       <div className="space-y-0.5">
-                        <Label>Allow annotate</Label>
-                        <p className="text-xs text-muted-foreground">Comments/markup</p>
+                        <Label>Allow annotating</Label>
+                        <p className="text-xs text-muted-foreground">Add comments</p>
                       </div>
-                      <Switch checked={allowAnnotate} onCheckedChange={setAllowAnnotate} />
-                    </div>
-
-                    <div className="flex items-center justify-between rounded-md border p-3">
-                      <div className="space-y-0.5">
-                        <Label>Allow assemble</Label>
-                        <p className="text-xs text-muted-foreground">Reorder pages</p>
-                      </div>
-                      <Switch checked={allowAssemble} onCheckedChange={setAllowAssemble} />
-                    </div>
-
-                    <div className="flex items-center justify-between rounded-md border p-3">
-                      <div className="space-y-0.5">
-                        <Label>Allow form fill</Label>
-                        <p className="text-xs text-muted-foreground">Fill form fields</p>
-                      </div>
-                      <Switch checked={allowFormFill} onCheckedChange={setAllowFormFill} />
+                      <Switch checked={allowAnnotating} onCheckedChange={setAllowAnnotating} />
                     </div>
                   </div>
 
                   <p className="text-xs text-muted-foreground">
-                    Permissions are best-effort and can be ignored by some PDF viewers.
+                    Note: Permissions are enforced by PDF readers and can be bypassed by some tools.
                   </p>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* PROTECT */}
-          {file && !outputBlob && mode === "protect" && (
+          {/* PASSWORD FORM */}
+          {file && !outputBlob && (
             <Card>
               <CardContent className="p-6 space-y-4">
                 <div className="flex items-center justify-between gap-3">
@@ -458,18 +291,15 @@ export default function PDFProtect() {
                     <Shield className="w-5 h-5 text-primary" />
                     <h3 className="font-semibold">Set Password Protection</h3>
                   </div>
-
                   <Button
-                    type="button"
                     variant="outline"
                     size="sm"
-                    disabled={isProcessing}
                     onClick={() => {
-                      const pw = generatePassword(16);
+                      const pw = generatePassword();
                       setPassword(pw);
                       setConfirmPassword(pw);
                       setShowPassword(true);
-                      toast.success("Generated a strong password.");
+                      toast.success("Password generated – copy it before downloading!");
                     }}
                   >
                     Generate
@@ -477,36 +307,47 @@ export default function PDFProtect() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">Password (min 8 chars)</Label>
                   <div className="relative">
                     <Input
                       id="password"
                       type={showPassword ? "text" : "password"}
+                      placeholder="Enter password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Use 8+ characters for better security"
-                      className="pr-10"
+                      autoComplete="new-password"
                     />
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
                     >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
                   </div>
-
-                  <div className="space-y-1">
-                    <Progress value={(strength.level / 4) * 100} className="h-2" />
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>
-                        Strength: <span className="font-medium text-foreground">{strength.label}</span>
-                      </span>
-                      <span>{password.length} chars</span>
+                  {password && (
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4].map((lvl) => (
+                          <div
+                            key={lvl}
+                            className={`h-1.5 w-6 rounded-full transition-colors ${
+                              strength.level >= lvl
+                                ? lvl <= 2
+                                  ? "bg-destructive"
+                                  : lvl === 3
+                                    ? "bg-yellow-500"
+                                    : "bg-green-500"
+                                : "bg-muted"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-xs text-muted-foreground">{strength.label}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">Recommendation: 12+ chars with symbols.</p>
-                  </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -514,28 +355,20 @@ export default function PDFProtect() {
                   <Input
                     id="confirmPassword"
                     type={showPassword ? "text" : "password"}
+                    placeholder="Confirm password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm your password"
+                    autoComplete="new-password"
                   />
-
-                  {!passwordMinOk && password.length > 0 && (
-                    <p className="text-xs text-destructive">Password must be at least 4 characters.</p>
-                  )}
-                  {confirmPassword.length > 0 && !passwordsMatch && (
-                    <p className="text-xs text-destructive">Passwords do not match.</p>
-                  )}
-                  {passwordMinOk && passwordsMatch && password.length > 0 && !strongEnough && (
-                    <p className="text-xs text-muted-foreground">
-                      Password is valid, but weak. Use 8+ characters for better security.
-                    </p>
+                  {confirmPassword && !passwordsMatch && (
+                    <p className="text-xs text-destructive">Passwords do not match</p>
                   )}
                 </div>
 
                 <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div className="space-y-1">
-                    <Label>Use same owner password</Label>
-                    <p className="text-xs text-muted-foreground">Owner can override restrictions</p>
+                  <div className="space-y-0.5">
+                    <Label>Same owner password</Label>
+                    <p className="text-xs text-muted-foreground">Use the same password for owner access</p>
                   </div>
                   <Switch checked={useSameOwnerPassword} onCheckedChange={setUseSameOwnerPassword} />
                 </div>
@@ -546,174 +379,117 @@ export default function PDFProtect() {
                     <Input
                       id="ownerPassword"
                       type={showPassword ? "text" : "password"}
+                      placeholder="Owner password"
                       value={ownerPassword}
                       onChange={(e) => setOwnerPassword(e.target.value)}
-                      placeholder="Required if different from user password"
+                      autoComplete="new-password"
                     />
+                    <p className="text-xs text-muted-foreground">Owner password allows full access to the PDF.</p>
                   </div>
                 )}
 
-                {isProcessing && (
-                  <div className="space-y-2">
-                    <Progress value={progress} className="h-2" />
-                    <p className="text-sm text-muted-foreground text-center">Processing... {progress}%</p>
-                  </div>
-                )}
-
-                <Button onClick={handleProcess} disabled={!canProtect} className="w-full">
+                <Button onClick={handleProcess} disabled={!canProtect} className="w-full gap-2">
                   {isProcessing ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Protecting...
+                      <Loader2 className="h-4 w-4 animate-spin" /> Protecting...
                     </>
                   ) : (
                     <>
-                      <Lock className="w-4 h-4 mr-2" />
-                      Protect PDF
+                      <Lock className="h-4 w-4" /> Protect PDF
                     </>
                   )}
                 </Button>
 
-                <p className="text-xs text-muted-foreground">
-                  Important: if you forget the password, this PDF cannot be opened.
-                </p>
+                {isProcessing && (
+                  <div className="space-y-2">
+                    <Progress value={progress} className="h-2" />
+                    <p className="text-xs text-center text-muted-foreground">Processing...</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
 
-          {/* UNLOCK */}
-          {file && !outputBlob && mode === "unlock" && (
-            <Card>
+          {/* RESULT */}
+          {outputBlob && (
+            <Card className="border-green-500/50 bg-green-500/5">
               <CardContent className="p-6 space-y-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <Unlock className="w-5 h-5 text-primary" />
-                  <h3 className="font-semibold">Unlock PDF</h3>
+                <div className="flex items-center gap-2 text-green-600">
+                  <Shield className="w-5 h-5" />
+                  <h3 className="font-semibold">PDF Protected Successfully!</h3>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="unlockPassword">Current password</Label>
-                  <div className="relative">
-                    <Input
-                      id="unlockPassword"
-                      type={showPassword ? "text" : "password"}
-                      value={unlockPassword}
-                      onChange={(e) => setUnlockPassword(e.target.value)}
-                      placeholder="Enter the current PDF password"
-                      className="pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-
-                  <p className="text-xs text-muted-foreground">
-                    Unlock removes encryption so the PDF opens without a password.
-                  </p>
-                </div>
-
-                {isProcessing && (
-                  <div className="space-y-2">
-                    <Progress value={progress} className="h-2" />
-                    <p className="text-sm text-muted-foreground text-center">Processing... {progress}%</p>
-                  </div>
-                )}
-
-                <Button onClick={handleProcess} disabled={!canUnlock} className="w-full">
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Unlocking...
-                    </>
-                  ) : (
-                    <>
-                      <Unlock className="w-4 h-4 mr-2" />
-                      Unlock PDF
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* OUTPUT */}
-          {outputBlob && file && (
-            <Card>
-              <CardContent className="p-6 text-center space-y-4">
-                <div className="w-16 h-16 mx-auto bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                  <Shield className="w-8 h-8 text-green-600 dark:text-green-400" />
-                </div>
-                <h3 className="text-xl font-semibold">{mode === "protect" ? "PDF Protected!" : "PDF Unlocked!"}</h3>
-                <p className="text-muted-foreground">
-                  {mode === "protect"
-                    ? "Your PDF is now password-protected. Viewers should ask for a password."
-                    : "Your PDF is now decrypted and should open without a password."}
+                <p className="text-sm text-muted-foreground">
+                  Your PDF is now password-protected. Anyone who opens this file will be prompted to enter the password
+                  you set.
                 </p>
-                <div className="flex gap-3 justify-center flex-wrap">
-                  <Button onClick={handleDownload}>
-                    <Download className="w-4 h-4 mr-2" />
-                    Download
+
+                <div className="flex gap-2">
+                  <Button onClick={handleDownload} className="flex-1 gap-2">
+                    <Download className="h-4 w-4" /> Download Protected PDF
                   </Button>
                   <Button variant="outline" onClick={resetAll}>
-                    Process Another
+                    Start Over
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground break-all">
-                  Output: <span className="font-medium text-foreground">{outputName}</span>
-                </p>
               </CardContent>
             </Card>
           )}
         </div>
 
-        {/* RIGHT */}
+        {/* RIGHT - Info */}
         <div className="space-y-6">
-          <Card className="p-6">
-            <h3 className="font-semibold mb-4">How it works</h3>
-            <ol className="space-y-3 text-sm text-muted-foreground">
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                  1
-                </span>
-                <span>Upload a PDF</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                  2
-                </span>
-                <span>Choose Protect or Unlock and enter the password</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                  3
-                </span>
-                <span>Process locally and download the new PDF</span>
-              </li>
-            </ol>
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <Lock className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold">How It Works</h3>
+              </div>
+              <ul className="space-y-3 text-sm text-muted-foreground">
+                <li className="flex gap-2">
+                  <span className="font-bold text-primary">1.</span>
+                  Upload your PDF file
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-bold text-primary">2.</span>
+                  Set a strong password (at least 8 characters)
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-bold text-primary">3.</span>
+                  Optionally configure advanced permissions
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-bold text-primary">4.</span>
+                  Download your protected PDF
+                </li>
+              </ul>
+            </CardContent>
           </Card>
 
-          <Card className="p-6 bg-muted/50">
-            <h3 className="font-semibold mb-2">Notes</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Everything runs locally in your browser — your PDF is not uploaded anywhere.</li>
-              <li>• Protect uses AES-256 encryption via QPDF (WASM) for broad compatibility.</li>
-              <li>• Unlock requires the current password; it cannot bypass unknown passwords.</li>
-              <li>• Advanced permissions are best-effort and may be ignored by some viewers.</li>
-              <li>• Very large PDFs may take longer depending on device memory.</li>
-            </ul>
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold">Security & Privacy</h3>
+              </div>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li>✓ All processing happens in your browser</li>
+                <li>✓ Your files never leave your device</li>
+                <li>✓ Strong AES encryption</li>
+                <li>✓ No server uploads required</li>
+              </ul>
+            </CardContent>
           </Card>
 
-          <Card className="p-6">
-            <h3 className="font-semibold mb-2">Password tips</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Use 12+ characters for best security.</li>
-              <li>• Mix upper/lowercase, numbers, and symbols.</li>
-              <li>• Store it in a password manager — you can’t recover it later.</li>
-            </ul>
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <h3 className="font-semibold">Tips</h3>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li>• Use a mix of uppercase, lowercase, numbers, and symbols</li>
+                <li>• Store your password securely – it cannot be recovered</li>
+                <li>• Test the protected PDF before sharing</li>
+              </ul>
+            </CardContent>
           </Card>
         </div>
       </div>
