@@ -144,16 +144,19 @@ export default function PDFProtect() {
 
       setProgress(70);
 
-      // Save with encryption - userPassword is what recipients will be asked for
-      const encryptedPdfBytes = await (pdfDoc as any).save({
+      // IMPORTANT: Must call encrypt() BEFORE save() - this is the correct API
+      (pdfDoc as any).encrypt({
         userPassword: userPw,
         ownerPassword: ownerPw,
         permissions: showAdvanced ? permissions : undefined,
       });
 
+      // Save without encryption options - encryption was already applied above
+      const encryptedPdfBytes = await pdfDoc.save({ useObjectStreams: false });
+
       setProgress(90);
 
-      const blob = new Blob([encryptedPdfBytes], { type: "application/pdf" });
+      const blob = new Blob([new Uint8Array(encryptedPdfBytes)], { type: "application/pdf" });
       const name = `${baseName(file.name)}_protected.pdf`;
 
       setOutputBlob(blob);
