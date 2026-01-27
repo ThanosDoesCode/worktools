@@ -1,15 +1,21 @@
 import { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Header } from './Header';
+import { RelatedTools } from './RelatedTools';
 
 interface ToolLayoutProps {
   title: string;
   description: string;
   children: ReactNode;
+  showRelatedTools?: boolean;
 }
 
-export function ToolLayout({ title, description, children }: ToolLayoutProps) {
+export function ToolLayout({ title, description, children, showRelatedTools = true }: ToolLayoutProps) {
+  const location = useLocation();
+  // Extract slug from path like "/tools/pdf-protect" -> "pdf-protect"
+  const slug = location.pathname.replace('/tools/', '');
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -30,6 +36,10 @@ export function ToolLayout({ title, description, children }: ToolLayoutProps) {
         <div className="animate-fade-in">
           {children}
         </div>
+
+        {showRelatedTools && (
+          <RelatedTools currentSlug={slug} maxTools={4} />
+        )}
       </main>
     </div>
   );
