@@ -349,6 +349,15 @@ export const tools: Tool[] = [
     keywords: ["pdf", "protect", "password", "encrypt", "security", "aes"],
     icon: "Lock",
   },
+  {
+    id: "36",
+    name: "PDF Unlock",
+    slug: "pdf-unlock",
+    description: "Remove password protection from your PDF (requires correct password).",
+    category: "pdfs",
+    keywords: ["pdf", "unlock", "remove password", "decrypt", "unprotect"],
+    icon: "Unlock",
+  },
 ];
 
 export const categories = [
