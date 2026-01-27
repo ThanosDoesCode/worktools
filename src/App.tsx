@@ -44,6 +44,7 @@ import ImageConverter from "./pages/tools/ImageConverter";
 import ImageCompressor from "./pages/tools/ImageCompressor";
 import CompressPDF from "@/pages/tools/CompressPDF";
 import PDFProtect from "@/pages/tools/PDFProtect";
+import PDFUnlock from "@/pages/tools/PDFUnlock";
 
 const queryClient = new QueryClient();
 
@@ -94,6 +95,7 @@ const App = () => (
           <Route path="/tools/image-compressor" element={<ImageCompressor />} />
           <Route path="/tools/compress-pdf" element={<CompressPDF />} />
           <Route path="/tools/pdf-protect" element={<PDFProtect />} />
+          <Route path="/tools/pdf-unlock" element={<PDFUnlock />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

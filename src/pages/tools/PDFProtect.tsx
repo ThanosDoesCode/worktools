@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Lock, Download, FileText, Shield, Eye, EyeOff, Loader2, Settings2 } from "lucide-react";
+import { Upload, Lock, Download, FileText, Shield, Eye, EyeOff, Loader2, Settings2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 
@@ -426,6 +426,22 @@ export default function PDFProtect() {
                   Your PDF is now password-protected. Anyone who opens this file will be prompted to enter the password
                   you set.
                 </p>
+
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border">
+                  <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <code className="flex-1 text-sm font-mono break-all">{password}</code>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 gap-1.5"
+                    onClick={() => {
+                      navigator.clipboard.writeText(password);
+                      toast.success("Password copied to clipboard!");
+                    }}
+                  >
+                    <Copy className="h-4 w-4" /> Copy
+                  </Button>
+                </div>
 
                 <div className="flex gap-2">
                   <Button onClick={handleDownload} className="flex-1 gap-2">
