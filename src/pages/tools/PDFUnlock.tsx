@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import { PDFDocument } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
@@ -7,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Upload, Unlock, Download, FileText, Shield, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { Upload, Unlock, Download, FileText, Shield, Eye, EyeOff, Loader2, AlertCircle, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 
@@ -381,6 +382,20 @@ export default function PDFUnlock() {
                 <li>• Only use on PDFs you have permission to unlock</li>
                 <li>• The unlocked PDF is re-rendered as images for compatibility</li>
               </ul>
+            </CardContent>
+          </Card>
+
+          <Card className="border-primary/20">
+            <CardContent className="p-6">
+              <Link to="/tools/pdf-protect" className="flex items-center gap-3 group">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold group-hover:text-primary transition-colors">PDF Protect</h3>
+                  <p className="text-sm text-muted-foreground">Add password protection to PDFs</p>
+                </div>
+              </Link>
             </CardContent>
           </Card>
         </div>

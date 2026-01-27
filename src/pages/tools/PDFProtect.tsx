@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import { PDFDocument } from "pdf-lib-with-encrypt";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Lock, Download, FileText, Shield, Eye, EyeOff, Loader2, Settings2, Copy } from "lucide-react";
+import { Upload, Lock, Download, FileText, Shield, Eye, EyeOff, Loader2, Settings2, Copy, Unlock } from "lucide-react";
 import { toast } from "sonner";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 
@@ -508,6 +509,20 @@ export default function PDFProtect() {
                 <li>• Store your password securely – it cannot be recovered</li>
                 <li>• Test the protected PDF before sharing</li>
               </ul>
+            </CardContent>
+          </Card>
+
+          <Card className="border-primary/20">
+            <CardContent className="p-6">
+              <Link to="/tools/pdf-unlock" className="flex items-center gap-3 group">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Unlock className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold group-hover:text-primary transition-colors">PDF Unlock</h3>
+                  <p className="text-sm text-muted-foreground">Remove password protection from PDFs</p>
+                </div>
+              </Link>
             </CardContent>
           </Card>
         </div>
