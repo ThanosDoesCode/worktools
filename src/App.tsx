@@ -9,7 +9,6 @@ import MarginMarkupCalculator from "./pages/tools/MarginMarkupCalculator";
 import MeetingCostCalculator from "./pages/tools/MeetingCostCalculator";
 import VATCalculator from "./pages/tools/VATCalculator";
 import EmailSignatureGenerator from "./pages/tools/EmailSignatureGenerator";
-import InvoiceGenerator from "./pages/tools/InvoiceGenerator";
 import BreakEvenCalculator from "./pages/tools/BreakEvenCalculator";
 import ROICalculator from "./pages/tools/ROICalculator";
 import PricingCalculator from "./pages/tools/PricingCalculator";
@@ -63,7 +62,6 @@ const App = () => (
           <Route path="/tools/meeting-cost-calculator" element={<MeetingCostCalculator />} />
           <Route path="/tools/vat-calculator" element={<VATCalculator />} />
           <Route path="/tools/email-signature-generator" element={<EmailSignatureGenerator />} />
-          <Route path="/tools/invoice-generator" element={<InvoiceGenerator />} />
           <Route path="/tools/break-even-calculator" element={<BreakEvenCalculator />} />
           <Route path="/tools/roi-calculator" element={<ROICalculator />} />
           <Route path="/tools/pricing-calculator" element={<PricingCalculator />} />
