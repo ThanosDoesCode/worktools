@@ -284,7 +284,7 @@ export const tools: Tool[] = [
 
   // Files — consolidated pages (instead of many tiny tool pages)
   {
-    id: "28",
+    id: "37",
     name: "Zip Tools",
     description: "Create ZIP files or extract ZIP archives",
     category: "files",
