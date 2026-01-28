@@ -358,6 +358,15 @@ export const tools: Tool[] = [
     keywords: ["pdf", "unlock", "remove password", "decrypt", "unprotect"],
     icon: "Unlock",
   },
+  {
+    id: "38",
+    name: "Generator Tools",
+    description: "QR codes, passwords, UUIDs, fake data, lorem ipsum, barcodes — all in one place",
+    category: "generators",
+    slug: "generator-tools",
+    keywords: ["generator", "qr", "barcode", "password", "uuid", "lorem", "fake data"],
+    icon: "Sparkles",
+  },
 ];
 
 export const categories = [
