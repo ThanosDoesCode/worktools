@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,13 +8,49 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { Copy, RefreshCw, Download } from "lucide-react";
+import { Copy, RefreshCw, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import QRCode from "qrcode";
 import JsBarcode from "jsbarcode";
 
 const GeneratorTools = () => {
   const { toast } = useToast();
+
+  // --- Tabs UX helpers
+  const tabScrollRef = useRef<HTMLDivElement | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollButtons = () => {
+    const el = tabScrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setCanScrollLeft(scrollLeft > 2);
+    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 2);
+  };
+
+  useEffect(() => {
+    updateScrollButtons();
+    const el = tabScrollRef.current;
+    if (!el) return;
+
+    const onScroll = () => updateScrollButtons();
+    el.addEventListener("scroll", onScroll, { passive: true });
+
+    const ro = new ResizeObserver(() => updateScrollButtons());
+    ro.observe(el);
+
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
+  }, []);
+
+  const scrollTabsBy = (delta: number) => {
+    const el = tabScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: delta, behavior: "smooth" });
+  };
 
   // Password Generator State
   const [passwordLength, setPasswordLength] = useState(16);
@@ -35,10 +71,12 @@ const GeneratorTools = () => {
   // QR Code State
   const [qrText, setQrText] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const [qrSvg, setQrSvg] = useState("");
 
   // Barcode State
   const [barcodeText, setBarcodeText] = useState("");
   const [barcodeDataUrl, setBarcodeDataUrl] = useState("");
+  const [barcodeSvg, setBarcodeSvg] = useState("");
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -162,7 +200,7 @@ const GeneratorTools = () => {
     setGeneratedLorem(paragraphs.join("\n\n"));
   };
 
-  // QR Code Generator
+  // QR Code Generator (PNG + SVG)
   const generateQRCode = async () => {
     if (!qrText.trim()) {
       toast({ title: "Please enter text or URL", variant: "destructive" });
@@ -171,21 +209,30 @@ const GeneratorTools = () => {
     try {
       const dataUrl = await QRCode.toDataURL(qrText, { width: 256, margin: 2 });
       setQrDataUrl(dataUrl);
+
+      const svg = await QRCode.toString(qrText, { type: "svg", margin: 2 });
+      setQrSvg(svg);
     } catch {
       toast({ title: "Failed to generate QR code", variant: "destructive" });
     }
   };
 
-  // Barcode Generator
+  // Barcode Generator (PNG + SVG)
   const generateBarcode = () => {
     if (!barcodeText.trim()) {
       toast({ title: "Please enter text for barcode", variant: "destructive" });
       return;
     }
     try {
+      // PNG (canvas)
       const canvas = document.createElement("canvas");
       JsBarcode(canvas, barcodeText, { format: "CODE128", width: 2, height: 100 });
-      setBarcodeDataUrl(canvas.toDataURL());
+      setBarcodeDataUrl(canvas.toDataURL("image/png"));
+
+      // SVG
+      const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      JsBarcode(svgEl, barcodeText, { format: "CODE128", width: 2, height: 100 });
+      setBarcodeSvg(svgEl.outerHTML);
     } catch {
       toast({ title: "Failed to generate barcode", variant: "destructive" });
     }
@@ -198,6 +245,36 @@ const GeneratorTools = () => {
     link.click();
   };
 
+  const downloadSvg = (svg: string, filename: string) => {
+    const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadAsJpg = (pngDataUrl: string, filename: string, quality = 0.92) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      // white background for JPG
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+
+      const jpgUrl = canvas.toDataURL("image/jpeg", quality);
+      downloadImage(jpgUrl, filename);
+    };
+    img.src = pngDataUrl;
+  };
+
   return (
     <ToolLayout
       title="Generator Tools"
@@ -206,35 +283,86 @@ const GeneratorTools = () => {
       <Card>
         <CardContent className="p-4 sm:p-6">
           <Tabs defaultValue="password" className="w-full">
-            {/* ✅ MOBILE + iPad friendly: horizontal scroll on small screens, wrap on larger */}
-            <TabsList
-              className="
-                w-full mb-6
-                flex items-center gap-2 justify-start
-                overflow-x-auto max-w-full
-                whitespace-nowrap
-                rounded-lg p-1
-                [-ms-overflow-style:none] [scrollbar-width:none]
-                [&::-webkit-scrollbar]:hidden
-                sm:flex-wrap sm:overflow-visible
-              "
-            >
-              <TabsTrigger value="password" className="shrink-0 min-w-max px-4">
-                Password
-              </TabsTrigger>
-              <TabsTrigger value="uuid" className="shrink-0 min-w-max px-4">
-                UUID
-              </TabsTrigger>
-              <TabsTrigger value="lorem" className="shrink-0 min-w-max px-4">
-                Lorem Ipsum
-              </TabsTrigger>
-              <TabsTrigger value="qrcode" className="shrink-0 min-w-max px-4">
-                QR Code
-              </TabsTrigger>
-              <TabsTrigger value="barcode" className="shrink-0 min-w-max px-4">
-                Barcode
-              </TabsTrigger>
-            </TabsList>
+            {/* ✅ Better Tab UX:
+                - scroll area with visible fade on edges
+                - left/right buttons appear when scrollable
+            */}
+            <div className="relative mb-6">
+              {/* edge fades */}
+              <div
+                className={[
+                  "pointer-events-none absolute inset-y-0 left-0 w-10",
+                  "bg-gradient-to-r from-background to-transparent",
+                  canScrollLeft ? "opacity-100" : "opacity-0",
+                  "transition-opacity",
+                ].join(" ")}
+              />
+              <div
+                className={[
+                  "pointer-events-none absolute inset-y-0 right-0 w-10",
+                  "bg-gradient-to-l from-background to-transparent",
+                  canScrollRight ? "opacity-100" : "opacity-0",
+                  "transition-opacity",
+                ].join(" ")}
+              />
+
+              {/* scroll buttons */}
+              {canScrollLeft && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 z-10 h-9 w-9 rounded-full"
+                  onClick={() => scrollTabsBy(-220)}
+                  aria-label="Scroll tabs left"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+              )}
+              {canScrollRight && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 z-10 h-9 w-9 rounded-full"
+                  onClick={() => scrollTabsBy(220)}
+                  aria-label="Scroll tabs right"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              )}
+
+              {/* TabsList is scroll container */}
+              <TabsList
+                ref={tabScrollRef as any}
+                className="
+                  w-full
+                  flex items-center gap-2 justify-start
+                  overflow-x-auto max-w-full
+                  whitespace-nowrap
+                  rounded-lg p-1
+                  pr-10 pl-10
+                  [-ms-overflow-style:none] [scrollbar-width:none]
+                  [&::-webkit-scrollbar]:hidden
+                "
+              >
+                <TabsTrigger value="password" className="shrink-0 min-w-max px-4">
+                  Password
+                </TabsTrigger>
+                <TabsTrigger value="uuid" className="shrink-0 min-w-max px-4">
+                  UUID
+                </TabsTrigger>
+                <TabsTrigger value="lorem" className="shrink-0 min-w-max px-4">
+                  Lorem Ipsum
+                </TabsTrigger>
+                <TabsTrigger value="qrcode" className="shrink-0 min-w-max px-4">
+                  QR Code
+                </TabsTrigger>
+                <TabsTrigger value="barcode" className="shrink-0 min-w-max px-4">
+                  Barcode
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             {/* Password Generator */}
             <TabsContent value="password" className="space-y-5 sm:space-y-6">
@@ -409,13 +537,24 @@ const GeneratorTools = () => {
                       alt="QR Code"
                       className="border rounded-lg w-full max-w-[260px] sm:max-w-[320px] h-auto"
                     />
-                    <Button
-                      variant="outline"
-                      className="w-full sm:w-auto h-11"
-                      onClick={() => downloadImage(qrDataUrl, "qrcode.png")}
-                    >
-                      <Download className="mr-2 h-4 w-4" /> Download PNG
-                    </Button>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto">
+                      <Button variant="outline" className="h-11" onClick={() => downloadImage(qrDataUrl, "qrcode.png")}>
+                        <Download className="mr-2 h-4 w-4" /> PNG
+                      </Button>
+                      <Button variant="outline" className="h-11" onClick={() => downloadAsJpg(qrDataUrl, "qrcode.jpg")}>
+                        <Download className="mr-2 h-4 w-4" /> JPG
+                      </Button>
+                      {qrSvg && (
+                        <Button variant="outline" className="h-11" onClick={() => downloadSvg(qrSvg, "qrcode.svg")}>
+                          <Download className="mr-2 h-4 w-4" /> SVG
+                        </Button>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground text-center">
+                      Tip: SVG is best for printing. PNG is best for general use.
+                    </p>
                   </div>
                 )}
               </div>
@@ -444,15 +583,38 @@ const GeneratorTools = () => {
                     <img
                       src={barcodeDataUrl}
                       alt="Barcode"
-                      className="border rounded-lg bg-white p-2 w-full max-w-[360px] h-auto"
+                      className="border rounded-lg bg-white p-2 w-full max-w-[420px] h-auto"
                     />
-                    <Button
-                      variant="outline"
-                      className="w-full sm:w-auto h-11"
-                      onClick={() => downloadImage(barcodeDataUrl, "barcode.png")}
-                    >
-                      <Download className="mr-2 h-4 w-4" /> Download PNG
-                    </Button>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto">
+                      <Button
+                        variant="outline"
+                        className="h-11"
+                        onClick={() => downloadImage(barcodeDataUrl, "barcode.png")}
+                      >
+                        <Download className="mr-2 h-4 w-4" /> PNG
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-11"
+                        onClick={() => downloadAsJpg(barcodeDataUrl, "barcode.jpg")}
+                      >
+                        <Download className="mr-2 h-4 w-4" /> JPG
+                      </Button>
+                      {barcodeSvg && (
+                        <Button
+                          variant="outline"
+                          className="h-11"
+                          onClick={() => downloadSvg(barcodeSvg, "barcode.svg")}
+                        >
+                          <Download className="mr-2 h-4 w-4" /> SVG
+                        </Button>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground text-center">
+                      Tip: SVG is best for labels/printing. PNG is best for sharing.
+                    </p>
                   </div>
                 )}
               </div>
