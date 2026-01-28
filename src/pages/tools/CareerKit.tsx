@@ -10,9 +10,6 @@ import { Slider } from "@/components/ui/slider";
 import { PenTool, FileUser, Mail, Download, Copy, Trash2, Plus, X, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 
-/* -----------------------------
-   Helper Functions
-------------------------------*/
 function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -27,9 +24,6 @@ function copyToClipboard(text) {
   toast.success("Copied to clipboard");
 }
 
-/* -----------------------------
-   Signature Generator
-------------------------------*/
 function SignatureGeneratorEmbedded() {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
@@ -56,7 +50,6 @@ function SignatureGeneratorEmbedded() {
     const h = canvas.clientHeight;
 
     ctx.clearRect(0, 0, w, h);
-
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, w, h);
 
@@ -198,40 +191,38 @@ function SignatureGeneratorEmbedded() {
   const palette = ["#0f172a", "#334155", "#16a34a", "#dc2626", "#7c3aed"];
 
   return (
-    <div className="space-y-4">
-      {/* Mode Toggle */}
-      <div className="flex gap-2">
+    <div className="space-y-4 w-full max-w-full">
+      <div className="flex gap-2 w-full">
         <Button
           size="sm"
           variant={mode === "draw" ? "default" : "outline"}
           onClick={() => setMode("draw")}
-          className="flex-1 sm:flex-none"
+          className="flex-1 sm:flex-none min-w-0"
         >
-          <PenTool className="w-4 h-4 mr-2" />
-          Draw
+          <PenTool className="w-4 h-4 mr-2 shrink-0" />
+          <span className="truncate">Draw</span>
         </Button>
         <Button
           size="sm"
           variant={mode === "type" ? "default" : "outline"}
           onClick={() => setMode("type")}
-          className="flex-1 sm:flex-none"
+          className="flex-1 sm:flex-none min-w-0"
         >
-          Type
+          <span className="truncate">Type</span>
         </Button>
       </div>
 
-      {/* Preview - Now on top for mobile */}
-      <div className="rounded-lg border bg-background p-3 sm:p-4">
+      <div className="rounded-lg border bg-background p-3 sm:p-4 w-full max-w-full">
         <div className="text-sm font-medium mb-3">Preview</div>
         <div
-          className="rounded-lg border border-dashed p-3 sm:p-6 flex items-center justify-center min-h-[200px] sm:min-h-[260px]"
+          className="rounded-lg border border-dashed p-3 sm:p-6 flex items-center justify-center min-h-[200px] sm:min-h-[260px] w-full max-w-full"
           style={{ backgroundColor: bgColor }}
         >
           {mode === "draw" ? (
-            <div ref={wrapRef} className="w-full">
+            <div ref={wrapRef} className="w-full max-w-full">
               <canvas
                 ref={canvasRef}
-                className="w-full rounded-md border bg-transparent touch-none cursor-crosshair"
+                className="w-full max-w-full rounded-md border bg-transparent touch-none cursor-crosshair"
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={() => setIsDrawing(false)}
@@ -239,7 +230,7 @@ function SignatureGeneratorEmbedded() {
               />
             </div>
           ) : (
-            <div className="text-center max-w-full overflow-hidden px-2">
+            <div className="text-center w-full max-w-full overflow-hidden px-2">
               <span
                 className="block break-words"
                 style={{
@@ -255,31 +246,37 @@ function SignatureGeneratorEmbedded() {
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="rounded-lg border bg-background p-3 sm:p-4 space-y-4">
+      <div className="rounded-lg border bg-background p-3 sm:p-4 space-y-4 w-full max-w-full">
         {mode === "draw" ? (
           <>
-            <div className="space-y-2">
+            <div className="space-y-2 w-full">
               <Label className="text-sm">Pen Width: {penWidth}px</Label>
-              <Slider value={[penWidth]} onValueChange={(v) => setPenWidth(v[0])} min={1} max={12} step={1} />
+              <Slider
+                value={[penWidth]}
+                onValueChange={(v) => setPenWidth(v[0])}
+                min={1}
+                max={12}
+                step={1}
+                className="w-full"
+              />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 w-full max-w-full">
               <Label className="text-sm">Pen Color</Label>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-start gap-2 w-full max-w-full">
                 <Input
                   type="color"
                   value={penColor}
                   onChange={(e) => setPenColor(e.target.value)}
-                  className="w-12 h-10 p-1"
+                  className="w-12 h-10 p-1 shrink-0"
                 />
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap flex-1 min-w-0">
                   {palette.map((c) => (
                     <button
                       key={c}
                       type="button"
                       onClick={() => setPenColor(c)}
-                      className={`h-9 w-9 rounded-md border ${penColor === c ? "ring-2 ring-ring" : ""}`}
+                      className={`h-9 w-9 shrink-0 rounded-md border ${penColor === c ? "ring-2 ring-ring" : ""}`}
                       style={{ backgroundColor: c }}
                       aria-label={`Set pen color ${c}`}
                     />
@@ -288,22 +285,22 @@ function SignatureGeneratorEmbedded() {
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 w-full max-w-full">
               <Label className="text-sm">Background</Label>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-start gap-2 w-full max-w-full">
                 <Input
                   type="color"
                   value={bgColor}
                   onChange={(e) => setBgColor(e.target.value)}
-                  className="w-12 h-10 p-1"
+                  className="w-12 h-10 p-1 shrink-0"
                 />
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap flex-1 min-w-0">
                   {["#ffffff", "#f8fafc", "#fef3c7", "#dbeafe"].map((c) => (
                     <button
                       key={c}
                       type="button"
                       onClick={() => setBgColor(c)}
-                      className={`h-9 w-9 rounded-md border ${bgColor === c ? "ring-2 ring-ring" : ""}`}
+                      className={`h-9 w-9 shrink-0 rounded-md border ${bgColor === c ? "ring-2 ring-ring" : ""}`}
                       style={{ backgroundColor: c }}
                       aria-label={`Set background ${c}`}
                     />
@@ -312,42 +309,50 @@ function SignatureGeneratorEmbedded() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 w-full">
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => setStrokes((prev) => prev.slice(0, -1))}
                 disabled={isEmpty}
+                className="w-full min-w-0"
               >
-                <Undo2 className="w-4 h-4 mr-2" /> Undo
+                <Undo2 className="w-4 h-4 mr-1 sm:mr-2" /> <span className="truncate">Undo</span>
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => setStrokes([])}
                 disabled={isEmpty}
-                className="hover:text-destructive"
+                className="hover:text-destructive w-full min-w-0"
               >
-                <Trash2 className="w-4 h-4 mr-2" /> Clear
+                <Trash2 className="w-4 h-4 mr-1 sm:mr-2" /> <span className="truncate">Clear</span>
               </Button>
             </div>
           </>
         ) : (
           <>
-            <div className="space-y-2">
+            <div className="space-y-2 w-full">
               <Label className="text-sm">Name</Label>
-              <Input value={typedName} onChange={(e) => setTypedName(e.target.value)} />
+              <Input value={typedName} onChange={(e) => setTypedName(e.target.value)} className="w-full" />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 w-full">
               <Label className="text-sm">Font Size: {typedSize}px</Label>
-              <Slider value={[typedSize]} onValueChange={(v) => setTypedSize(v[0])} min={28} max={120} step={4} />
+              <Slider
+                value={[typedSize]}
+                onValueChange={(v) => setTypedSize(v[0])}
+                min={28}
+                max={120}
+                step={4}
+                className="w-full"
+              />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 w-full">
               <Label className="text-sm">Font Style</Label>
               <Select value={typedStyle} onValueChange={(v) => setTypedStyle(v)}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -360,22 +365,22 @@ function SignatureGeneratorEmbedded() {
               </Select>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 w-full max-w-full">
               <Label className="text-sm">Text Color</Label>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-start gap-2 w-full max-w-full">
                 <Input
                   type="color"
                   value={typedColor}
                   onChange={(e) => setTypedColor(e.target.value)}
-                  className="w-12 h-10 p-1"
+                  className="w-12 h-10 p-1 shrink-0"
                 />
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap flex-1 min-w-0">
                   {palette.map((c) => (
                     <button
                       key={c}
                       type="button"
                       onClick={() => setTypedColor(c)}
-                      className={`h-9 w-9 rounded-md border ${typedColor === c ? "ring-2 ring-ring" : ""}`}
+                      className={`h-9 w-9 shrink-0 rounded-md border ${typedColor === c ? "ring-2 ring-ring" : ""}`}
                       style={{ backgroundColor: c }}
                       aria-label={`Set text color ${c}`}
                     />
@@ -384,22 +389,22 @@ function SignatureGeneratorEmbedded() {
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 w-full max-w-full">
               <Label className="text-sm">Background</Label>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-start gap-2 w-full max-w-full">
                 <Input
                   type="color"
                   value={bgColor}
                   onChange={(e) => setBgColor(e.target.value)}
-                  className="w-12 h-10 p-1"
+                  className="w-12 h-10 p-1 shrink-0"
                 />
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap flex-1 min-w-0">
                   {["#ffffff", "#f8fafc", "#fef3c7", "#dbeafe"].map((c) => (
                     <button
                       key={c}
                       type="button"
                       onClick={() => setBgColor(c)}
-                      className={`h-9 w-9 rounded-md border ${bgColor === c ? "ring-2 ring-ring" : ""}`}
+                      className={`h-9 w-9 shrink-0 rounded-md border ${bgColor === c ? "ring-2 ring-ring" : ""}`}
                       style={{ backgroundColor: c }}
                       aria-label={`Set background ${c}`}
                     />
@@ -418,9 +423,6 @@ function SignatureGeneratorEmbedded() {
   );
 }
 
-/* -----------------------------
-   Resume Generator
-------------------------------*/
 function ResumeGeneratorEmbedded() {
   const [fullName, setFullName] = useState("");
   const [title, setTitle] = useState("");
@@ -479,10 +481,9 @@ function ResumeGeneratorEmbedded() {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Preview First on Mobile */}
-      <Card className="shadow-none lg:hidden">
-        <CardContent className="pt-4 sm:pt-6">
+    <div className="space-y-4 w-full max-w-full">
+      <Card className="shadow-none lg:hidden w-full max-w-full">
+        <CardContent className="pt-4 sm:pt-6 w-full">
           <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
             <div className="text-sm font-medium">Preview</div>
             <div className="flex gap-2">
@@ -500,73 +501,73 @@ function ResumeGeneratorEmbedded() {
               </Button>
             </div>
           </div>
-          <pre className="whitespace-pre-wrap text-xs sm:text-sm leading-relaxed max-h-[50vh] overflow-y-auto rounded-md border bg-muted/30 p-3 sm:p-4">
+          <pre className="whitespace-pre-wrap text-xs sm:text-sm leading-relaxed max-h-[50vh] overflow-auto rounded-md border bg-muted/30 p-3 sm:p-4 w-full max-w-full">
             {output}
           </pre>
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Form */}
-        <div className="space-y-4 max-h-none lg:max-h-[78vh] overflow-y-auto lg:pr-2">
-          <Card className="shadow-none">
-            <CardContent className="pt-4 sm:pt-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-2">
+      <div className="grid gap-4 lg:grid-cols-2 w-full max-w-full">
+        <div className="space-y-4 w-full max-w-full">
+          <Card className="shadow-none w-full max-w-full">
+            <CardContent className="pt-4 sm:pt-6 space-y-4 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                <div className="space-y-2 w-full">
                   <Label className="text-sm">Full Name</Label>
-                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full" />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 w-full">
                   <Label className="text-sm">Job Title</Label>
-                  <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+                  <Input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full" />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 w-full">
                   <Label className="text-sm">Location</Label>
-                  <Input value={location} onChange={(e) => setLocation(e.target.value)} />
+                  <Input value={location} onChange={(e) => setLocation(e.target.value)} className="w-full" />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 w-full">
                   <Label className="text-sm">Email</Label>
-                  <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <Input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full" />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 w-full">
                   <Label className="text-sm">Phone</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full" />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-sm">Website/Portfolio</Label>
-                  <Input value={website} onChange={(e) => setWebsite(e.target.value)} />
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Website</Label>
+                  <Input value={website} onChange={(e) => setWebsite(e.target.value)} className="w-full" />
                 </div>
-                <div className="space-y-2 sm:col-span-2">
+                <div className="space-y-2 sm:col-span-2 w-full">
                   <Label className="text-sm">LinkedIn</Label>
-                  <Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} />
+                  <Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} className="w-full" />
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 w-full">
                 <Label className="text-sm">Professional Summary</Label>
                 <Textarea
                   value={summary}
                   onChange={(e) => setSummary(e.target.value)}
                   rows={4}
-                  className="resize-none"
+                  className="resize-none w-full"
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 w-full max-w-full">
                 <Label className="text-sm">Skills</Label>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full">
                   <Input
                     placeholder="Add a skill"
                     value={newSkill}
                     onChange={(e) => setNewSkill(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && addSkill()}
+                    className="flex-1 min-w-0"
                   />
                   <Button onClick={addSkill} size="icon" className="shrink-0">
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
                 {skills.length > 0 && (
-                  <div className="flex flex-wrap gap-2 pt-2">
+                  <div className="flex flex-wrap gap-2 pt-2 w-full">
                     {skills.map((skill) => (
                       <div
                         key={skill.id}
@@ -575,7 +576,7 @@ function ResumeGeneratorEmbedded() {
                         <span className="text-xs sm:text-sm">{skill.name}</span>
                         <button
                           onClick={() => setSkills((prev) => prev.filter((s) => s.id !== skill.id))}
-                          className="text-muted-foreground hover:text-destructive"
+                          className="text-muted-foreground hover:text-destructive shrink-0"
                           aria-label="Remove skill"
                         >
                           <X className="w-3 h-3" />
@@ -588,8 +589,7 @@ function ResumeGeneratorEmbedded() {
             </CardContent>
           </Card>
 
-          {/* Experience */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between w-full">
             <Label className="text-sm font-medium">Experience</Label>
             <Button
               size="sm"
@@ -606,9 +606,9 @@ function ResumeGeneratorEmbedded() {
           </div>
 
           {experiences.map((exp, i) => (
-            <Card key={exp.id} className="shadow-none">
-              <CardContent className="pt-4 sm:pt-6 space-y-3">
-                <div className="flex items-center justify-between">
+            <Card key={exp.id} className="shadow-none w-full max-w-full">
+              <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
+                <div className="flex items-center justify-between w-full">
                   <div className="text-xs text-muted-foreground">Experience {i + 1}</div>
                   {experiences.length > 1 && (
                     <Button
@@ -621,15 +621,16 @@ function ResumeGeneratorEmbedded() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
                   <Input
-                    placeholder="Role/Position"
+                    placeholder="Role"
                     value={exp.role}
                     onChange={(e) => {
                       const next = [...experiences];
                       next[i].role = e.target.value;
                       setExperiences(next);
                     }}
+                    className="w-full"
                   />
                   <Input
                     placeholder="Company"
@@ -639,29 +640,32 @@ function ResumeGeneratorEmbedded() {
                       next[i].company = e.target.value;
                       setExperiences(next);
                     }}
+                    className="w-full"
                   />
                   <Input
-                    placeholder="Start Date"
+                    placeholder="Start"
                     value={exp.start}
                     onChange={(e) => {
                       const next = [...experiences];
                       next[i].start = e.target.value;
                       setExperiences(next);
                     }}
+                    className="w-full"
                   />
                   <Input
-                    placeholder="End Date"
+                    placeholder="End"
                     value={exp.end}
                     onChange={(e) => {
                       const next = [...experiences];
                       next[i].end = e.target.value;
                       setExperiences(next);
                     }}
+                    className="w-full"
                   />
                 </div>
 
                 <Textarea
-                  placeholder="Bullets (one per line)"
+                  placeholder="Bullets"
                   value={exp.bullets}
                   onChange={(e) => {
                     const next = [...experiences];
@@ -669,14 +673,13 @@ function ResumeGeneratorEmbedded() {
                     setExperiences(next);
                   }}
                   rows={3}
-                  className="resize-none"
+                  className="resize-none w-full"
                 />
               </CardContent>
             </Card>
           ))}
 
-          {/* Education */}
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center justify-between pt-2 w-full">
             <Label className="text-sm font-medium">Education</Label>
             <Button
               size="sm"
@@ -693,9 +696,9 @@ function ResumeGeneratorEmbedded() {
           </div>
 
           {education.map((ed, i) => (
-            <Card key={ed.id} className="shadow-none">
-              <CardContent className="pt-4 sm:pt-6 space-y-3">
-                <div className="flex items-center justify-between">
+            <Card key={ed.id} className="shadow-none w-full max-w-full">
+              <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
+                <div className="flex items-center justify-between w-full">
                   <div className="text-xs text-muted-foreground">Education {i + 1}</div>
                   {education.length > 1 && (
                     <Button
@@ -708,15 +711,16 @@ function ResumeGeneratorEmbedded() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
                   <Input
-                    placeholder="School/University"
+                    placeholder="School"
                     value={ed.school}
                     onChange={(e) => {
                       const next = [...education];
                       next[i].school = e.target.value;
                       setEducation(next);
                     }}
+                    className="w-full"
                   />
                   <Input
                     placeholder="Degree"
@@ -726,29 +730,32 @@ function ResumeGeneratorEmbedded() {
                       next[i].degree = e.target.value;
                       setEducation(next);
                     }}
+                    className="w-full"
                   />
                   <Input
-                    placeholder="Start Year"
+                    placeholder="Start"
                     value={ed.start}
                     onChange={(e) => {
                       const next = [...education];
                       next[i].start = e.target.value;
                       setEducation(next);
                     }}
+                    className="w-full"
                   />
                   <Input
-                    placeholder="End Year"
+                    placeholder="End"
                     value={ed.end}
                     onChange={(e) => {
                       const next = [...education];
                       next[i].end = e.target.value;
                       setEducation(next);
                     }}
+                    className="w-full"
                   />
                 </div>
 
                 <Textarea
-                  placeholder="Additional details"
+                  placeholder="Details"
                   value={ed.details}
                   onChange={(e) => {
                     const next = [...education];
@@ -756,16 +763,15 @@ function ResumeGeneratorEmbedded() {
                     setEducation(next);
                   }}
                   rows={2}
-                  className="resize-none"
+                  className="resize-none w-full"
                 />
               </CardContent>
             </Card>
           ))}
         </div>
 
-        {/* Preview - Desktop Only */}
-        <Card className="shadow-none hidden lg:block">
-          <CardContent className="pt-6">
+        <Card className="shadow-none hidden lg:block w-full max-w-full">
+          <CardContent className="pt-6 w-full">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="text-sm font-medium">Preview</div>
               <div className="flex gap-2">
@@ -781,7 +787,7 @@ function ResumeGeneratorEmbedded() {
                 </Button>
               </div>
             </div>
-            <pre className="whitespace-pre-wrap text-sm leading-relaxed max-h-[70vh] overflow-y-auto rounded-md border bg-muted/30 p-4">
+            <pre className="whitespace-pre-wrap text-sm leading-relaxed max-h-[70vh] overflow-auto rounded-md border bg-muted/30 p-4 w-full max-w-full">
               {output}
             </pre>
           </CardContent>
@@ -791,9 +797,6 @@ function ResumeGeneratorEmbedded() {
   );
 }
 
-/* -----------------------------
-   Cover Letter Generator
-------------------------------*/
 function CoverLetterGeneratorEmbedded() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -839,10 +842,9 @@ ${fullName}`.trim();
   }, [fullName, email, phone, address, company, role, hiringManager, tone, content]);
 
   return (
-    <div className="space-y-4">
-      {/* Preview First on Mobile */}
-      <Card className="shadow-none lg:hidden">
-        <CardContent className="pt-4 sm:pt-6">
+    <div className="space-y-4 w-full max-w-full">
+      <Card className="shadow-none lg:hidden w-full max-w-full">
+        <CardContent className="pt-4 sm:pt-6 w-full">
           <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
             <div className="text-sm font-medium">Preview</div>
             <div className="flex gap-2">
@@ -863,60 +865,59 @@ ${fullName}`.trim();
             </div>
           </div>
 
-          <pre className="whitespace-pre-wrap text-xs sm:text-sm leading-relaxed max-h-[50vh] overflow-y-auto rounded-md border bg-muted/30 p-3 sm:p-4">
+          <pre className="whitespace-pre-wrap text-xs sm:text-sm leading-relaxed max-h-[50vh] overflow-auto rounded-md border bg-muted/30 p-3 sm:p-4 w-full max-w-full">
             {letter}
           </pre>
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Inputs */}
-        <div className="space-y-4">
-          <Card className="shadow-none">
-            <CardContent className="pt-4 sm:pt-6 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-2">
+      <div className="grid gap-4 lg:grid-cols-2 w-full max-w-full">
+        <div className="space-y-4 w-full max-w-full">
+          <Card className="shadow-none w-full max-w-full">
+            <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                <div className="space-y-2 w-full">
                   <Label className="text-sm">Full Name</Label>
-                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full" />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 w-full">
                   <Label className="text-sm">Email</Label>
-                  <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <Input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full" />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 w-full">
                   <Label className="text-sm">Phone</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full" />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-sm">Address (optional)</Label>
-                  <Input value={address} onChange={(e) => setAddress(e.target.value)} />
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Address</Label>
+                  <Input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="shadow-none">
-            <CardContent className="pt-4 sm:pt-6 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-2">
+          <Card className="shadow-none w-full max-w-full">
+            <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                <div className="space-y-2 w-full">
                   <Label className="text-sm">Company</Label>
-                  <Input value={company} onChange={(e) => setCompany(e.target.value)} />
+                  <Input value={company} onChange={(e) => setCompany(e.target.value)} className="w-full" />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 w-full">
                   <Label className="text-sm">Role</Label>
-                  <Input value={role} onChange={(e) => setRole(e.target.value)} />
+                  <Input value={role} onChange={(e) => setRole(e.target.value)} className="w-full" />
                 </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label className="text-sm">Hiring Manager (optional)</Label>
-                  <Input value={hiringManager} onChange={(e) => setHiringManager(e.target.value)} />
+                <div className="space-y-2 sm:col-span-2 w-full">
+                  <Label className="text-sm">Hiring Manager</Label>
+                  <Input value={hiringManager} onChange={(e) => setHiringManager(e.target.value)} className="w-full" />
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 w-full">
                 <Label className="text-sm">Tone</Label>
                 <Select value={tone} onValueChange={(v) => setTone(v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select tone" />
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {["Professional", "Bold", "Friendly", "Concise", "Enthusiastic"].map((t) => (
@@ -928,22 +929,21 @@ ${fullName}`.trim();
                 </Select>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 w-full">
                 <Label className="text-sm">Body</Label>
                 <Textarea
                   rows={8}
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
-                  className="resize-none"
+                  className="resize-none w-full"
                 />
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Preview - Desktop Only */}
-        <Card className="shadow-none hidden lg:block">
-          <CardContent className="pt-6">
+        <Card className="shadow-none hidden lg:block w-full max-w-full">
+          <CardContent className="pt-6 w-full">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="text-sm font-medium">Preview</div>
               <div className="flex gap-2">
@@ -962,7 +962,7 @@ ${fullName}`.trim();
               </div>
             </div>
 
-            <pre className="whitespace-pre-wrap text-sm leading-relaxed max-h-[70vh] overflow-y-auto rounded-md border bg-muted/30 p-4">
+            <pre className="whitespace-pre-wrap text-sm leading-relaxed max-h-[70vh] overflow-auto rounded-md border bg-muted/30 p-4 w-full max-w-full">
               {letter}
             </pre>
           </CardContent>
@@ -972,56 +972,62 @@ ${fullName}`.trim();
   );
 }
 
-/* -----------------------------
-   Main Page
-------------------------------*/
 export default function CareerToolkit() {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8 lg:py-10 space-y-4 sm:space-y-6">
-        <header className="space-y-1">
+    <div className="min-h-screen bg-background w-full overflow-x-hidden">
+      <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8 lg:py-10 space-y-4 sm:space-y-6">
+        <header className="space-y-1 w-full">
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold tracking-tight">Career Toolkit</h1>
           <p className="text-xs sm:text-sm lg:text-base text-muted-foreground">
             Fast, clean tools for signatures, resumes, and cover letters.
           </p>
         </header>
 
-        <Tabs defaultValue="signature" className="space-y-3 sm:space-y-4">
-          <TabsList className="w-full grid grid-cols-3 h-auto p-1">
-            <TabsTrigger value="signature" className="flex-col sm:flex-row gap-1 sm:gap-2 text-xs sm:text-sm py-2">
-              <PenTool className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span>Signature</span>
+        <Tabs defaultValue="signature" className="space-y-3 sm:space-y-4 w-full max-w-full">
+          <TabsList className="w-full grid grid-cols-3 h-auto p-1 gap-1">
+            <TabsTrigger
+              value="signature"
+              className="flex-col sm:flex-row gap-1 sm:gap-2 text-[10px] sm:text-sm py-2 px-1 sm:px-3 min-w-0"
+            >
+              <PenTool className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="truncate">Signature</span>
             </TabsTrigger>
-            <TabsTrigger value="resume" className="flex-col sm:flex-row gap-1 sm:gap-2 text-xs sm:text-sm py-2">
-              <FileUser className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span>Resume</span>
+            <TabsTrigger
+              value="resume"
+              className="flex-col sm:flex-row gap-1 sm:gap-2 text-[10px] sm:text-sm py-2 px-1 sm:px-3 min-w-0"
+            >
+              <FileUser className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="truncate">Resume</span>
             </TabsTrigger>
-            <TabsTrigger value="cover-letter" className="flex-col sm:flex-row gap-1 sm:gap-2 text-xs sm:text-sm py-2">
-              <Mail className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Cover Letter</span>
-              <span className="sm:hidden">Letter</span>
+            <TabsTrigger
+              value="cover-letter"
+              className="flex-col sm:flex-row gap-1 sm:gap-2 text-[10px] sm:text-sm py-2 px-1 sm:px-3 min-w-0"
+            >
+              <Mail className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="hidden sm:inline truncate">Cover Letter</span>
+              <span className="sm:hidden truncate">Letter</span>
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="signature">
-            <Card className="shadow-none">
-              <CardContent className="pt-4 sm:pt-6">
+          <TabsContent value="signature" className="w-full max-w-full">
+            <Card className="shadow-none w-full max-w-full">
+              <CardContent className="pt-4 sm:pt-6 w-full max-w-full">
                 <SignatureGeneratorEmbedded />
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="resume">
-            <Card className="shadow-none">
-              <CardContent className="pt-4 sm:pt-6">
+          <TabsContent value="resume" className="w-full max-w-full">
+            <Card className="shadow-none w-full max-w-full">
+              <CardContent className="pt-4 sm:pt-6 w-full max-w-full">
                 <ResumeGeneratorEmbedded />
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="cover-letter">
-            <Card className="shadow-none">
-              <CardContent className="pt-4 sm:pt-6">
+          <TabsContent value="cover-letter" className="w-full max-w-full">
+            <Card className="shadow-none w-full max-w-full">
+              <CardContent className="pt-4 sm:pt-6 w-full max-w-full">
                 <CoverLetterGeneratorEmbedded />
               </CardContent>
             </Card>
