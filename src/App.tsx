@@ -98,8 +98,6 @@ const App = () => (
           <Route path="/tools/pdf-protect" element={<PDFProtect />} />
           <Route path="/tools/pdf-unlock" element={<PDFUnlock />} />
           <Route path="/tools/generator-tools" element={<GeneratorTools />} />
-          <Route path="/tools/business-docs" element={<BusinessDocs />} />
-          <Route path="/tools/career-kit" element={<CareerKit />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
