@@ -1,6 +1,6 @@
 import { categories, getToolsByCategory } from "@/lib/tools";
 import { ToolCard } from "@/components/ui/tool-card";
-import { Mail, DollarSign, Settings, Users, FileText, Code } from "lucide-react";
+import { Mail, DollarSign, Settings, Users, FileText, Code, Sparkles } from "lucide-react";
 
 const categoryIcons: Record<string, React.ReactNode> = {
   communication: <Mail className="h-5 w-5" />,
@@ -9,6 +9,7 @@ const categoryIcons: Record<string, React.ReactNode> = {
   hr: <Users className="h-5 w-5" />,
   pdfs: <FileText className="h-5 w-5" />,
   files: <Code className="h-5 w-5" />,
+  generators: <Sparkles className="h-5 w-5" />,
 };
 
 const categoryColors: Record<string, string> = {
@@ -18,6 +19,7 @@ const categoryColors: Record<string, string> = {
   hr: "bg-warning-light text-warning",
   pdfs: "bg-primary/10 text-primary",
   files: "bg-secondary text-secondary-foreground",
+  generators: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-200",
 };
 
 function isPdfToSomething(tool: { slug: string; name: string }) {

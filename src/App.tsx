@@ -45,6 +45,7 @@ import ImageCompressor from "./pages/tools/ImageCompressor";
 import CompressPDF from "@/pages/tools/CompressPDF";
 import PDFProtect from "@/pages/tools/PDFProtect";
 import PDFUnlock from "@/pages/tools/PDFUnlock";
+import GeneratorTools from "./pages/tools/GeneratorTools";
 
 const queryClient = new QueryClient();
 
@@ -96,6 +97,7 @@ const App = () => (
           <Route path="/tools/compress-pdf" element={<CompressPDF />} />
           <Route path="/tools/pdf-protect" element={<PDFProtect />} />
           <Route path="/tools/pdf-unlock" element={<PDFUnlock />} />
+          <Route path="/tools/generator-tools" element={<GeneratorTools />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
