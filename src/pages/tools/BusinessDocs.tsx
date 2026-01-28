@@ -13,6 +13,8 @@ import {
   FileText,
   Receipt,
   FileSignature,
+  Shield,
+  Presentation,
   Plus,
   Trash2,
   RotateCcw,
@@ -21,6 +23,8 @@ import {
   Download,
 } from "lucide-react";
 import { toast } from "sonner";
+import { NDAGenerator } from "@/components/business-docs/NDAGenerator";
+import { ProposalGenerator } from "@/components/business-docs/ProposalGenerator";
 
 type CurrencyCode =
   | "EUR"
@@ -1377,7 +1381,15 @@ export default function BusinessDocs() {
                     </TabsTrigger>
                     <TabsTrigger value="contract" className="flex-1 min-w-max gap-2">
                       <FileSignature className="h-4 w-4" />
-                      <span className="hidden sm:inline">Contract / Letter</span>
+                      <span className="hidden sm:inline">Contract</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="nda" className="flex-1 min-w-max gap-2">
+                      <Shield className="h-4 w-4" />
+                      <span className="hidden sm:inline">NDA</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="proposal" className="flex-1 min-w-max gap-2">
+                      <Presentation className="h-4 w-4" />
+                      <span className="hidden sm:inline">Proposal</span>
                     </TabsTrigger>
                   </TabsList>
                 </div>
@@ -1410,6 +1422,14 @@ export default function BusinessDocs() {
 
             <TabsContent value="contract" className="space-y-6">
               <ContractLetterGeneratorEmbedded />
+            </TabsContent>
+
+            <TabsContent value="nda" className="space-y-6">
+              <NDAGenerator />
+            </TabsContent>
+
+            <TabsContent value="proposal" className="space-y-6">
+              <ProposalGenerator />
             </TabsContent>
           </Tabs>
         </CardContent>
