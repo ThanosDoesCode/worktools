@@ -174,7 +174,7 @@ export const tools: Tool[] = [
   {
     id: "33",
     name: "Organize PDF",
-    description: "Reorder, rotate, or delete pages in your PDF — client-side",
+    description: "Reorder, rotate, or delete pages in your PDF",
     category: "pdfs",
     slug: "organize-pdf",
     keywords: ["organize", "pdf", "reorder", "rotate", "delete", "pages", "rearrange"],
@@ -183,7 +183,7 @@ export const tools: Tool[] = [
   {
     id: "28",
     name: "Merge PDFs",
-    description: "Combine multiple PDF files into one — client-side",
+    description: "Combine multiple PDF files into one",
     category: "pdfs",
     slug: "merge-pdfs",
     keywords: ["merge", "pdf", "combine", "join"],
@@ -286,7 +286,7 @@ export const tools: Tool[] = [
   {
     id: "28",
     name: "Zip Tools",
-    description: "Create ZIP files or extract ZIP archives — client-side",
+    description: "Create ZIP files or extract ZIP archives",
     category: "files",
     slug: "zip-tools",
     keywords: ["zip", "extract", "archive", "compress"],
@@ -295,7 +295,7 @@ export const tools: Tool[] = [
   {
     id: "29",
     name: "Minify & Prettify",
-    description: "JSON prettifier + HTML/CSS/JS minifiers — client-side",
+    description: "JSON prettifier + HTML/CSS/JS minifiers",
     category: "files",
     slug: "minify-prettify",
     keywords: ["json", "prettify", "minify", "css", "js", "html"],
@@ -304,7 +304,7 @@ export const tools: Tool[] = [
   {
     id: "30",
     name: "Image Converter",
-    description: "Convert JPG/PNG/WebP/AVIF images — client-side",
+    description: "Convert JPG/PNG/WebP/AVIF images",
     category: "files",
     slug: "image-converter",
     keywords: ["image", "convert", "jpg", "jpeg", "png", "webp", "avif"],
@@ -313,7 +313,7 @@ export const tools: Tool[] = [
   {
     id: "31",
     name: "Image Compressor",
-    description: "Compress images for email, Instagram, LinkedIn, and web — client-side",
+    description: "Compress images for email, Instagram, LinkedIn, and web",
     category: "files",
     slug: "image-compressor",
     keywords: ["image", "compress", "email", "instagram", "linkedin", "webp", "jpg", "png"],
@@ -334,7 +334,7 @@ export const tools: Tool[] = [
   {
     id: "34",
     name: "Split PDF",
-    description: "Split, extract, or chunk pages from a PDF — client-side, fast, private.",
+    description: "Split, extract, or chunk pages from a PDF — fast, private.",
     category: "pdfs",
     slug: "split-pdf",
     keywords: ["split pdf", "extract pdf pages", "pdf page range", "separate pdf", "chunk pdf"],
@@ -344,7 +344,7 @@ export const tools: Tool[] = [
     id: "35",
     name: "PDF Protect",
     slug: "pdf-protect",
-    description: "Password-protect your PDF with 256-bit AES encryption (client-side).",
+    description: "Password-protect your PDF with 256-bit AES encryption.",
     category: "pdfs",
     keywords: ["pdf", "protect", "password", "encrypt", "security", "aes"],
     icon: "Lock",
