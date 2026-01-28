@@ -38,18 +38,21 @@ export default function WatermarkPDF() {
 
   const { toast } = useToast();
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    const file = acceptedFiles[0];
-    if (!file) return;
+  const onDrop = useCallback(
+    async (acceptedFiles: File[]) => {
+      const file = acceptedFiles[0];
+      if (!file) return;
 
-    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-    if (!isPdf) {
-      toast({ title: "Only PDFs supported", description: "Upload a .pdf file.", variant: "destructive" });
-      return;
-    }
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (!isPdf) {
+        toast({ title: "Only PDFs supported", description: "Upload a .pdf file.", variant: "destructive" });
+        return;
+      }
 
-    setPdfFile({ file, name: file.name, size: file.size });
-  }, [toast]);
+      setPdfFile({ file, name: file.name, size: file.size });
+    },
+    [toast],
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -136,7 +139,7 @@ export default function WatermarkPDF() {
   };
 
   return (
-    <ToolLayout title="Watermark PDF" description="Add a text watermark to every page — client-side, private.">
+    <ToolLayout title="Watermark PDF" description="Add a text watermark to every page — private.">
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">
           <Card className="p-6">
@@ -223,7 +226,12 @@ export default function WatermarkPDF() {
             </div>
 
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={repeat} onChange={(e) => setRepeat(e.target.checked)} disabled={working} />
+              <input
+                type="checkbox"
+                checked={repeat}
+                onChange={(e) => setRepeat(e.target.checked)}
+                disabled={working}
+              />
               Repeat watermark across the page
             </label>
           </Card>
@@ -247,7 +255,9 @@ export default function WatermarkPDF() {
           <Card className="p-6">
             <h3 className="font-semibold mb-4">Tips</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Use opacity around <b>0.10–0.25</b> for subtle watermarks</li>
+              <li>
+                • Use opacity around <b>0.10–0.25</b> for subtle watermarks
+              </li>
               <li>• Use “Repeat” for stronger security-style watermarks</li>
               <li>• Works fully client-side (private)</li>
             </ul>

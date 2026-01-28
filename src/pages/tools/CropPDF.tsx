@@ -112,7 +112,7 @@ export default function CropPDF() {
   };
 
   return (
-    <ToolLayout title="Crop PDF" description="Crop margins on every page and download a new PDF — client-side.">
+    <ToolLayout title="Crop PDF" description="Crop margins on every page and download a new PDF.">
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">
           <Card className="p-6">

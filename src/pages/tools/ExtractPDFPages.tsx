@@ -73,41 +73,44 @@ export default function ExtractPDFPages() {
 
   const { toast } = useToast();
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    const file = acceptedFiles[0];
-    if (!file) return;
+  const onDrop = useCallback(
+    async (acceptedFiles: File[]) => {
+      const file = acceptedFiles[0];
+      if (!file) return;
 
-    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-    if (!isPdf) {
-      toast({
-        title: "Only PDFs supported",
-        description: "Please upload a .pdf file.",
-        variant: "destructive",
-      });
-      return;
-    }
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (!isPdf) {
+        toast({
+          title: "Only PDFs supported",
+          description: "Please upload a .pdf file.",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    setPdfFile({ file, name: file.name, size: file.size });
-    setWorking(true);
-    try {
-      const bytes = await file.arrayBuffer();
-      const doc = await PDFDocument.load(bytes);
-      const count = doc.getPageCount();
-      setPageCount(count);
-      setRange(`1-${count}`);
-      toast({ title: "Loaded", description: `${count} pages detected.` });
-    } catch (e: any) {
-      setPdfFile(null);
-      setPageCount(null);
-      toast({
-        title: "Failed to read PDF",
-        description: e?.message ? String(e.message) : "Could not load this PDF.",
-        variant: "destructive",
-      });
-    } finally {
-      setWorking(false);
-    }
-  }, [toast]);
+      setPdfFile({ file, name: file.name, size: file.size });
+      setWorking(true);
+      try {
+        const bytes = await file.arrayBuffer();
+        const doc = await PDFDocument.load(bytes);
+        const count = doc.getPageCount();
+        setPageCount(count);
+        setRange(`1-${count}`);
+        toast({ title: "Loaded", description: `${count} pages detected.` });
+      } catch (e: any) {
+        setPdfFile(null);
+        setPageCount(null);
+        toast({
+          title: "Failed to read PDF",
+          description: e?.message ? String(e.message) : "Could not load this PDF.",
+          variant: "destructive",
+        });
+      } finally {
+        setWorking(false);
+      }
+    },
+    [toast],
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -162,7 +165,7 @@ export default function ExtractPDFPages() {
   };
 
   return (
-    <ToolLayout title="Extract PDF Pages" description="Pick only the pages you need and download a new PDF — private, client-side.">
+    <ToolLayout title="Extract PDF Pages" description="Pick only the pages you need and download a new PDF — private.">
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">
           <Card className="p-6">
@@ -205,7 +208,9 @@ export default function ExtractPDFPages() {
                   disabled={!pageCount || working}
                   placeholder="e.g. 1-3,5,8-10"
                 />
-                <div className="text-xs text-muted-foreground">Example: <b>1-3,5,8-10</b></div>
+                <div className="text-xs text-muted-foreground">
+                  Example: <b>1-3,5,8-10</b>
+                </div>
               </div>
             </Card>
           )}
@@ -229,9 +234,26 @@ export default function ExtractPDFPages() {
           <Card className="p-6">
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
-              <li className="flex gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">1</span><span>Upload your PDF</span></li>
-              <li className="flex gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">2</span><span>Type page ranges like <b>1-3,5</b></span></li>
-              <li className="flex gap-3"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">3</span><span>Download a new PDF with only those pages</span></li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  1
+                </span>
+                <span>Upload your PDF</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  2
+                </span>
+                <span>
+                  Type page ranges like <b>1-3,5</b>
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                  3
+                </span>
+                <span>Download a new PDF with only those pages</span>
+              </li>
             </ol>
           </Card>
 

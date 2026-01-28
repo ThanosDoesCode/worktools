@@ -228,10 +228,7 @@ export default function MergePDFs() {
   };
 
   return (
-    <ToolLayout
-      title="Merge PDFs"
-      description="Combine multiple PDF files into a single PDF — fast, private, client-side."
-    >
+    <ToolLayout title="Merge PDFs" description="Combine multiple PDF files into a single PDF — fast, private.">
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Left */}
         <div className="space-y-6">

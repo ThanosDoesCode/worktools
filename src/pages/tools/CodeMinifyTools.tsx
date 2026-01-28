@@ -52,15 +52,21 @@ export default function CodeMinifyTools() {
   const isError = output.startsWith("⚠️ Error:");
 
   return (
-    <ToolLayout title="Minify & Prettify" description="JSON prettifier + lightweight HTML/CSS/JS minifiers — client-side.">
+    <ToolLayout title="Minify & Prettify" description="JSON prettifier + lightweight HTML/CSS/JS minifiers.">
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">
           <Card className="p-6">
             <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
               <TabsList className="w-full">
-                <TabsTrigger className="flex-1" value="json">JSON</TabsTrigger>
-                <TabsTrigger className="flex-1" value="html">HTML</TabsTrigger>
-                <TabsTrigger className="flex-1" value="cssjs">CSS/JS</TabsTrigger>
+                <TabsTrigger className="flex-1" value="json">
+                  JSON
+                </TabsTrigger>
+                <TabsTrigger className="flex-1" value="html">
+                  HTML
+                </TabsTrigger>
+                <TabsTrigger className="flex-1" value="cssjs">
+                  CSS/JS
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value={mode} className="mt-6 space-y-4">
@@ -71,8 +77,8 @@ export default function CodeMinifyTools() {
                     mode === "json"
                       ? `Paste JSON here...`
                       : mode === "html"
-                      ? `Paste HTML here...`
-                      : `Paste CSS or JS here...`
+                        ? `Paste HTML here...`
+                        : `Paste CSS or JS here...`
                   }
                   className="min-h-[260px]"
                 />
@@ -99,7 +105,9 @@ export default function CodeMinifyTools() {
         <div className="space-y-6">
           <Card className="p-6">
             <h3 className="font-semibold mb-3">Output</h3>
-            <pre className={`rounded-md border p-4 text-sm overflow-auto min-h-[260px] ${isError ? "text-destructive" : ""}`}>
+            <pre
+              className={`rounded-md border p-4 text-sm overflow-auto min-h-[260px] ${isError ? "text-destructive" : ""}`}
+            >
               {output || "Paste input to see output..."}
             </pre>
           </Card>

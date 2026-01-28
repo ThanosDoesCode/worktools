@@ -199,7 +199,7 @@ export default function EbookToPDF() {
   };
 
   return (
-    <ToolLayout title="E-book to PDF" description="Convert EPUB e-books to a clean PDF — client-side, best-effort.">
+    <ToolLayout title="E-book to PDF" description="Convert EPUB e-books to a clean PDF — best-effort.">
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Left */}
         <div className="space-y-6">

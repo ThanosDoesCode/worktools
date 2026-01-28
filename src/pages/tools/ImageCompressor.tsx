@@ -711,7 +711,7 @@ export default function ImageCompressor() {
   return (
     <ToolLayout
       title="Image Compressor"
-      description="Compress images for email, Instagram, LinkedIn, and web — private, fast, client-side."
+      description="Compress images for email, Instagram, LinkedIn, and web — private, fast."
     >
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Left */}

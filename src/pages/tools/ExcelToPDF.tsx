@@ -118,7 +118,7 @@ export default function ExcelToPDF() {
         });
       }
     },
-    [toast]
+    [toast],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -160,7 +160,12 @@ export default function ExcelToPDF() {
       return rr;
     });
 
-    return { rows: padded, colsCount, truncatedRows: table.length > maxRows, truncatedCols: (table[0]?.length || 0) > maxCols };
+    return {
+      rows: padded,
+      colsCount,
+      truncatedRows: table.length > maxRows,
+      truncatedCols: (table[0]?.length || 0) > maxCols,
+    };
   }, [table]);
 
   const convertToPDF = async () => {
@@ -245,7 +250,7 @@ export default function ExcelToPDF() {
   };
 
   return (
-    <ToolLayout title="Excel to PDF" description="Convert XLSX/XLS/CSV spreadsheets to a clean PDF — client-side, private.">
+    <ToolLayout title="Excel to PDF" description="Convert XLSX/XLS/CSV spreadsheets to a clean PDF — private.">
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Left */}
         <div className="space-y-6">
@@ -388,7 +393,8 @@ export default function ExcelToPDF() {
                 <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground flex gap-2">
                   <FileText className="h-4 w-4 mt-0.5 shrink-0" />
                   <div>
-                    Tip: If your sheet is wide, choose <b>Landscape</b>. The export supports wide tables via horizontal page breaks.
+                    Tip: If your sheet is wide, choose <b>Landscape</b>. The export supports wide tables via horizontal
+                    page breaks.
                   </div>
                 </div>
               </div>

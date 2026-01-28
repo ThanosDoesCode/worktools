@@ -109,7 +109,7 @@ export default function PDFToText() {
   };
 
   return (
-    <ToolLayout title="PDF to Text" description="Extract plain text content from PDF files (client-side).">
+    <ToolLayout title="PDF to Text" description="Extract plain text content from PDF files.">
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">
           <Card className="p-6">

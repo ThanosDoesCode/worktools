@@ -115,7 +115,7 @@ export default function TextToPDF() {
   };
 
   return (
-    <ToolLayout title="Text to PDF" description="Convert plain text or Markdown-style text into a clean PDF — client-side.">
+    <ToolLayout title="Text to PDF" description="Convert plain text or Markdown-style text into a clean PDF.">
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Left */}
         <div className="space-y-6">

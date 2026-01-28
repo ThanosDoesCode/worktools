@@ -173,7 +173,7 @@ export default function PDFToWord() {
   return (
     <ToolLayout
       title="PDF to Word (Text Extract)"
-      description="Extract selectable text from a PDF and download an editable DOCX — free and client-side."
+      description="Extract selectable text from a PDF and download an editable DOCX."
     >
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">
