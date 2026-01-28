@@ -206,31 +206,32 @@ const GeneratorTools = () => {
       <Card>
         <CardContent className="p-4 sm:p-6">
           <Tabs defaultValue="password" className="w-full">
-            {/* Mobile: horizontal scroll tabs. Desktop: grid. */}
+            {/* ✅ MOBILE + iPad friendly: horizontal scroll on small screens, wrap on larger */}
             <TabsList
-              className={[
-                "w-full mb-4 sm:mb-6",
-                // mobile
-                "flex overflow-x-auto whitespace-nowrap gap-2 justify-start",
-                "rounded-lg p-1",
-                "[&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]",
-                // desktop+
-                "sm:grid sm:grid-cols-5 sm:gap-2 sm:overflow-visible",
-              ].join(" ")}
+              className="
+                w-full mb-6
+                flex items-center gap-2 justify-start
+                overflow-x-auto max-w-full
+                whitespace-nowrap
+                rounded-lg p-1
+                [-ms-overflow-style:none] [scrollbar-width:none]
+                [&::-webkit-scrollbar]:hidden
+                sm:flex-wrap sm:overflow-visible
+              "
             >
-              <TabsTrigger value="password" className="shrink-0 px-3 sm:px-4">
+              <TabsTrigger value="password" className="shrink-0 min-w-max px-4">
                 Password
               </TabsTrigger>
-              <TabsTrigger value="uuid" className="shrink-0 px-3 sm:px-4">
+              <TabsTrigger value="uuid" className="shrink-0 min-w-max px-4">
                 UUID
               </TabsTrigger>
-              <TabsTrigger value="lorem" className="shrink-0 px-3 sm:px-4">
+              <TabsTrigger value="lorem" className="shrink-0 min-w-max px-4">
                 Lorem Ipsum
               </TabsTrigger>
-              <TabsTrigger value="qrcode" className="shrink-0 px-3 sm:px-4">
+              <TabsTrigger value="qrcode" className="shrink-0 min-w-max px-4">
                 QR Code
               </TabsTrigger>
-              <TabsTrigger value="barcode" className="shrink-0 px-3 sm:px-4">
+              <TabsTrigger value="barcode" className="shrink-0 min-w-max px-4">
                 Barcode
               </TabsTrigger>
             </TabsList>
@@ -249,7 +250,6 @@ const GeneratorTools = () => {
                   />
                 </div>
 
-                {/* Mobile: 1 col, Desktop: 2 cols */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="flex items-center space-x-2">
                     <Checkbox
