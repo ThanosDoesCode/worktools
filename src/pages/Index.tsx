@@ -2,10 +2,11 @@ import { Header } from '@/components/layout/Header';
 import { SearchBar } from '@/components/home/SearchBar';
 import { PopularTools } from '@/components/home/PopularTools';
 import { CategorySection } from '@/components/home/CategorySection';
+import { MobileBottomNav } from '@/components/layout/MobileBottomNav';
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20 md:pb-0">
       <Header />
       
       {/* Hero Section */}
@@ -37,6 +38,9 @@ const Index = () => {
           <p>WORKTOOLS — Free business utilities. No login required.</p>
         </div>
       </footer>
+
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav />
     </div>
   );
 };
