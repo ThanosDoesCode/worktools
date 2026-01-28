@@ -22,15 +22,6 @@ export const tools: Tool[] = [
 
   // Finance
   {
-    id: "2",
-    name: "Invoice Generator",
-    description: "Create and download professional invoices instantly",
-    category: "operations",
-    slug: "invoice-generator",
-    keywords: ["invoice", "billing", "pdf", "business"],
-    icon: "FileText",
-  },
-  {
     id: "3",
     name: "Margin vs Markup Calculator",
     description: "Calculate profit margins and markup percentages instantly",
