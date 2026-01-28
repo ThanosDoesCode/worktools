@@ -1,14 +1,9 @@
-// src/pages/tools/CareerKit.tsx
 import { useEffect, useRef, useState } from "react";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-
-import SignatureTab from "@/pages/tools/career-kit/tabs/SignatureTab";
-import ResumeCVTab from "@/pages/tools/career-kit/tabs/ResumeCVTab";
-import CoverLetterTab from "@/pages/tools/career-kit/tabs/CoverLetterTab";
+import { ChevronLeft, ChevronRight, PenTool, FileUser, Mail } from "lucide-react";
 
 export default function CareerKit() {
   const tabScrollRef = useRef<HTMLDivElement | null>(null);
@@ -47,10 +42,7 @@ export default function CareerKit() {
   };
 
   return (
-    <ToolLayout
-      title="Career Kit"
-      description="Create a signature, resume/CV, and cover letter in minutes."
-    >
+    <ToolLayout title="Career Kit" description="Signature, Resume/CV, Cover Letter — fast and clean.">
       <Card>
         <CardContent className="p-4 sm:p-6">
           <Tabs defaultValue="signature" className="w-full">
@@ -88,23 +80,22 @@ export default function CareerKit() {
 
                   <TabsList
                     ref={tabScrollRef as any}
-                    className="
-                      w-full h-11
-                      flex items-center justify-start gap-2
-                      overflow-x-auto whitespace-nowrap
-                      rounded-lg p-1
-                      [-ms-overflow-style:none] [scrollbar-width:none]
-                      [&::-webkit-scrollbar]:hidden
-                    "
+                    className="w-full mb-0 flex overflow-x-auto gap-1 p-1 h-11 whitespace-nowrap rounded-lg
+                      [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   >
-                    <TabsTrigger value="signature" className="shrink-0 min-w-max px-4">
-                      Signature
+                    <TabsTrigger value="signature" className="flex-1 min-w-max gap-2">
+                      <PenTool className="h-4 w-4" />
+                      <span className="hidden sm:inline">Signature</span>
                     </TabsTrigger>
-                    <TabsTrigger value="resume" className="shrink-0 min-w-max px-4">
-                      Resume / CV
+
+                    <TabsTrigger value="resume" className="flex-1 min-w-max gap-2">
+                      <FileUser className="h-4 w-4" />
+                      <span className="hidden sm:inline">Resume / CV</span>
                     </TabsTrigger>
-                    <TabsTrigger value="cover" className="shrink-0 min-w-max px-4">
-                      Cover Letter
+
+                    <TabsTrigger value="cover" className="flex-1 min-w-max gap-2">
+                      <Mail className="h-4 w-4" />
+                      <span className="hidden sm:inline">Cover Letter</span>
                     </TabsTrigger>
                   </TabsList>
                 </div>
@@ -126,17 +117,23 @@ export default function CareerKit() {
                 <p className="mt-2 text-xs text-muted-foreground">Swipe tabs or use arrows.</p>
               )}
             </div>
-
-            <TabsContent value="signature">
-              <SignatureTab />
+            {/* ---------------- Signature generator (draw + export PNG/SVG) ---------------- */}
+            <TabsContent value="signature" className="space-y-6">
+              <div className="p-6 rounded-xl border border-border bg-surface-elevated">
+                
+              </div>
             </TabsContent>
-
-            <TabsContent value="resume">
-              <ResumeCVTab />
+            {/* ----------------  Resume / CV generator ---------------- */}
+            <TabsContent value="resume" className="space-y-6">
+              <div className="p-6 rounded-xl border border-border bg-surface-elevated">
+            
+              </div>
             </TabsContent>
-
-            <TabsContent value="cover">
-              <CoverLetterTab />
+            {/* ---------------- Cover letter generator ---------------- */}
+            <TabsContent value="cover" className="space-y-6">
+              <div className="p-6 rounded-xl border border-border bg-surface-elevated">
+              
+              </div>
             </TabsContent>
           </Tabs>
         </CardContent>
