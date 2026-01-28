@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { Copy, RefreshCw, Download } from "lucide-react";
+import { Copy, RefreshCw, Download, Key, Hash, FileText, QrCode, Barcode } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import QRCode from "qrcode";
 import JsBarcode from "jsbarcode";
@@ -206,102 +206,28 @@ const GeneratorTools = () => {
       <Card>
         <CardContent className="p-4 sm:p-6">
           <Tabs defaultValue="password" className="w-full">
-            {/* Mobile: horizontal scroll tabs. Desktop: grid. */}
-            {/* ✅ Improved Tabs UX (no clipping / clear scroll affordance) */}
-            <div className="mb-6">
-              <div className="relative flex items-center gap-2">
-                {/* Left button */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => scrollTabsBy(-240)}
-                  disabled={!canScrollLeft}
-                  className="
-        h-9 w-9 shrink-0 rounded-full
-        bg-background/80 backdrop-blur
-        disabled:opacity-40
-      "
-                  aria-label="Scroll tabs left"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-
-                {/* Scroll rail wrapper (controls fade + prevents clipping) */}
-                <div className="relative flex-1 min-w-0">
-                  {/* Left fade */}
-                  <div
-                    className={[
-                      "pointer-events-none absolute inset-y-0 left-0 w-8",
-                      "bg-gradient-to-r from-background to-transparent",
-                      canScrollLeft ? "opacity-100" : "opacity-0",
-                      "transition-opacity",
-                    ].join(" ")}
-                  />
-                  {/* Right fade */}
-                  <div
-                    className={[
-                      "pointer-events-none absolute inset-y-0 right-0 w-8",
-                      "bg-gradient-to-l from-background to-transparent",
-                      canScrollRight ? "opacity-100" : "opacity-0",
-                      "transition-opacity",
-                    ].join(" ")}
-                  />
-
-                  {/* TabsList is the scroll container */}
-                  <TabsList
-                    ref={tabScrollRef as any}
-                    className="
-          w-full h-11
-          flex items-center justify-start gap-2
-          overflow-x-auto
-          whitespace-nowrap
-          rounded-lg p-1
-          [-ms-overflow-style:none] [scrollbar-width:none]
-          [&::-webkit-scrollbar]:hidden
-        "
-                  >
-                    <TabsTrigger value="password" className="shrink-0 min-w-max px-4">
-                      Password
-                    </TabsTrigger>
-                    <TabsTrigger value="uuid" className="shrink-0 min-w-max px-4">
-                      UUID
-                    </TabsTrigger>
-                    <TabsTrigger value="lorem" className="shrink-0 min-w-max px-4">
-                      Lorem Ipsum
-                    </TabsTrigger>
-                    <TabsTrigger value="qrcode" className="shrink-0 min-w-max px-4">
-                      QR Code
-                    </TabsTrigger>
-                    <TabsTrigger value="barcode" className="shrink-0 min-w-max px-4">
-                      Barcode
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
-
-                {/* Right button */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => scrollTabsBy(240)}
-                  disabled={!canScrollRight}
-                  className="
-        h-9 w-9 shrink-0 rounded-full
-        bg-background/80 backdrop-blur
-        disabled:opacity-40
-      "
-                  aria-label="Scroll tabs right"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* Small hint shown only when scrollable */}
-              {(canScrollLeft || canScrollRight) && (
-                <p className="mt-2 text-xs text-muted-foreground">Swipe tabs or use arrows.</p>
-              )}
-            </div>
+            <TabsList className="w-full mb-6 flex overflow-x-auto gap-1 p-1 scrollbar-hide">
+              <TabsTrigger value="password" className="flex-1 min-w-max gap-2">
+                <Key className="h-4 w-4" />
+                <span className="hidden sm:inline">Password</span>
+              </TabsTrigger>
+              <TabsTrigger value="uuid" className="flex-1 min-w-max gap-2">
+                <Hash className="h-4 w-4" />
+                <span className="hidden sm:inline">UUID</span>
+              </TabsTrigger>
+              <TabsTrigger value="lorem" className="flex-1 min-w-max gap-2">
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Lorem</span>
+              </TabsTrigger>
+              <TabsTrigger value="qrcode" className="flex-1 min-w-max gap-2">
+                <QrCode className="h-4 w-4" />
+                <span className="hidden sm:inline">QR Code</span>
+              </TabsTrigger>
+              <TabsTrigger value="barcode" className="flex-1 min-w-max gap-2">
+                <Barcode className="h-4 w-4" />
+                <span className="hidden sm:inline">Barcode</span>
+              </TabsTrigger>
+            </TabsList>
 
             {/* Password Generator */}
             <TabsContent value="password" className="space-y-5 sm:space-y-6">
