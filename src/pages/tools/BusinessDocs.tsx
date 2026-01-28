@@ -131,7 +131,6 @@ export default function BusinessDocs() {
             </div>
 
             <TabsContent value="invoice">
-              {/* ✅ includes your invoice generator (tab version) */}
               <InvoiceTab />
             </TabsContent>
 
