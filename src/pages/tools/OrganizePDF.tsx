@@ -3,18 +3,7 @@ import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  Upload,
-  X,
-  Download,
-  FileText,
-  Loader2,
-  ArrowUp,
-  ArrowDown,
-  RotateCw,
-  Trash2,
-  Layers,
-} from "lucide-react";
+import { Upload, X, Download, FileText, Loader2, ArrowUp, ArrowDown, RotateCw, Trash2, Layers } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PDFDocument, degrees } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
@@ -79,53 +68,56 @@ export default function OrganizePDF() {
 
   const { toast } = useToast();
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    const file = acceptedFiles[0];
-    if (!file) return;
+  const onDrop = useCallback(
+    async (acceptedFiles: File[]) => {
+      const file = acceptedFiles[0];
+      if (!file) return;
 
-    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-    if (!isPdf) {
-      toast({ title: "Only PDFs supported", description: "Upload a .pdf file.", variant: "destructive" });
-      return;
-    }
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (!isPdf) {
+        toast({ title: "Only PDFs supported", description: "Upload a .pdf file.", variant: "destructive" });
+        return;
+      }
 
-    setPdfFile({ file, name: file.name, size: file.size });
-    setWorking(true);
-    setLoadingThumbnails(true);
-    try {
-      const bytes = await file.arrayBuffer();
-      const doc = await PDFDocument.load(bytes);
-      const count = doc.getPageCount();
+      setPdfFile({ file, name: file.name, size: file.size });
+      setWorking(true);
+      setLoadingThumbnails(true);
+      try {
+        const bytes = await file.arrayBuffer();
+        const doc = await PDFDocument.load(bytes);
+        const count = doc.getPageCount();
 
-      const initialPages = Array.from({ length: count }).map((_, i) => ({
-        id: safeId(),
-        index: i,
-        rotation: 0 as const,
-        deleted: false,
-      }));
-      setPages(initialPages);
+        const initialPages = Array.from({ length: count }).map((_, i) => ({
+          id: safeId(),
+          index: i,
+          rotation: 0 as const,
+          deleted: false,
+        }));
+        setPages(initialPages);
 
-      // Generate thumbnails in background
-      generateThumbnails(file).then((thumbs) => {
-        setPages((prev) =>
-          prev.map((p, i) => ({ ...p, thumbnail: thumbs[i] }))
-        );
-        setLoadingThumbnails(false);
-      }).catch(() => setLoadingThumbnails(false));
+        // Generate thumbnails in background
+        generateThumbnails(file)
+          .then((thumbs) => {
+            setPages((prev) => prev.map((p, i) => ({ ...p, thumbnail: thumbs[i] })));
+            setLoadingThumbnails(false);
+          })
+          .catch(() => setLoadingThumbnails(false));
 
-      toast({ title: "Loaded", description: `${count} pages ready to organize.` });
-    } catch (e: any) {
-      setPdfFile(null);
-      setPages([]);
-      toast({
-        title: "Failed to load PDF",
-        description: e?.message ? String(e.message) : "Could not open this PDF.",
-        variant: "destructive",
-      });
-    } finally {
-      setWorking(false);
-    }
-  }, [toast]);
+        toast({ title: "Loaded", description: `${count} pages ready to organize.` });
+      } catch (e: any) {
+        setPdfFile(null);
+        setPages([]);
+        toast({
+          title: "Failed to load PDF",
+          description: e?.message ? String(e.message) : "Could not open this PDF.",
+          variant: "destructive",
+        });
+      } finally {
+        setWorking(false);
+      }
+    },
+    [toast],
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -152,9 +144,7 @@ export default function OrganizePDF() {
 
   const rotate = (id: string) => {
     setPages((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, rotation: ((p.rotation + 90) % 360) as 0 | 90 | 180 | 270 } : p
-      )
+      prev.map((p) => (p.id === id ? { ...p, rotation: ((p.rotation + 90) % 360) as 0 | 90 | 180 | 270 } : p)),
     );
   };
 
@@ -164,7 +154,10 @@ export default function OrganizePDF() {
 
   const activePages = useMemo(() => pages.filter((p) => !p.deleted), [pages]);
 
-  const canExport = useMemo(() => !!pdfFile && activePages.length > 0 && !working, [pdfFile, activePages.length, working]);
+  const canExport = useMemo(
+    () => !!pdfFile && activePages.length > 0 && !working,
+    [pdfFile, activePages.length, working],
+  );
 
   const exportNow = async () => {
     if (!pdfFile) return;
@@ -213,7 +206,7 @@ export default function OrganizePDF() {
   };
 
   return (
-    <ToolLayout title="Organize PDF" description="Reorder, rotate, and delete pages — then download a new PDF (client-side).">
+    <ToolLayout title="Organize PDF" description="Reorder, rotate, and delete pages — then download a new PDF.">
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">
           <Card className="p-6">
@@ -263,11 +256,7 @@ export default function OrganizePDF() {
                       style={{ transform: `rotate(${p.rotation}deg)` }}
                     >
                       {p.thumbnail ? (
-                        <img
-                          src={p.thumbnail}
-                          alt={`Page ${p.index + 1}`}
-                          className="w-full h-full object-contain"
-                        />
+                        <img src={p.thumbnail} alt={`Page ${p.index + 1}`} className="w-full h-full object-contain" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           {loadingThumbnails ? (
@@ -285,23 +274,45 @@ export default function OrganizePDF() {
                         Page {p.index + 1}
                         {p.deleted && <span className="text-destructive"> (deleted)</span>}
                       </div>
-                      {p.rotation !== 0 && (
-                        <div className="text-xs text-muted-foreground">{p.rotation}° rotated</div>
-                      )}
+                      {p.rotation !== 0 && <div className="text-xs text-muted-foreground">{p.rotation}° rotated</div>}
                     </div>
 
                     {/* Actions */}
                     <div className="flex items-center justify-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => move(idx, -1)} disabled={idx === 0 || working}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => move(idx, -1)}
+                        disabled={idx === 0 || working}
+                      >
                         <ArrowUp className="h-3 w-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => move(idx, 1)} disabled={idx === pages.length - 1 || working}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => move(idx, 1)}
+                        disabled={idx === pages.length - 1 || working}
+                      >
                         <ArrowDown className="h-3 w-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => rotate(p.id)} disabled={working}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => rotate(p.id)}
+                        disabled={working}
+                      >
                         <RotateCw className="h-3 w-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleDelete(p.id)} disabled={working}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => toggleDelete(p.id)}
+                        disabled={working}
+                      >
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>

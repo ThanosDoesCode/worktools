@@ -3,16 +3,7 @@ import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  Upload,
-  X,
-  Download,
-  ScanLine,
-  Loader2,
-  ArrowUp,
-  ArrowDown,
-  RotateCw,
-} from "lucide-react";
+import { Upload, X, Download, ScanLine, Loader2, ArrowUp, ArrowDown, RotateCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 
@@ -71,7 +62,7 @@ async function renderProcessedCanvas(
   rotation: 0 | 90 | 180 | 270,
   mode: Mode,
   contrast: number, // 0..2 (1 = normal)
-  whiten: number // 0..1
+  whiten: number, // 0..1
 ): Promise<HTMLCanvasElement> {
   const img = await loadImage(imgUrl);
 
@@ -191,7 +182,7 @@ export default function ScanToPDF() {
 
       setItems((prev) => [...prev, ...newItems]);
     },
-    [toast]
+    [toast],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -227,9 +218,7 @@ export default function ScanToPDF() {
 
   const rotate = (id: string) => {
     setItems((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, rotation: ((p.rotation + 90) % 360) as 0 | 90 | 180 | 270 } : p
-      )
+      prev.map((p) => (p.id === id ? { ...p, rotation: ((p.rotation + 90) % 360) as 0 | 90 | 180 | 270 } : p)),
     );
   };
 
@@ -295,7 +284,7 @@ export default function ScanToPDF() {
   return (
     <ToolLayout
       title="Scan to PDF"
-      description="Turn scanned photos into a clean PDF — enhance, rotate, reorder, and download (client-side)."
+      description="Turn scanned photos into a clean PDF — enhance, rotate, reorder, and download."
     >
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Left */}

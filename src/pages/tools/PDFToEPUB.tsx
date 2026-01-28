@@ -267,7 +267,7 @@ p { margin: 0 0 1em; }`,
   return (
     <ToolLayout
       title="PDF to EPUB (Text-based)"
-      description="Convert selectable PDF text into a reflowable EPUB e-book — free and client-side."
+      description="Convert selectable PDF text into a reflowable EPUB e-book."
     >
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">

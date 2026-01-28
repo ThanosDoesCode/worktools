@@ -141,7 +141,7 @@ export default function PDFToPowerPoint() {
       }
 
       // Export PPTX
-      const blob = await pptx.write({ outputType: "blob" }) as Blob;
+      const blob = (await pptx.write({ outputType: "blob" })) as Blob;
       saveAs(blob, `${baseName(pdfFile.name)}.pptx`);
 
       toast({
@@ -163,7 +163,7 @@ export default function PDFToPowerPoint() {
   return (
     <ToolLayout
       title="PDF to PowerPoint (Slides)"
-      description="Convert each PDF page into a PowerPoint slide (as an image) — free and client-side."
+      description="Convert each PDF page into a PowerPoint slide (as an image)."
     >
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">

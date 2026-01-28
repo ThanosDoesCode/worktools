@@ -51,7 +51,10 @@ function parsePageRanges(input: string, maxPages: number): Array<[number, number
   const text = (input || "").trim();
   if (!text) return [];
 
-  const parts = text.split(",").map((p) => p.trim()).filter(Boolean);
+  const parts = text
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
   const ranges: Array<[number, number]> = [];
 
   for (const token of parts) {
@@ -178,7 +181,7 @@ export default function SplitPDF() {
         });
       }
     },
-    [toast] // eslint-disable-line react-hooks/exhaustive-deps
+    [toast], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -379,10 +382,7 @@ export default function SplitPDF() {
   };
 
   return (
-    <ToolLayout
-      title="Split PDF"
-      description="Split, extract, or chunk pages from a PDF — client-side, fast, private."
-    >
+    <ToolLayout title="Split PDF" description="Split, extract, or chunk pages from a PDF — fast, private.">
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Left */}
         <div className="space-y-6">
@@ -567,7 +567,9 @@ export default function SplitPDF() {
           <Card className="p-6 bg-muted/50">
             <h3 className="font-semibold mb-2">Notes</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Use ranges like: <span className="font-medium text-foreground">1-3, 6, 9-12</span></li>
+              <li>
+                • Use ranges like: <span className="font-medium text-foreground">1-3, 6, 9-12</span>
+              </li>
               <li>• “Each range as separate” creates a ZIP with one PDF per range.</li>
               <li>• For single pages and chunks, output is always a ZIP.</li>
               <li>• Everything runs locally in your browser. No uploads.</li>

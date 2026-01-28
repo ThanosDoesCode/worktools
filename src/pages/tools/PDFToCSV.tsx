@@ -180,10 +180,7 @@ export default function PDFToCSV() {
   };
 
   return (
-    <ToolLayout
-      title="PDF to CSV (Table Extract)"
-      description="Extract text and simple tables from PDF into CSV — free and client-side."
-    >
+    <ToolLayout title="PDF to CSV (Table Extract)" description="Extract text and simple tables from PDF into CSV.">
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">
           <Card className="p-6">

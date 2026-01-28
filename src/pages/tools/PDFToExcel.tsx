@@ -166,7 +166,7 @@ export default function PDFToExcel() {
   return (
     <ToolLayout
       title="PDF to Excel (Table Extract)"
-      description="Extract text and simple tables from PDF into an XLSX spreadsheet — free and client-side."
+      description="Extract text and simple tables from PDF into an XLSX spreadsheet."
     >
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">

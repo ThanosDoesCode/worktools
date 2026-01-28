@@ -8,42 +8,44 @@ import { useToast } from "@/hooks/use-toast";
 
 // Browser-compatible SVG optimizer using regex transformations
 function optimizeSvg(svg: string): string {
-  return svg
-    // Remove XML declaration
-    .replace(/<\?xml[^?]*\?>/gi, "")
-    // Remove DOCTYPE
-    .replace(/<!DOCTYPE[^>]*>/gi, "")
-    // Remove comments
-    .replace(/<!--[\s\S]*?-->/g, "")
-    // Remove editor metadata (Inkscape, Illustrator, etc.)
-    .replace(/\s*(inkscape|sodipodi|xmlns:inkscape|xmlns:sodipodi)[^=]*="[^"]*"/gi, "")
-    .replace(/\s*(sketch|xmlns:sketch)[^=]*="[^"]*"/gi, "")
-    .replace(/\s*data-name="[^"]*"/gi, "")
-    // Remove empty groups
-    .replace(/<g[^>]*>\s*<\/g>/gi, "")
-    // Remove empty defs
-    .replace(/<defs[^>]*>\s*<\/defs>/gi, "")
-    // Remove metadata element
-    .replace(/<metadata[\s\S]*?<\/metadata>/gi, "")
-    // Remove title and desc if empty or whitespace only
-    .replace(/<title>\s*<\/title>/gi, "")
-    .replace(/<desc>\s*<\/desc>/gi, "")
-    // Collapse whitespace
-    .replace(/>\s+</g, "><")
-    .replace(/\s+/g, " ")
-    // Remove unnecessary spaces in tags
-    .replace(/\s+>/g, ">")
-    .replace(/<\s+/g, "<")
-    // Clean up self-closing tags
-    .replace(/\s+\/>/g, "/>")
-    // Remove default values
-    .replace(/\s+fill-opacity="1"/gi, "")
-    .replace(/\s+stroke-opacity="1"/gi, "")
-    .replace(/\s+opacity="1"/gi, "")
-    // Simplify colors
-    .replace(/#([0-9a-fA-F])\1([0-9a-fA-F])\2([0-9a-fA-F])\3/gi, "#$1$2$3")
-    // Remove trailing/leading whitespace
-    .trim();
+  return (
+    svg
+      // Remove XML declaration
+      .replace(/<\?xml[^?]*\?>/gi, "")
+      // Remove DOCTYPE
+      .replace(/<!DOCTYPE[^>]*>/gi, "")
+      // Remove comments
+      .replace(/<!--[\s\S]*?-->/g, "")
+      // Remove editor metadata (Inkscape, Illustrator, etc.)
+      .replace(/\s*(inkscape|sodipodi|xmlns:inkscape|xmlns:sodipodi)[^=]*="[^"]*"/gi, "")
+      .replace(/\s*(sketch|xmlns:sketch)[^=]*="[^"]*"/gi, "")
+      .replace(/\s*data-name="[^"]*"/gi, "")
+      // Remove empty groups
+      .replace(/<g[^>]*>\s*<\/g>/gi, "")
+      // Remove empty defs
+      .replace(/<defs[^>]*>\s*<\/defs>/gi, "")
+      // Remove metadata element
+      .replace(/<metadata[\s\S]*?<\/metadata>/gi, "")
+      // Remove title and desc if empty or whitespace only
+      .replace(/<title>\s*<\/title>/gi, "")
+      .replace(/<desc>\s*<\/desc>/gi, "")
+      // Collapse whitespace
+      .replace(/>\s+</g, "><")
+      .replace(/\s+/g, " ")
+      // Remove unnecessary spaces in tags
+      .replace(/\s+>/g, ">")
+      .replace(/<\s+/g, "<")
+      // Clean up self-closing tags
+      .replace(/\s+\/>/g, "/>")
+      // Remove default values
+      .replace(/\s+fill-opacity="1"/gi, "")
+      .replace(/\s+stroke-opacity="1"/gi, "")
+      .replace(/\s+opacity="1"/gi, "")
+      // Simplify colors
+      .replace(/#([0-9a-fA-F])\1([0-9a-fA-F])\2([0-9a-fA-F])\3/gi, "#$1$2$3")
+      // Remove trailing/leading whitespace
+      .trim()
+  );
 }
 
 export default function SvgOptimizer() {
@@ -53,20 +55,23 @@ export default function SvgOptimizer() {
   const [working, setWorking] = useState(false);
   const { toast } = useToast();
 
-  const onDrop = useCallback(async (accepted: File[]) => {
-    const file = accepted[0];
-    if (!file) return;
+  const onDrop = useCallback(
+    async (accepted: File[]) => {
+      const file = accepted[0];
+      if (!file) return;
 
-    const isSvg = file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
-    if (!isSvg) {
-      toast({ title: "Only SVG", description: "Upload an .svg file.", variant: "destructive" });
-      return;
-    }
-    setName(file.name);
-    const text = await file.text();
-    setInput(text);
-    setOutput("");
-  }, [toast]);
+      const isSvg = file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
+      if (!isSvg) {
+        toast({ title: "Only SVG", description: "Upload an .svg file.", variant: "destructive" });
+        return;
+      }
+      setName(file.name);
+      const text = await file.text();
+      setInput(text);
+      setOutput("");
+    },
+    [toast],
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -94,7 +99,11 @@ export default function SvgOptimizer() {
       const pct = input.length > 0 ? ((saved / input.length) * 100).toFixed(1) : "0";
       toast({ title: "Optimized", description: `Reduced by ${saved} chars (${pct}%)` });
     } catch (e: any) {
-      toast({ title: "Optimize failed", description: e?.message ? String(e.message) : "Error optimizing SVG.", variant: "destructive" });
+      toast({
+        title: "Optimize failed",
+        description: e?.message ? String(e.message) : "Error optimizing SVG.",
+        variant: "destructive",
+      });
     } finally {
       setWorking(false);
     }
@@ -120,7 +129,7 @@ export default function SvgOptimizer() {
   };
 
   return (
-    <ToolLayout title="SVG Optimizer" description="Optimize SVG files to reduce size — client-side.">
+    <ToolLayout title="SVG Optimizer" description="Optimize SVG files to reduce size.">
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="space-y-6">
           <Card className="p-6">
@@ -194,7 +203,8 @@ export default function SvgOptimizer() {
 
             {output && (
               <div className="text-xs text-muted-foreground">
-                Original: {input.length} chars • Optimized: {output.length} chars • Saved: {input.length - output.length} chars
+                Original: {input.length} chars • Optimized: {output.length} chars • Saved:{" "}
+                {input.length - output.length} chars
               </div>
             )}
           </Card>
