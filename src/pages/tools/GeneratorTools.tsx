@@ -370,7 +370,7 @@ const GeneratorTools = () => {
     const count = clamp(uuidCount, 1, 50);
     const uuids: string[] = [];
     for (let i = 0; i < count; i++) {
-      let u = crypto.randomUUID();
+      let u: string = crypto.randomUUID();
       if (uuidNoHyphens) u = u.replace(/-/g, "");
       if (uuidUppercase) u = u.toUpperCase();
       uuids.push(u);
