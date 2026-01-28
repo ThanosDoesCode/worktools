@@ -22,12 +22,39 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-type CurrencyCode = "EUR" | "USD" | "GBP" | "CHF";
+type CurrencyCode =
+  | "EUR"
+  | "USD"
+  | "GBP"
+  | "CHF"
+  | "JPY"
+  | "AUD"
+  | "CAD"
+  | "CNY"
+  | "INR"
+  | "NZD"
+  | "SEK"
+  | "NOK"
+  | "DKK"
+  | "SGD"
+  | "HKD";
+
 const currencies: { code: CurrencyCode; symbol: string }[] = [
   { code: "EUR", symbol: "€" },
   { code: "USD", symbol: "$" },
   { code: "GBP", symbol: "£" },
   { code: "CHF", symbol: "CHF " },
+  { code: "JPY", symbol: "¥" },
+  { code: "AUD", symbol: "$" },
+  { code: "CAD", symbol: "$" },
+  { code: "CNY", symbol: "¥" },
+  { code: "INR", symbol: "₹" },
+  { code: "NZD", symbol: "$" },
+  { code: "SEK", symbol: "kr" },
+  { code: "NOK", symbol: "kr" },
+  { code: "DKK", symbol: "kr" },
+  { code: "SGD", symbol: "$" },
+  { code: "HKD", symbol: "$" },
 ];
 
 type LineItem = {
