@@ -371,6 +371,11 @@ export const categories = [
     name: "Compress & Optimize",
     description: "Compress Optimize Tools, image compression, and code minifiers",
   },
+  {
+    id: "generators",
+    name: "Generators",
+    description: "Quick generators for QR codes, passwords, invoices, templates, and more",
+  },
 ];
 
 export function searchTools(query: string): Tool[] {
