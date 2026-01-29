@@ -204,11 +204,11 @@ ${email}
   ]);
 
   return (
-    <div className="grid lg:grid-cols-2 gap-8">
-      <div className="space-y-4 max-h-[700px] overflow-y-auto pr-2">
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border space-y-4">
-          <h3 className="font-semibold text-foreground">Your Company</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+      <div className="space-y-4 max-h-none lg:max-h-[700px] overflow-y-auto lg:pr-2">
+        <div className="bg-surface-elevated rounded-xl p-4 sm:p-6 border border-border space-y-4">
+          <h3 className="font-semibold text-foreground text-sm sm:text-base">Your Company</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <Label>Company Name</Label>
               <Input 
@@ -246,9 +246,9 @@ ${email}
           </div>
         </div>
 
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border space-y-4">
-          <h3 className="font-semibold text-foreground">Client Information</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-surface-elevated rounded-xl p-4 sm:p-6 border border-border space-y-4">
+          <h3 className="font-semibold text-foreground text-sm sm:text-base">Client Information</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <Label>Client Company</Label>
               <Input 
@@ -268,8 +268,8 @@ ${email}
           </div>
         </div>
 
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border space-y-4">
-          <h3 className="font-semibold text-foreground">Project Details</h3>
+        <div className="bg-surface-elevated rounded-xl p-4 sm:p-6 border border-border space-y-4">
+          <h3 className="font-semibold text-foreground text-sm sm:text-base">Project Details</h3>
           <div>
             <Label>Project Title</Label>
             <Input 
@@ -289,15 +289,15 @@ ${email}
           </div>
         </div>
 
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border space-y-4">
+        <div className="bg-surface-elevated rounded-xl p-4 sm:p-6 border border-border space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-foreground">Deliverables</h3>
+            <h3 className="font-semibold text-foreground text-sm sm:text-base">Deliverables</h3>
             <Button variant="outline" size="sm" onClick={addDeliverable}>
               <Plus className="w-4 h-4 mr-1" /> Add
             </Button>
           </div>
           {deliverables.map((d) => (
-            <div key={d.id} className="flex gap-2 items-end">
+            <div key={d.id} className="flex flex-col sm:flex-row gap-2 sm:items-end">
               <div className="flex-1">
                 <Input 
                   placeholder="Deliverable item" 
@@ -305,34 +305,36 @@ ${email}
                   onChange={(e) => updateDeliverable(d.id, "item", e.target.value)} 
                 />
               </div>
-              <div className="w-28">
-                <Input 
-                  placeholder="Price" 
-                  value={d.price} 
-                  onChange={(e) => updateDeliverable(d.id, "price", e.target.value)} 
-                />
+              <div className="flex gap-2 items-center">
+                <div className="flex-1 sm:w-28 sm:flex-none">
+                  <Input 
+                    placeholder="Price" 
+                    value={d.price} 
+                    onChange={(e) => updateDeliverable(d.id, "price", e.target.value)} 
+                  />
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => removeDeliverable(d.id)}
+                  disabled={deliverables.length === 1}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
               </div>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => removeDeliverable(d.id)}
-                disabled={deliverables.length === 1}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
             </div>
           ))}
         </div>
 
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border space-y-4">
+        <div className="bg-surface-elevated rounded-xl p-4 sm:p-6 border border-border space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-foreground">Timeline / Milestones</h3>
+            <h3 className="font-semibold text-foreground text-sm sm:text-base">Timeline / Milestones</h3>
             <Button variant="outline" size="sm" onClick={addMilestone}>
               <Plus className="w-4 h-4 mr-1" /> Add
             </Button>
           </div>
           {milestones.map((m) => (
-            <div key={m.id} className="flex gap-2 items-end">
+            <div key={m.id} className="flex flex-col sm:flex-row gap-2 sm:items-end">
               <div className="flex-1">
                 <Input 
                   placeholder="Phase name" 
@@ -340,28 +342,30 @@ ${email}
                   onChange={(e) => updateMilestone(m.id, "phase", e.target.value)} 
                 />
               </div>
-              <div className="w-32">
-                <Input 
-                  placeholder="Timeline" 
-                  value={m.timeline} 
-                  onChange={(e) => updateMilestone(m.id, "timeline", e.target.value)} 
-                />
+              <div className="flex gap-2 items-center">
+                <div className="flex-1 sm:w-32 sm:flex-none">
+                  <Input 
+                    placeholder="Timeline" 
+                    value={m.timeline} 
+                    onChange={(e) => updateMilestone(m.id, "timeline", e.target.value)} 
+                  />
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => removeMilestone(m.id)}
+                  disabled={milestones.length === 1}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
               </div>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => removeMilestone(m.id)}
-                disabled={milestones.length === 1}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
             </div>
           ))}
         </div>
 
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border space-y-4">
-          <h3 className="font-semibold text-foreground">Pricing & Terms</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-surface-elevated rounded-xl p-4 sm:p-6 border border-border space-y-4">
+          <h3 className="font-semibold text-foreground text-sm sm:text-base">Pricing & Terms</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <Label>Total Price</Label>
               <Input 
@@ -394,15 +398,15 @@ ${email}
         </Button>
       </div>
 
-      <div className="bg-white dark:bg-background rounded-xl border border-border p-6 shadow-sm">
-        <div className="max-h-[600px] overflow-y-auto">
-          <pre className="whitespace-pre-wrap font-mono text-xs text-foreground">{proposalText}</pre>
+      <div className="bg-white dark:bg-background rounded-xl border border-border p-4 sm:p-6 shadow-sm">
+        <div className="max-h-[300px] sm:max-h-[400px] lg:max-h-[600px] overflow-y-auto">
+          <pre className="whitespace-pre-wrap font-mono text-[10px] sm:text-xs text-foreground">{proposalText}</pre>
         </div>
-        <div className="flex gap-3 mt-4">
-          <Button variant="outline" onClick={() => copyToClipboard(proposalText)}>
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4">
+          <Button variant="outline" onClick={() => copyToClipboard(proposalText)} className="flex-1 sm:flex-none">
             <Copy className="w-4 h-4 mr-2" /> Copy
           </Button>
-          <Button onClick={() => downloadText("proposal.txt", proposalText)}>
+          <Button onClick={() => downloadText("proposal.txt", proposalText)} className="flex-1 sm:flex-none">
             <Download className="w-4 h-4 mr-2" /> Download
           </Button>
         </div>

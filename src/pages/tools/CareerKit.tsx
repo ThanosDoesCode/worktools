@@ -241,32 +241,32 @@ export default function CareerSuite() {
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#D1FF00]/30 bg-[#D1FF00]/5 text-[#D1FF00] text-xs font-bold tracking-tighter uppercase">
           <Sparkles className="h-3 w-3" /> 2026 Pro Edition
         </div>
-        <h1 className="text-5xl md:text-8xl font-black tracking-tighter leading-[0.9] text-balance">
+        <h1 className="text-4xl sm:text-5xl md:text-8xl font-black tracking-tighter leading-[0.9] text-balance">
           CAREER <GradientText>SUITE</GradientText>
         </h1>
-        <p className="text-zinc-500 max-w-xl text-lg md:text-xl font-medium leading-tight">
+        <p className="text-zinc-500 max-w-xl text-base md:text-xl font-medium leading-tight">
           Bespoke tools for the modern executive. Mobile-first, high-fidelity, zero friction.
         </p>
       </header>
 
       <main className="max-w-7xl mx-auto">
-        <Tabs defaultValue="signature" className="space-y-10">
-          <TabsList className="bg-[#111111] p-1 rounded-full border border-[#222222] h-16 w-full md:w-auto flex overflow-x-auto no-scrollbar">
+        <Tabs defaultValue="signature" className="space-y-6 md:space-y-10">
+          <TabsList className="bg-[#111111] p-1 rounded-2xl md:rounded-full border border-[#222222] h-auto md:h-16 w-full flex flex-wrap md:flex-nowrap gap-1 md:gap-0">
             <TabsTrigger
               value="signature"
-              className="rounded-full px-8 data-[state=active]:bg-[#D1FF00] data-[state=active]:text-black font-bold transition-all"
+              className="flex-1 min-w-[80px] rounded-xl md:rounded-full px-3 md:px-8 py-3 md:py-0 text-sm md:text-base data-[state=active]:bg-[#D1FF00] data-[state=active]:text-black font-bold transition-all"
             >
               Signature
             </TabsTrigger>
             <TabsTrigger
               value="resume"
-              className="rounded-full px-8 data-[state=active]:bg-[#D1FF00] data-[state=active]:text-black font-bold transition-all"
+              className="flex-1 min-w-[80px] rounded-xl md:rounded-full px-3 md:px-8 py-3 md:py-0 text-sm md:text-base data-[state=active]:bg-[#D1FF00] data-[state=active]:text-black font-bold transition-all"
             >
               Resume
             </TabsTrigger>
             <TabsTrigger
               value="coverletter"
-              className="rounded-full px-8 data-[state=active]:bg-[#D1FF00] data-[state=active]:text-black font-bold transition-all"
+              className="flex-1 min-w-[80px] rounded-xl md:rounded-full px-3 md:px-8 py-3 md:py-0 text-sm md:text-base data-[state=active]:bg-[#D1FF00] data-[state=active]:text-black font-bold transition-all whitespace-nowrap"
             >
               Cover Letter
             </TabsTrigger>
@@ -325,8 +325,8 @@ export default function CareerSuite() {
           </TabsContent>
 
           <TabsContent value="coverletter">
-            <PremiumCard className="p-20 text-center border-dashed">
-              <p className="text-zinc-500 font-mono italic">Premium Cover Letter Engine Initializing...</p>
+            <PremiumCard className="p-6 md:p-20 text-center border-dashed">
+              <p className="text-zinc-500 font-mono italic text-sm md:text-base">Premium Cover Letter Engine Initializing...</p>
             </PremiumCard>
           </TabsContent>
         </Tabs>
