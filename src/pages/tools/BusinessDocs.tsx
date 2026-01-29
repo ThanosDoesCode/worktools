@@ -206,29 +206,23 @@ function InvoiceGeneratorEmbedded() {
       {/* INPUTS */}
       <div className="space-y-6 print:hidden">
         {/* Seller */}
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+        <div className="bg-surface-elevated rounded-xl p-4 sm:p-6 border border-border">
           <h3 className="font-semibold text-foreground mb-4">Your Information</h3>
-          <div className="space-y-4">
-            <div>
+
+          {/* Mobile-first: single column. On sm+ keep same, on lg make 2 columns */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="space-y-2">
               <Label htmlFor="inv-sellerName">Company / Name</Label>
               <Input
                 id="inv-sellerName"
                 value={sellerName}
                 onChange={(e) => setSellerName(e.target.value)}
                 placeholder="Your Company Ltd"
+                className="w-full"
               />
             </div>
-            <div>
-              <Label htmlFor="inv-sellerAddress">Address</Label>
-              <Textarea
-                id="inv-sellerAddress"
-                value={sellerAddress}
-                onChange={(e) => setSellerAddress(e.target.value)}
-                placeholder={"123 Business Street\nCity, Country"}
-                rows={2}
-              />
-            </div>
-            <div>
+
+            <div className="space-y-2">
               <Label htmlFor="inv-sellerEmail">Email</Label>
               <Input
                 id="inv-sellerEmail"
@@ -236,6 +230,20 @@ function InvoiceGeneratorEmbedded() {
                 value={sellerEmail}
                 onChange={(e) => setSellerEmail(e.target.value)}
                 placeholder="billing@company.com"
+                className="w-full"
+              />
+            </div>
+
+            {/* Address spans full width on lg */}
+            <div className="space-y-2 lg:col-span-2">
+              <Label htmlFor="inv-sellerAddress">Address</Label>
+              <Textarea
+                id="inv-sellerAddress"
+                value={sellerAddress}
+                onChange={(e) => setSellerAddress(e.target.value)}
+                placeholder={"123 Business Street\nCity, Country"}
+                rows={3}
+                className="w-full"
               />
             </div>
           </div>
