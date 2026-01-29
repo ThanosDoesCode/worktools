@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -7,8 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { PenTool, FileUser, Mail, Download, Copy, Trash2, Plus, X, Undo2 } from "lucide-react";
+import { PenTool, FileUser, Mail, Download, Copy, Trash2, Plus, X, Undo2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { Header } from "@/components/layout/Header";
 
 function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
@@ -975,7 +977,16 @@ ${fullName}`.trim();
 export default function CareerToolkit() {
   return (
     <div className="min-h-screen bg-background w-full overflow-x-hidden">
+      <Header />
       <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8 lg:py-10 space-y-4 sm:space-y-6">
+        <Link 
+          to="/" 
+          className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          All Tools
+        </Link>
+        
         <header className="space-y-1 w-full">
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold tracking-tight">Career Toolkit</h1>
           <p className="text-xs sm:text-sm lg:text-base text-muted-foreground">
