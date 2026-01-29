@@ -125,10 +125,10 @@ ${signatureBlock}`;
   }, [disclosingParty, receivingParty, effectiveDate, purpose, duration, jurisdiction, ndaType]);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+    <div className="grid lg:grid-cols-2 gap-8">
       <div className="space-y-4">
-        <div className="bg-surface-elevated rounded-xl p-4 sm:p-6 border border-border">
-          <h3 className="font-semibold text-foreground mb-4 text-sm sm:text-base">NDA Type</h3>
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+          <h3 className="font-semibold text-foreground mb-4">NDA Type</h3>
           <Select value={ndaType} onValueChange={(v: "mutual" | "one-way") => setNdaType(v)}>
             <SelectTrigger>
               <SelectValue />
@@ -145,8 +145,8 @@ ${signatureBlock}`;
           </p>
         </div>
 
-        <div className="bg-surface-elevated rounded-xl p-4 sm:p-6 border border-border space-y-4">
-          <h3 className="font-semibold text-foreground mb-2 text-sm sm:text-base">Parties</h3>
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border space-y-4">
+          <h3 className="font-semibold text-foreground mb-2">Parties</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label>{ndaType === "mutual" ? "Party A" : "Disclosing Party"}</Label>
@@ -167,8 +167,8 @@ ${signatureBlock}`;
           </div>
         </div>
 
-        <div className="bg-surface-elevated rounded-xl p-4 sm:p-6 border border-border space-y-4">
-          <h3 className="font-semibold text-foreground mb-2 text-sm sm:text-base">Details</h3>
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border space-y-4">
+          <h3 className="font-semibold text-foreground mb-2">Details</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label>Effective Date</Label>
@@ -218,15 +218,15 @@ ${signatureBlock}`;
         </Button>
       </div>
 
-      <div className="bg-white dark:bg-background rounded-xl border border-border p-4 sm:p-6 shadow-sm">
-        <div className="max-h-[300px] sm:max-h-[400px] lg:max-h-[500px] overflow-y-auto">
-          <pre className="whitespace-pre-wrap font-mono text-[10px] sm:text-xs text-foreground">{ndaText}</pre>
+      <div className="bg-white dark:bg-background rounded-xl border border-border p-6 shadow-sm">
+        <div className="max-h-[500px] overflow-y-auto">
+          <pre className="whitespace-pre-wrap font-mono text-xs text-foreground">{ndaText}</pre>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4">
-          <Button variant="outline" onClick={() => copyToClipboard(ndaText)} className="flex-1 sm:flex-none">
+        <div className="flex gap-3 mt-4">
+          <Button variant="outline" onClick={() => copyToClipboard(ndaText)}>
             <Copy className="w-4 h-4 mr-2" /> Copy
           </Button>
-          <Button onClick={() => downloadText("nda.txt", ndaText)} className="flex-1 sm:flex-none">
+          <Button onClick={() => downloadText("nda.txt", ndaText)}>
             <Download className="w-4 h-4 mr-2" /> Download
           </Button>
         </div>

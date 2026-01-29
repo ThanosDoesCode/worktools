@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -8,40 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import {
-  PenTool,
-  FileUser,
-  Mail,
-  Download,
-  Copy,
-  Trash2,
-  Plus,
-  X,
-  Undo2,
-  Briefcase,
-  Sparkles,
-  ArrowLeft,
-} from "lucide-react";
+import { PenTool, FileUser, Mail, Download, Copy, Trash2, Plus, X, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 
-/* -----------------------------
-   Premium Utility Components
-   (Styled to match the rest of your tools)
-------------------------------*/
-const GradientText = ({ children }: { children: React.ReactNode }) => (
-  <span className="bg-gradient-to-r from-foreground via-foreground/80 to-foreground bg-clip-text text-transparent">
-    {children}
-  </span>
-);
-
-const PremiumCard = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <Card className={`bg-background border-border shadow-sm ${className}`}>{children}</Card>
-);
-
-/* -----------------------------
-   Helper Functions
-------------------------------*/
-function downloadBlob(filename: string, blob: Blob) {
+function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -50,661 +19,1021 @@ function downloadBlob(filename: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
-function copyToClipboard(text: string) {
+function copyToClipboard(text) {
   navigator.clipboard.writeText(text);
   toast.success("Copied to clipboard");
 }
 
-/* -----------------------------
-   Signature Generator (Mobile Optimized)
-------------------------------*/
-type Point = { x: number; y: number };
-type Stroke = { points: Point[]; width: number; color: string };
+function SignatureGeneratorEmbedded() {
+  const canvasRef = useRef(null);
+  const wrapRef = useRef(null);
 
-function SignatureGenerator() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const [mode, setMode] = useState<"draw" | "type">("draw");
+  const [mode, setMode] = useState("draw");
   const [penWidth, setPenWidth] = useState(3);
-  const [penColor, setPenColor] = useState("#111111");
-  const [bgColor, setBgColor] = useState("#FFFFFF");
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [penColor, setPenColor] = useState("#0f172a");
+  const [bgColor, setBgColor] = useState("#ffffff");
+  const [strokes, setStrokes] = useState([]);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [typedName, setTypedName] = useState("John Doe");
+
+  const [typedName, setTypedName] = useState("Your Name");
   const [typedSize, setTypedSize] = useState(56);
-  const [typedStyle, setTypedStyle] = useState<"cursive" | "serif" | "modern">("cursive");
+  const [typedStyle, setTypedStyle] = useState("cursive");
+  const [typedColor, setTypedColor] = useState("#0f172a");
 
   const drawAll = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const w = canvas.width / (window.devicePixelRatio || 1);
-    const h = canvas.height / (window.devicePixelRatio || 1);
+
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
 
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, w, h);
 
     if (mode === "draw") {
-      ctx.strokeStyle = "rgba(0,0,0,0.08)";
+      ctx.strokeStyle = "rgba(15, 23, 42, 0.06)";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(20, h * 0.7);
-      ctx.lineTo(w - 20, h * 0.7);
+      ctx.moveTo(20, h * 0.68);
+      ctx.lineTo(w - 20, h * 0.68);
       ctx.stroke();
     }
 
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    strokes.forEach((s) => {
-      if (s.points.length < 2) return;
+
+    for (const s of strokes) {
+      if (s.points.length < 2) continue;
       ctx.strokeStyle = s.color;
       ctx.lineWidth = s.width;
       ctx.beginPath();
       ctx.moveTo(s.points[0].x, s.points[0].y);
-      s.points.forEach((p) => ctx.lineTo(p.x, p.y));
+      for (let i = 1; i < s.points.length; i++) {
+        ctx.lineTo(s.points[i].x, s.points[i].y);
+      }
       ctx.stroke();
-    });
+    }
   };
 
   const resizeCanvas = () => {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
+
     const dpr = window.devicePixelRatio || 1;
     const rect = wrap.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = 220 * dpr;
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `220px`;
+    const width = Math.max(260, Math.floor(rect.width));
+    const height = 220;
+
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+
     const ctx = canvas.getContext("2d");
-    ctx?.scale(dpr, dpr);
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
     drawAll();
   };
 
   useEffect(() => {
     resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
-    return () => window.removeEventListener("resize", resizeCanvas);
-  }, [mode, bgColor]);
+    const ro = new ResizeObserver(() => resizeCanvas());
+    if (wrapRef.current) ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+  }, [mode]);
 
   useEffect(() => {
-    drawAll();
-  }, [strokes, penWidth, penColor]);
+    if (mode === "draw") drawAll();
+  }, [strokes, penWidth, mode, bgColor]);
 
-  const onPointerDown = (e: React.PointerEvent) => {
+  const getPos = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  const onPointerDown = (e) => {
     if (mode !== "draw") return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    canvas.setPointerCapture(e.pointerId);
     setIsDrawing(true);
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+    const pos = getPos(e.nativeEvent);
     setStrokes((prev) => [...prev, { points: [pos], width: penWidth, color: penColor }]);
   };
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!isDrawing || mode !== "draw") return;
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  const onPointerMove = (e) => {
+    if (mode !== "draw" || !isDrawing) return;
+    const pos = getPos(e.nativeEvent);
     setStrokes((prev) => {
       const last = prev[prev.length - 1];
-      return [...prev.slice(0, -1), { ...last, points: [...last.points, pos] }];
+      if (!last) return prev;
+      const updated = { ...last, points: [...last.points, pos] };
+      return [...prev.slice(0, -1), updated];
     });
   };
 
-  const exportSignature = async () => {
-    try {
-      if (mode === "type") {
-        // Simple export of typed signature as text file (keeps this tool lightweight)
-        const blob = new Blob([typedName], { type: "text/plain;charset=utf-8" });
-        downloadBlob("signature.txt", blob);
-        toast.success("Exported!");
-        return;
-      }
+  const downloadPNG = () => {
+    if (mode === "type") {
+      const canvas = document.createElement("canvas");
+      const w = 1200;
+      const h = 420;
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, w, h);
 
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        downloadBlob("signature.png", blob);
-        toast.success("Exported!");
-      }, "image/png");
-    } catch {
-      toast.error("Could not export signature.");
+      ctx.fillStyle = typedColor;
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "center";
+
+      const fontMap = {
+        cursive: "cursive",
+        serif: "Georgia, serif",
+        sans: "Arial, sans-serif",
+        elegant: "'Times New Roman', serif",
+        modern: "'Helvetica Neue', sans-serif",
+      };
+      ctx.font = `${typedSize * 4}px ${fontMap[typedStyle]}`;
+      ctx.fillText(typedName || "Your Name", w / 2, h / 2);
+
+      canvas.toBlob((b) => b && downloadBlob("signature.png", b));
+      return;
     }
+
+    canvasRef.current?.toBlob((b) => b && downloadBlob("signature.png", b));
   };
 
+  const isEmpty = strokes.length === 0;
+
+  const fontFamily =
+    typedStyle === "cursive"
+      ? "cursive"
+      : typedStyle === "elegant"
+        ? "'Times New Roman', serif"
+        : typedStyle === "modern"
+          ? "'Helvetica Neue', sans-serif"
+          : typedStyle === "serif"
+            ? "Georgia, serif"
+            : "Arial, sans-serif";
+
+  const palette = ["#0f172a", "#334155", "#16a34a", "#dc2626", "#7c3aed"];
+
   return (
-    <div className="flex flex-col gap-6 lg:grid lg:grid-cols-12">
-      <div className="lg:col-span-5 space-y-6 order-2 lg:order-1">
-        <PremiumCard className="p-6">
-          <div className="flex gap-2 mb-6">
-            <Button
-              className="flex-1 rounded-full"
-              variant={mode === "draw" ? "default" : "outline"}
-              onClick={() => setMode("draw")}
-            >
-              Draw
-            </Button>
-            <Button
-              className="flex-1 rounded-full"
-              variant={mode === "type" ? "default" : "outline"}
-              onClick={() => setMode("type")}
-            >
-              Type
-            </Button>
-          </div>
-
-          <div className="space-y-6">
-            {mode === "draw" ? (
-              <>
-                <div className="space-y-3">
-                  <Label className="text-muted-foreground uppercase tracking-widest text-[10px]">Brush Weight</Label>
-                  <Slider value={[penWidth]} onValueChange={(v) => setPenWidth(v[0])} min={1} max={10} />
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-muted-foreground uppercase tracking-widest text-[10px]">Ink</Label>
-                  <div className="flex gap-3">
-                    {["#111111", "#2563EB", "#DC2626"].map((c) => (
-                      <button
-                        key={c}
-                        onClick={() => setPenColor(c)}
-                        className={`w-10 h-10 rounded-full border-2 ${
-                          penColor === c ? "border-foreground" : "border-transparent"
-                        }`}
-                        style={{ background: c }}
-                        aria-label={`Ink ${c}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-muted-foreground uppercase tracking-widest text-[10px]">Background</Label>
-                  <div className="flex gap-3">
-                    {["#FFFFFF", "#F4F4F5", "#0A0A0A"].map((c) => (
-                      <button
-                        key={c}
-                        onClick={() => setBgColor(c)}
-                        className={`w-10 h-10 rounded-full border-2 ${
-                          bgColor === c ? "border-foreground" : "border-transparent"
-                        }`}
-                        style={{ background: c }}
-                        aria-label={`Background ${c}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase text-muted-foreground font-bold">Full Name</Label>
-                  <Input
-                    className="h-14 text-xl"
-                    value={typedName}
-                    onChange={(e) => setTypedName(e.target.value)}
-                    placeholder="Full Name"
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-xs uppercase text-muted-foreground font-bold">Size</Label>
-                  <Slider value={[typedSize]} onValueChange={(v) => setTypedSize(v[0])} min={28} max={90} />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase text-muted-foreground font-bold">Style</Label>
-                  <Select value={typedStyle} onValueChange={(v: any) => setTypedStyle(v)}>
-                    <SelectTrigger className="h-12">
-                      <SelectValue placeholder="Select style" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cursive">Cursive</SelectItem>
-                      <SelectItem value="serif">Serif</SelectItem>
-                      <SelectItem value="modern">Modern</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
-
-            <Button className="w-full h-14 text-lg font-bold" onClick={exportSignature}>
-              <Download className="mr-2 h-5 w-5" /> Export Signature
-            </Button>
-          </div>
-        </PremiumCard>
-      </div>
-
-      <div className="lg:col-span-7 order-1 lg:order-2">
-        <div
-          ref={wrapRef}
-          className="relative group overflow-hidden rounded-3xl border border-border bg-card aspect-[16/9] lg:h-full flex items-center justify-center"
+    <div className="space-y-4 w-full max-w-full">
+      <div className="flex gap-2 w-full">
+        <Button
+          size="sm"
+          variant={mode === "draw" ? "default" : "outline"}
+          onClick={() => setMode("draw")}
+          className="flex-1 sm:flex-none min-w-0"
         >
-          {mode === "draw" ? (
-            <canvas
-              ref={canvasRef}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={() => setIsDrawing(false)}
-              className="touch-none cursor-crosshair w-full h-full"
-            />
-          ) : (
-            <div
-              className={`text-center transition-all duration-500 hover:scale-105 ${
-                typedStyle === "cursive" ? "font-serif italic" : typedStyle === "serif" ? "font-serif" : "font-sans"
-              }`}
-              style={{ fontSize: `${typedSize}px`, color: penColor }}
-            >
-              {typedName}
-            </div>
-          )}
-
-          <div className="absolute top-4 right-4 flex gap-2">
-            <Button size="icon" variant="secondary" className="rounded-full" onClick={() => setStrokes([])}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* -----------------------------
-   Cover Letter Engine (ADDED)
-------------------------------*/
-function CoverLetterEngine() {
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [role, setRole] = useState("");
-  const [company, setCompany] = useState("");
-  const [hiringManager, setHiringManager] = useState("");
-  const [jobSource, setJobSource] = useState("");
-  const [jobDescription, setJobDescription] = useState("");
-  const [topWins, setTopWins] = useState("");
-  const [tone, setTone] = useState<"executive" | "direct" | "warm">("executive");
-  const [generated, setGenerated] = useState("");
-
-  const buildLetter = () => {
-    const nameLine = fullName?.trim() ? fullName.trim() : "[Your Name]";
-    const roleLine = role?.trim() ? role.trim() : "[Target Role]";
-    const companyLine = company?.trim() ? company.trim() : "[Company]";
-    const managerLine = hiringManager?.trim() ? `Dear ${hiringManager.trim()},` : "Dear Hiring Manager,";
-    const sourceLine = jobSource?.trim()
-      ? `I’m writing regarding the ${roleLine} role I saw via ${jobSource.trim()}.`
-      : `I’m writing to apply for the ${roleLine} role at ${companyLine}.`;
-
-    const wins = topWins
-      .split("\n")
-      .map((x) => x.trim())
-      .filter(Boolean)
-      .slice(0, 4);
-
-    const winsBlock =
-      wins.length > 0
-        ? `\n\nHere are a few highlights that align with what ${companyLine} needs:\n${wins
-            .map((w) => `• ${w}`)
-            .join("\n")}\n`
-        : "";
-
-    const jdBlock = jobDescription?.trim()
-      ? `\n\nBased on the role requirements you shared, I would focus immediately on:\n• Translating priorities into a clear execution plan\n• Improving speed-to-impact through tight operating rhythms and ownership\n• Building predictable results through pipeline, process, and coaching\n`
-      : "";
-
-    const closingByTone =
-      tone === "executive"
-        ? `\n\nIf it’s useful, I can walk you through how I would approach the first 30–60–90 days in the role and what I’d prioritize to deliver measurable outcomes.`
-        : tone === "direct"
-          ? `\n\nI’d welcome a quick call to discuss how I can help ${companyLine} hit the targets for this role.`
-          : `\n\nI’d love the chance to speak and learn more about your priorities for this role and how I can contribute.`;
-
-    const contactLine =
-      email?.trim() || phone?.trim()
-        ? `\n\nYou can reach me at${email?.trim() ? ` ${email.trim()}` : ""}${email?.trim() && phone?.trim() ? " or" : ""}${
-            phone?.trim() ? ` ${phone.trim()}` : ""
-          }.`
-        : "";
-
-    const letter = `${nameLine}
-${email?.trim() ? email.trim() : "[Email]"}${phone?.trim() ? ` • ${phone.trim()}` : ""}
-
-${managerLine}
-
-${sourceLine}
-
-I bring a strong track record of driving commercial performance, aligning teams to a clear strategy, and improving execution through simple systems that scale. I’m particularly interested in ${companyLine} because it’s a place where ownership, pace, and customer focus matter.
-
-${winsBlock}${jdBlock}
-In short: I help turn strategy into reliable growth—by clarifying the “what”, tightening the “how”, and ensuring the team has the tools, cadence, and accountability to perform.
-
-${closingByTone}${contactLine}
-
-Sincerely,
-${nameLine}
-`;
-
-    setGenerated(letter);
-    toast.success("Cover letter generated");
-  };
-
-  const downloadTxt = () => {
-    const blob = new Blob([generated || ""], { type: "text/plain;charset=utf-8" });
-    downloadBlob("cover-letter.txt", blob);
-  };
-
-  return (
-    <div className="grid lg:grid-cols-2 gap-10">
-      <PremiumCard className="p-8 space-y-6">
-        <h3 className="text-2xl font-bold flex items-center gap-2">
-          <Mail className="text-primary" /> Cover Letter Inputs
-        </h3>
-
-        <div className="grid gap-4">
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground font-bold">Full Name</Label>
-            <Input
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="e.g. Alex Vance"
-              className="rounded-xl h-12"
-            />
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-xs uppercase text-muted-foreground font-bold">Email</Label>
-              <Input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="e.g. alex@email.com"
-                className="rounded-xl h-12"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs uppercase text-muted-foreground font-bold">Phone</Label>
-              <Input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="e.g. +46 ..."
-                className="rounded-xl h-12"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground font-bold">Target Role</Label>
-            <Input
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              placeholder="e.g. Head of Leasing"
-              className="rounded-xl h-12"
-            />
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-xs uppercase text-muted-foreground font-bold">Company</Label>
-              <Input
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                placeholder="e.g. SIXT"
-                className="rounded-xl h-12"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs uppercase text-muted-foreground font-bold">Hiring Manager</Label>
-              <Input
-                value={hiringManager}
-                onChange={(e) => setHiringManager(e.target.value)}
-                placeholder="Optional"
-                className="rounded-xl h-12"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground font-bold">Where you found it</Label>
-            <Input
-              value={jobSource}
-              onChange={(e) => setJobSource(e.target.value)}
-              placeholder="e.g. LinkedIn / Careers page"
-              className="rounded-xl h-12"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground font-bold">Top wins (1 per line)</Label>
-            <Textarea
-              value={topWins}
-              onChange={(e) => setTopWins(e.target.value)}
-              placeholder={
-                "e.g.\nGrew revenue +18% YoY\nBuilt a sales cadence that improved conversion by 22%\nLed a 15-person commercial team"
-              }
-              className="rounded-xl min-h-[120px]"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground font-bold">Job description (optional)</Label>
-            <Textarea
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
-              placeholder="Paste key requirements here (optional)."
-              className="rounded-xl min-h-[120px]"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs uppercase text-muted-foreground font-bold">Tone</Label>
-            <Select value={tone} onValueChange={(v: any) => setTone(v)}>
-              <SelectTrigger className="h-12 rounded-xl">
-                <SelectValue placeholder="Select tone" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="executive">Executive</SelectItem>
-                <SelectItem value="direct">Direct</SelectItem>
-                <SelectItem value="warm">Warm</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-3 pt-2">
-            <Button className="w-full h-12 rounded-xl font-bold" onClick={buildLetter}>
-              <Sparkles className="mr-2 h-4 w-4" /> Generate
-            </Button>
-
-            <Button
-              variant="outline"
-              className="w-full h-12 rounded-xl font-bold"
-              onClick={() => {
-                setGenerated("");
-                toast.success("Cleared");
-              }}
-            >
-              <Trash2 className="mr-2 h-4 w-4" /> Clear
-            </Button>
-          </div>
-        </div>
-      </PremiumCard>
-
-      <div className="relative">
-        <div className="sticky top-10">
-          <div className="rounded-3xl bg-card border border-border p-8 min-h-[600px] shadow-sm">
-            <div className="border-b border-border pb-6 mb-6 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl md:text-2xl font-black tracking-tight">Live Preview</h2>
-                <p className="text-muted-foreground text-sm">Copy, download, or refine inputs.</p>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  className="rounded-full"
-                  onClick={() => {
-                    if (!generated.trim()) return toast.error("Generate a cover letter first.");
-                    copyToClipboard(generated);
-                  }}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  className="rounded-full"
-                  onClick={() => {
-                    if (!generated.trim()) return toast.error("Generate a cover letter first.");
-                    downloadTxt();
-                    toast.success("Downloaded");
-                  }}
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-4 text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
-              {generated.trim() ? (
-                generated
-              ) : (
-                <div className="text-muted-foreground">
-                  [ Your cover letter will appear here after you generate it. ]
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* -----------------------------
-   Main Career Suite Application
-------------------------------*/
-export default function CareerSuite() {
-  const navigate = useNavigate();
-
-  return (
-    <div className="min-h-screen bg-background text-foreground p-4 md:p-10 font-sans">
-      {/* Back Button */}
-      <div className="max-w-7xl mx-auto mb-6">
-        <Button variant="ghost" className="gap-2" onClick={() => navigate("/tools")}>
-          <ArrowLeft className="h-4 w-4" /> Back to all tools
+          <PenTool className="w-4 h-4 mr-2 shrink-0" />
+          <span className="truncate">Draw</span>
+        </Button>
+        <Button
+          size="sm"
+          variant={mode === "type" ? "default" : "outline"}
+          onClick={() => setMode("type")}
+          className="flex-1 sm:flex-none min-w-0"
+        >
+          <span className="truncate">Type</span>
         </Button>
       </div>
 
-      {/* Header */}
-      <header className="max-w-7xl mx-auto mb-12 space-y-4">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-muted text-foreground text-xs font-bold tracking-tighter uppercase">
-          <Sparkles className="h-3 w-3" /> Pro Edition
+      <div className="rounded-lg border bg-background p-3 sm:p-4 w-full max-w-full">
+        <div className="text-sm font-medium mb-3">Preview</div>
+        <div
+          className="rounded-lg border border-dashed p-3 sm:p-6 flex items-center justify-center min-h-[200px] sm:min-h-[260px] w-full max-w-full"
+          style={{ backgroundColor: bgColor }}
+        >
+          {mode === "draw" ? (
+            <div ref={wrapRef} className="w-full max-w-full">
+              <canvas
+                ref={canvasRef}
+                className="w-full max-w-full rounded-md border bg-transparent touch-none cursor-crosshair"
+                onPointerDown={onPointerDown}
+                onPointerMove={onPointerMove}
+                onPointerUp={() => setIsDrawing(false)}
+                onPointerCancel={() => setIsDrawing(false)}
+              />
+            </div>
+          ) : (
+            <div className="text-center w-full max-w-full overflow-hidden px-2">
+              <span
+                className="block break-words"
+                style={{
+                  fontFamily,
+                  fontSize: Math.min(typedSize, 72),
+                  color: typedColor,
+                }}
+              >
+                {typedName}
+              </span>
+            </div>
+          )}
         </div>
+      </div>
 
-        <h1 className="text-4xl sm:text-5xl md:text-8xl font-black tracking-tighter leading-[0.9] text-balance">
-          CAREER <GradientText>SUITE</GradientText>
-        </h1>
+      <div className="rounded-lg border bg-background p-3 sm:p-4 space-y-4 w-full max-w-full">
+        {mode === "draw" ? (
+          <>
+            <div className="space-y-2 w-full">
+              <Label className="text-sm">Pen Width: {penWidth}px</Label>
+              <Slider
+                value={[penWidth]}
+                onValueChange={(v) => setPenWidth(v[0])}
+                min={1}
+                max={12}
+                step={1}
+                className="w-full"
+              />
+            </div>
 
-        <p className="text-muted-foreground max-w-xl text-base md:text-xl font-medium leading-tight">
-          Practical career tools. Consistent styling with the rest of your tool suite.
-        </p>
-      </header>
-
-      <main className="max-w-7xl mx-auto">
-        <Tabs defaultValue="signature" className="space-y-6 md:space-y-10">
-          {/* NOTE: responsiveness code preserved (same structure + responsive classes) */}
-          <TabsList className="bg-muted p-1 rounded-2xl md:rounded-full border border-border h-auto md:h-16 w-full flex flex-wrap md:flex-nowrap gap-1 md:gap-0">
-            <TabsTrigger
-              value="signature"
-              className="flex-1 min-w-[80px] rounded-xl md:rounded-full px-3 md:px-8 py-3 md:py-0 text-sm md:text-base data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold transition-all"
-            >
-              Signature
-            </TabsTrigger>
-            <TabsTrigger
-              value="resume"
-              className="flex-1 min-w-[80px] rounded-xl md:rounded-full px-3 md:px-8 py-3 md:py-0 text-sm md:text-base data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold transition-all"
-            >
-              Resume
-            </TabsTrigger>
-            <TabsTrigger
-              value="coverletter"
-              className="flex-1 min-w-[80px] rounded-xl md:rounded-full px-3 md:px-8 py-3 md:py-0 text-sm md:text-base data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-bold transition-all whitespace-nowrap"
-            >
-              Cover Letter
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="signature" className="outline-none focus:ring-0">
-            <SignatureGenerator />
-          </TabsContent>
-
-          <TabsContent value="resume">
-            <div className="grid lg:grid-cols-2 gap-10">
-              <PremiumCard className="p-8 space-y-6">
-                <h3 className="text-2xl font-bold flex items-center gap-2">
-                  <Briefcase className="text-primary" /> Intelligence Input
-                </h3>
-                <div className="grid gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs uppercase text-muted-foreground font-bold">Full Identity</Label>
-                    <Input placeholder="E.g. Alexander Vance" className="rounded-xl h-12" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs uppercase text-muted-foreground font-bold">Target Position</Label>
-                    <Input placeholder="Senior Account Executive" className="rounded-xl h-12" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs uppercase text-muted-foreground font-bold">Narrative Summary</Label>
-                    <Textarea placeholder="Define your edge..." className="rounded-xl min-h-[120px]" />
-                  </div>
-                  <Button className="w-full font-bold h-14 rounded-xl">
-                    <Plus className="mr-2" /> Add Experience Node
-                  </Button>
-                </div>
-              </PremiumCard>
-
-              <div className="relative">
-                <div className="sticky top-10">
-                  <div className="rounded-3xl bg-card border border-border p-8 min-h-[600px] shadow-sm">
-                    <div className="border-b border-border pb-6 mb-6">
-                      <h2 className="text-3xl font-black uppercase tracking-tighter">Your Name</h2>
-                      <p className="text-primary font-bold tracking-widest text-sm">SENIOR ROLE</p>
-                    </div>
-                    <div className="space-y-4 text-muted-foreground text-sm leading-relaxed">
-                      [ Live Editorial Preview ]
-                    </div>
-                  </div>
+            <div className="space-y-2 w-full max-w-full">
+              <Label className="text-sm">Pen Color</Label>
+              <div className="flex items-start gap-2 w-full max-w-full">
+                <Input
+                  type="color"
+                  value={penColor}
+                  onChange={(e) => setPenColor(e.target.value)}
+                  className="w-12 h-10 p-1 shrink-0"
+                />
+                <div className="flex gap-2 flex-wrap flex-1 min-w-0">
+                  {palette.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setPenColor(c)}
+                      className={`h-9 w-9 shrink-0 rounded-md border ${penColor === c ? "ring-2 ring-ring" : ""}`}
+                      style={{ backgroundColor: c }}
+                      aria-label={`Set pen color ${c}`}
+                    />
+                  ))}
                 </div>
               </div>
             </div>
+
+            <div className="space-y-2 w-full max-w-full">
+              <Label className="text-sm">Background</Label>
+              <div className="flex items-start gap-2 w-full max-w-full">
+                <Input
+                  type="color"
+                  value={bgColor}
+                  onChange={(e) => setBgColor(e.target.value)}
+                  className="w-12 h-10 p-1 shrink-0"
+                />
+                <div className="flex gap-2 flex-wrap flex-1 min-w-0">
+                  {["#ffffff", "#f8fafc", "#fef3c7", "#dbeafe"].map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setBgColor(c)}
+                      className={`h-9 w-9 shrink-0 rounded-md border ${bgColor === c ? "ring-2 ring-ring" : ""}`}
+                      style={{ backgroundColor: c }}
+                      aria-label={`Set background ${c}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 w-full">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setStrokes((prev) => prev.slice(0, -1))}
+                disabled={isEmpty}
+                className="w-full min-w-0"
+              >
+                <Undo2 className="w-4 h-4 mr-1 sm:mr-2" /> <span className="truncate">Undo</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setStrokes([])}
+                disabled={isEmpty}
+                className="hover:text-destructive w-full min-w-0"
+              >
+                <Trash2 className="w-4 h-4 mr-1 sm:mr-2" /> <span className="truncate">Clear</span>
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-2 w-full">
+              <Label className="text-sm">Name</Label>
+              <Input value={typedName} onChange={(e) => setTypedName(e.target.value)} className="w-full" />
+            </div>
+
+            <div className="space-y-2 w-full">
+              <Label className="text-sm">Font Size: {typedSize}px</Label>
+              <Slider
+                value={[typedSize]}
+                onValueChange={(v) => setTypedSize(v[0])}
+                min={28}
+                max={120}
+                step={4}
+                className="w-full"
+              />
+            </div>
+
+            <div className="space-y-2 w-full">
+              <Label className="text-sm">Font Style</Label>
+              <Select value={typedStyle} onValueChange={(v) => setTypedStyle(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cursive">Cursive</SelectItem>
+                  <SelectItem value="elegant">Elegant Serif</SelectItem>
+                  <SelectItem value="serif">Classic Serif</SelectItem>
+                  <SelectItem value="modern">Modern Sans</SelectItem>
+                  <SelectItem value="sans">Simple Sans</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2 w-full max-w-full">
+              <Label className="text-sm">Text Color</Label>
+              <div className="flex items-start gap-2 w-full max-w-full">
+                <Input
+                  type="color"
+                  value={typedColor}
+                  onChange={(e) => setTypedColor(e.target.value)}
+                  className="w-12 h-10 p-1 shrink-0"
+                />
+                <div className="flex gap-2 flex-wrap flex-1 min-w-0">
+                  {palette.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setTypedColor(c)}
+                      className={`h-9 w-9 shrink-0 rounded-md border ${typedColor === c ? "ring-2 ring-ring" : ""}`}
+                      style={{ backgroundColor: c }}
+                      aria-label={`Set text color ${c}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 w-full max-w-full">
+              <Label className="text-sm">Background</Label>
+              <div className="flex items-start gap-2 w-full max-w-full">
+                <Input
+                  type="color"
+                  value={bgColor}
+                  onChange={(e) => setBgColor(e.target.value)}
+                  className="w-12 h-10 p-1 shrink-0"
+                />
+                <div className="flex gap-2 flex-wrap flex-1 min-w-0">
+                  {["#ffffff", "#f8fafc", "#fef3c7", "#dbeafe"].map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setBgColor(c)}
+                      className={`h-9 w-9 shrink-0 rounded-md border ${bgColor === c ? "ring-2 ring-ring" : ""}`}
+                      style={{ backgroundColor: c }}
+                      aria-label={`Set background ${c}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      <Button className="w-full" onClick={downloadPNG}>
+        <Download className="w-4 h-4 mr-2" /> Download Signature
+      </Button>
+    </div>
+  );
+}
+
+function ResumeGeneratorEmbedded() {
+  const [fullName, setFullName] = useState("");
+  const [title, setTitle] = useState("");
+  const [location, setLocation] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [website, setWebsite] = useState("");
+  const [linkedin, setLinkedin] = useState("");
+  const [summary, setSummary] = useState("");
+
+  const [experiences, setExperiences] = useState([{ id: "1", role: "", company: "", start: "", end: "", bullets: "" }]);
+
+  const [education, setEducation] = useState([{ id: "1", school: "", degree: "", start: "", end: "", details: "" }]);
+
+  const [skills, setSkills] = useState([]);
+  const [newSkill, setNewSkill] = useState("");
+
+  const output = useMemo(() => {
+    const contacts = [location, email, phone, website, linkedin].filter(Boolean);
+    const headerLine = contacts.length > 0 ? contacts.join(" • ") : "";
+
+    const expBlock = experiences
+      .filter((e) => e.role || e.company)
+      .map((e) => {
+        const dates = [e.start, e.end].filter(Boolean).join(" – ");
+        const top = [e.role, e.company].filter(Boolean).join(" @ ");
+        return `${top}${dates ? ` (${dates})` : ""}\n${e.bullets || ""}`.trim();
+      })
+      .join("\n\n");
+
+    const eduBlock = education
+      .filter((ed) => ed.school || ed.degree)
+      .map((ed) => {
+        const dates = [ed.start, ed.end].filter(Boolean).join(" – ");
+        const top = [ed.degree, ed.school].filter(Boolean).join(", ");
+        return `${top}${dates ? ` (${dates})` : ""}${ed.details ? `\n${ed.details}` : ""}`.trim();
+      })
+      .join("\n\n");
+
+    const skillsBlock = skills.length > 0 ? skills.map((s) => s.name).join(" • ") : "";
+
+    let result = `${(fullName || "YOUR NAME").toUpperCase()}\n${title || ""}`;
+    if (headerLine) result += `\n${headerLine}`;
+    if (summary) result += `\n\nPROFESSIONAL SUMMARY\n${summary}`;
+    if (skillsBlock) result += `\n\nSKILLS\n${skillsBlock}`;
+    if (expBlock) result += `\n\nEXPERIENCE\n${expBlock}`;
+    if (eduBlock) result += `\n\nEDUCATION\n${eduBlock}`;
+
+    return result.trim();
+  }, [fullName, title, location, email, phone, website, linkedin, summary, experiences, education, skills]);
+
+  const addSkill = () => {
+    if (!newSkill.trim()) return;
+    setSkills((prev) => [...prev, { id: Date.now().toString(), name: newSkill.trim() }]);
+    setNewSkill("");
+  };
+
+  return (
+    <div className="space-y-4 w-full max-w-full">
+      <Card className="shadow-none lg:hidden w-full max-w-full">
+        <CardContent className="pt-4 sm:pt-6 w-full">
+          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+            <div className="text-sm font-medium">Preview</div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => copyToClipboard(output)}>
+                <Copy className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Copy</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => downloadBlob("resume.txt", new Blob([output], { type: "text/plain;charset=utf-8" }))}
+              >
+                <Download className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Download</span>
+              </Button>
+            </div>
+          </div>
+          <pre className="whitespace-pre-wrap text-xs sm:text-sm leading-relaxed max-h-[50vh] overflow-auto rounded-md border bg-muted/30 p-3 sm:p-4 w-full max-w-full">
+            {output}
+          </pre>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2 w-full max-w-full">
+        <div className="space-y-4 w-full max-w-full">
+          <Card className="shadow-none w-full max-w-full">
+            <CardContent className="pt-4 sm:pt-6 space-y-4 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Full Name</Label>
+                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full" />
+                </div>
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Job Title</Label>
+                  <Input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full" />
+                </div>
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Location</Label>
+                  <Input value={location} onChange={(e) => setLocation(e.target.value)} className="w-full" />
+                </div>
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Email</Label>
+                  <Input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full" />
+                </div>
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Phone</Label>
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full" />
+                </div>
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Website</Label>
+                  <Input value={website} onChange={(e) => setWebsite(e.target.value)} className="w-full" />
+                </div>
+                <div className="space-y-2 sm:col-span-2 w-full">
+                  <Label className="text-sm">LinkedIn</Label>
+                  <Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} className="w-full" />
+                </div>
+              </div>
+
+              <div className="space-y-2 w-full">
+                <Label className="text-sm">Professional Summary</Label>
+                <Textarea
+                  value={summary}
+                  onChange={(e) => setSummary(e.target.value)}
+                  rows={4}
+                  className="resize-none w-full"
+                />
+              </div>
+
+              <div className="space-y-2 w-full max-w-full">
+                <Label className="text-sm">Skills</Label>
+                <div className="flex gap-2 w-full">
+                  <Input
+                    placeholder="Add a skill"
+                    value={newSkill}
+                    onChange={(e) => setNewSkill(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addSkill()}
+                    className="flex-1 min-w-0"
+                  />
+                  <Button onClick={addSkill} size="icon" className="shrink-0">
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                {skills.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-2 w-full">
+                    {skills.map((skill) => (
+                      <div
+                        key={skill.id}
+                        className="bg-muted px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border flex items-center gap-2"
+                      >
+                        <span className="text-xs sm:text-sm">{skill.name}</span>
+                        <button
+                          onClick={() => setSkills((prev) => prev.filter((s) => s.id !== skill.id))}
+                          className="text-muted-foreground hover:text-destructive shrink-0"
+                          aria-label="Remove skill"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex items-center justify-between w-full">
+            <Label className="text-sm font-medium">Experience</Label>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                setExperiences((prev) => [
+                  ...prev,
+                  { id: Date.now().toString(), role: "", company: "", start: "", end: "", bullets: "" },
+                ])
+              }
+            >
+              <Plus className="w-4 h-4 mr-2" /> Add
+            </Button>
+          </div>
+
+          {experiences.map((exp, i) => (
+            <Card key={exp.id} className="shadow-none w-full max-w-full">
+              <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
+                <div className="flex items-center justify-between w-full">
+                  <div className="text-xs text-muted-foreground">Experience {i + 1}</div>
+                  {experiences.length > 1 && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setExperiences((prev) => prev.filter((_, idx) => idx !== i))}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                  <Input
+                    placeholder="Role"
+                    value={exp.role}
+                    onChange={(e) => {
+                      const next = [...experiences];
+                      next[i].role = e.target.value;
+                      setExperiences(next);
+                    }}
+                    className="w-full"
+                  />
+                  <Input
+                    placeholder="Company"
+                    value={exp.company}
+                    onChange={(e) => {
+                      const next = [...experiences];
+                      next[i].company = e.target.value;
+                      setExperiences(next);
+                    }}
+                    className="w-full"
+                  />
+                  <Input
+                    placeholder="Start"
+                    value={exp.start}
+                    onChange={(e) => {
+                      const next = [...experiences];
+                      next[i].start = e.target.value;
+                      setExperiences(next);
+                    }}
+                    className="w-full"
+                  />
+                  <Input
+                    placeholder="End"
+                    value={exp.end}
+                    onChange={(e) => {
+                      const next = [...experiences];
+                      next[i].end = e.target.value;
+                      setExperiences(next);
+                    }}
+                    className="w-full"
+                  />
+                </div>
+
+                <Textarea
+                  placeholder="Bullets"
+                  value={exp.bullets}
+                  onChange={(e) => {
+                    const next = [...experiences];
+                    next[i].bullets = e.target.value;
+                    setExperiences(next);
+                  }}
+                  rows={3}
+                  className="resize-none w-full"
+                />
+              </CardContent>
+            </Card>
+          ))}
+
+          <div className="flex items-center justify-between pt-2 w-full">
+            <Label className="text-sm font-medium">Education</Label>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                setEducation((prev) => [
+                  ...prev,
+                  { id: Date.now().toString(), school: "", degree: "", start: "", end: "", details: "" },
+                ])
+              }
+            >
+              <Plus className="w-4 h-4 mr-2" /> Add
+            </Button>
+          </div>
+
+          {education.map((ed, i) => (
+            <Card key={ed.id} className="shadow-none w-full max-w-full">
+              <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
+                <div className="flex items-center justify-between w-full">
+                  <div className="text-xs text-muted-foreground">Education {i + 1}</div>
+                  {education.length > 1 && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setEducation((prev) => prev.filter((_, idx) => idx !== i))}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                  <Input
+                    placeholder="School"
+                    value={ed.school}
+                    onChange={(e) => {
+                      const next = [...education];
+                      next[i].school = e.target.value;
+                      setEducation(next);
+                    }}
+                    className="w-full"
+                  />
+                  <Input
+                    placeholder="Degree"
+                    value={ed.degree}
+                    onChange={(e) => {
+                      const next = [...education];
+                      next[i].degree = e.target.value;
+                      setEducation(next);
+                    }}
+                    className="w-full"
+                  />
+                  <Input
+                    placeholder="Start"
+                    value={ed.start}
+                    onChange={(e) => {
+                      const next = [...education];
+                      next[i].start = e.target.value;
+                      setEducation(next);
+                    }}
+                    className="w-full"
+                  />
+                  <Input
+                    placeholder="End"
+                    value={ed.end}
+                    onChange={(e) => {
+                      const next = [...education];
+                      next[i].end = e.target.value;
+                      setEducation(next);
+                    }}
+                    className="w-full"
+                  />
+                </div>
+
+                <Textarea
+                  placeholder="Details"
+                  value={ed.details}
+                  onChange={(e) => {
+                    const next = [...education];
+                    next[i].details = e.target.value;
+                    setEducation(next);
+                  }}
+                  rows={2}
+                  className="resize-none w-full"
+                />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card className="shadow-none hidden lg:block w-full max-w-full">
+          <CardContent className="pt-6 w-full">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="text-sm font-medium">Preview</div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(output)}>
+                  <Copy className="w-4 h-4 mr-2" /> Copy
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => downloadBlob("resume.txt", new Blob([output], { type: "text/plain;charset=utf-8" }))}
+                >
+                  <Download className="w-4 h-4 mr-2" /> Download
+                </Button>
+              </div>
+            </div>
+            <pre className="whitespace-pre-wrap text-sm leading-relaxed max-h-[70vh] overflow-auto rounded-md border bg-muted/30 p-4 w-full max-w-full">
+              {output}
+            </pre>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function CoverLetterGeneratorEmbedded() {
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [company, setCompany] = useState("");
+  const [role, setRole] = useState("");
+  const [hiringManager, setHiringManager] = useState("");
+  const [tone, setTone] = useState("Professional");
+  const [content, setContent] = useState("");
+
+  const letter = useMemo(() => {
+    const greetings = {
+      Professional: hiringManager ? `Dear ${hiringManager},` : "Dear Hiring Manager,",
+      Bold: `To the Team at ${company || "the Company"},`,
+      Friendly: hiringManager ? `Hi ${hiringManager.split(" ")[0]},` : "Hi there!",
+      Concise: "To whom it may concern,",
+      Enthusiastic: hiringManager ? `Dear ${hiringManager},` : "Dear Hiring Team!",
+    };
+
+    const closings = {
+      Professional: "Sincerely,",
+      Bold: "Looking forward to hearing from you,",
+      Friendly: "Best regards,",
+      Concise: "Regards,",
+      Enthusiastic: "Excited to connect,",
+    };
+
+    const contactInfo = [address, phone, email].filter(Boolean).join("\n");
+
+    return `${fullName}${contactInfo ? `\n${contactInfo}` : ""}
+
+${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+
+${company}
+
+${greetings[tone]}
+
+I am writing to express my ${tone === "Enthusiastic" ? "strong" : ""} interest in the ${role || "open position"}${company ? ` at ${company}` : ""}. ${content}
+
+${closings[tone]}
+${fullName}`.trim();
+  }, [fullName, email, phone, address, company, role, hiringManager, tone, content]);
+
+  return (
+    <div className="space-y-4 w-full max-w-full">
+      <Card className="shadow-none lg:hidden w-full max-w-full">
+        <CardContent className="pt-4 sm:pt-6 w-full">
+          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+            <div className="text-sm font-medium">Preview</div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => copyToClipboard(letter)}>
+                <Copy className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Copy</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  downloadBlob("cover-letter.txt", new Blob([letter], { type: "text/plain;charset=utf-8" }))
+                }
+              >
+                <Download className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Download</span>
+              </Button>
+            </div>
+          </div>
+
+          <pre className="whitespace-pre-wrap text-xs sm:text-sm leading-relaxed max-h-[50vh] overflow-auto rounded-md border bg-muted/30 p-3 sm:p-4 w-full max-w-full">
+            {letter}
+          </pre>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2 w-full max-w-full">
+        <div className="space-y-4 w-full max-w-full">
+          <Card className="shadow-none w-full max-w-full">
+            <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Full Name</Label>
+                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full" />
+                </div>
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Email</Label>
+                  <Input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full" />
+                </div>
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Phone</Label>
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full" />
+                </div>
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Address</Label>
+                  <Input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-none w-full max-w-full">
+            <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Company</Label>
+                  <Input value={company} onChange={(e) => setCompany(e.target.value)} className="w-full" />
+                </div>
+                <div className="space-y-2 w-full">
+                  <Label className="text-sm">Role</Label>
+                  <Input value={role} onChange={(e) => setRole(e.target.value)} className="w-full" />
+                </div>
+                <div className="space-y-2 sm:col-span-2 w-full">
+                  <Label className="text-sm">Hiring Manager</Label>
+                  <Input value={hiringManager} onChange={(e) => setHiringManager(e.target.value)} className="w-full" />
+                </div>
+              </div>
+
+              <div className="space-y-2 w-full">
+                <Label className="text-sm">Tone</Label>
+                <Select value={tone} onValueChange={(v) => setTone(v)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["Professional", "Bold", "Friendly", "Concise", "Enthusiastic"].map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2 w-full">
+                <Label className="text-sm">Body</Label>
+                <Textarea
+                  rows={8}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  className="resize-none w-full"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="shadow-none hidden lg:block w-full max-w-full">
+          <CardContent className="pt-6 w-full">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="text-sm font-medium">Preview</div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(letter)}>
+                  <Copy className="w-4 h-4 mr-2" /> Copy
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    downloadBlob("cover-letter.txt", new Blob([letter], { type: "text/plain;charset=utf-8" }))
+                  }
+                >
+                  <Download className="w-4 h-4 mr-2" /> Download
+                </Button>
+              </div>
+            </div>
+
+            <pre className="whitespace-pre-wrap text-sm leading-relaxed max-h-[70vh] overflow-auto rounded-md border bg-muted/30 p-4 w-full max-w-full">
+              {letter}
+            </pre>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+export default function CareerToolkit() {
+  return (
+    <div className="min-h-screen bg-background w-full overflow-x-hidden">
+      <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8 lg:py-10 space-y-4 sm:space-y-6">
+        <header className="space-y-1 w-full">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold tracking-tight">Career Toolkit</h1>
+          <p className="text-xs sm:text-sm lg:text-base text-muted-foreground">
+            Fast, clean tools for signatures, resumes, and cover letters.
+          </p>
+        </header>
+
+        <Tabs defaultValue="signature" className="space-y-3 sm:space-y-4 w-full max-w-full">
+          <TabsList className="w-full grid grid-cols-3 h-auto p-1 gap-1">
+            <TabsTrigger
+              value="signature"
+              className="flex-col sm:flex-row gap-1 sm:gap-2 text-[10px] sm:text-sm py-2 px-1 sm:px-3 min-w-0"
+            >
+              <PenTool className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="truncate">Signature</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="resume"
+              className="flex-col sm:flex-row gap-1 sm:gap-2 text-[10px] sm:text-sm py-2 px-1 sm:px-3 min-w-0"
+            >
+              <FileUser className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="truncate">Resume</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="cover-letter"
+              className="flex-col sm:flex-row gap-1 sm:gap-2 text-[10px] sm:text-sm py-2 px-1 sm:px-3 min-w-0"
+            >
+              <Mail className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+              <span className="hidden sm:inline truncate">Cover Letter</span>
+              <span className="sm:hidden truncate">Letter</span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="signature" className="w-full max-w-full">
+            <Card className="shadow-none w-full max-w-full">
+              <CardContent className="pt-4 sm:pt-6 w-full max-w-full">
+                <SignatureGeneratorEmbedded />
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          {/* Cover Letter: implemented (was placeholder) */}
-          <TabsContent value="coverletter">
-            <CoverLetterEngine />
+          <TabsContent value="resume" className="w-full max-w-full">
+            <Card className="shadow-none w-full max-w-full">
+              <CardContent className="pt-4 sm:pt-6 w-full max-w-full">
+                <ResumeGeneratorEmbedded />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="cover-letter" className="w-full max-w-full">
+            <Card className="shadow-none w-full max-w-full">
+              <CardContent className="pt-4 sm:pt-6 w-full max-w-full">
+                <CoverLetterGeneratorEmbedded />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
-      </main>
-
-      <footer className="max-w-7xl mx-auto mt-32 pt-10 border-t border-border flex flex-col md:flex-row justify-between items-center gap-6 text-muted-foreground text-sm font-medium">
-        <p>© 2026</p>
-        <div className="flex gap-8">
-          <a href="#" className="hover:text-foreground transition-colors">
-            Privacy
-          </a>
-          <a href="#" className="hover:text-foreground transition-colors">
-            Terms of Service
-          </a>
-          <a href="#" className="hover:text-foreground transition-colors">
-            Contact Support
-          </a>
-        </div>
-      </footer>
+      </div>
     </div>
   );
 }
