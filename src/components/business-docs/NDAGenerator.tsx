@@ -126,7 +126,7 @@ ${signatureBlock}`;
 
   return (
     <div className="grid lg:grid-cols-2 gap-8">
-      <div className="space-y-4 lg:max-h-[700px] lg:overflow-y-auto lg:pr-2">
+      <div className="space-y-4 lg:max-h-[700px] lg:overflow-y-auto lg:pr-2 scrollbar-hide">
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
           <h3 className="font-semibold text-foreground mb-4">NDA Type</h3>
           <Select value={ndaType} onValueChange={(v: "mutual" | "one-way") => setNdaType(v)}>
@@ -218,7 +218,7 @@ ${signatureBlock}`;
         </Button>
       </div>
 
-      <div className="bg-white dark:bg-background rounded-xl border border-border p-6 shadow-sm lg:max-h-[700px] lg:overflow-y-auto">
+      <div className="bg-white dark:bg-background rounded-xl border border-border p-6 shadow-sm lg:max-h-[700px] lg:overflow-y-auto scrollbar-hide">
         <div>
           <pre className="whitespace-pre-wrap font-mono text-xs text-foreground">{ndaText}</pre>
         </div>
