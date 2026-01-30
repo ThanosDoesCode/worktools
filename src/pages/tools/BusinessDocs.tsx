@@ -1283,7 +1283,9 @@ function ContractLetterGeneratorEmbedded() {
 
       {/* Preview */}
       <div className="bg-white rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none">
-        <pre className="whitespace-pre-wrap text-sm leading-relaxed font-mono text-slate-900">{output}</pre>
+        <pre className="whitespace-pre-wrap text-sm leading-relaxed font-mono text-slate-900 selection:bg-yellow-200 selection:text-slate-900">
+          {output}
+        </pre>
       </div>
     </div>
   );
