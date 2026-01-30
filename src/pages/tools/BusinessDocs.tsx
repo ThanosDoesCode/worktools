@@ -481,7 +481,7 @@ function InvoiceGeneratorEmbedded() {
       </div>
 
       {/* PREVIEW */}
-      <div className="bg-white rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none max-h-[700px] overflow-y-auto">
+      <div className="bg-white rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none lg:max-h-[700px] lg:overflow-y-auto">
         <div className="space-y-6">
           <div className="flex justify-between items-start gap-4">
             <div className="min-w-0">
