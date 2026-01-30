@@ -33,15 +33,6 @@
   }
 }
 
-@layer utilities {
-  .tool-preview {
-    @apply whitespace-pre-wrap text-sm leading-relaxed font-mono text-slate-900;
-  }
-  .tool-preview::selection {
-    @apply bg-yellow-200 text-slate-900;
-  }
-}
-
 .card {
   padding: 2em;
 }
