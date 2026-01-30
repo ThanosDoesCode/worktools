@@ -148,7 +148,6 @@ function InvoiceGeneratorEmbedded() {
 
   const print = () => window.print();
 
-  // Optional: export as text
   const invoiceText = useMemo(() => {
     const lines = lineItems
       .map(
@@ -326,7 +325,7 @@ function InvoiceGeneratorEmbedded() {
           </div>
         </div>
 
-        {/* Line items: MOBILE-FIRST cards, DESKTOP table-ish */}
+        {/* Line items */}
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
           <div className="flex items-center justify-between gap-3 mb-4">
             <h3 className="font-semibold text-foreground">Line Items</h3>
@@ -481,7 +480,7 @@ function InvoiceGeneratorEmbedded() {
       </div>
 
       {/* PREVIEW */}
-      <div className="bg-white rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none max-h-[700px] overflow-y-auto">
+      <div className="bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none max-h-[700px] overflow-y-auto">
         <div className="space-y-6">
           <div className="flex justify-between items-start gap-4">
             <div className="min-w-0">
@@ -589,7 +588,6 @@ function ReceiptGeneratorEmbedded() {
   const [taxRate, setTaxRate] = useState(0);
 
   const [items, setItems] = useState<LineItem[]>([{ id: "1", description: "", quantity: 1, unitPrice: 0 }]);
-
   const [footer, setFooter] = useState("Thank you for your purchase!");
 
   const subtotal = useMemo(() => items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0), [items]);
@@ -886,7 +884,7 @@ function ReceiptGeneratorEmbedded() {
       </div>
 
       {/* Preview */}
-      <div className="bg-white rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none">
+      <div className="bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none">
         <div className="max-w-md mx-auto">
           <div className="text-center">
             <h2 className="text-xl font-bold">{merchantName || "Merchant"}</h2>
@@ -1282,10 +1280,9 @@ function ContractLetterGeneratorEmbedded() {
       </div>
 
       {/* Preview */}
-      <div className="bg-white rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none">
-        <pre className="whitespace-pre-wrap text-sm leading-relaxed font-mono text-slate-900 selection:bg-yellow-200 selection:text-slate-900">
-          {output}
-        </pre>
+      <div className="bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none">
+        {/* ✅ uses your global utility class */}
+        <pre className="tool-preview">{output}</pre>
       </div>
     </div>
   );
@@ -1335,7 +1332,7 @@ export default function BusinessDocs() {
       <Card>
         <CardContent className="p-4 sm:p-6">
           <Tabs defaultValue="invoice" className="w-full">
-            {/* Scrollable tab bar with clear hint */}
+            {/* Scrollable tab bar */}
             <div className="mb-6">
               <div className="relative flex items-center gap-2">
                 <Button
