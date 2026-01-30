@@ -394,8 +394,8 @@ ${email}
         </Button>
       </div>
 
-      <div className="bg-white dark:bg-background rounded-xl border border-border p-6 shadow-sm">
-        <div className="max-h-[600px] overflow-y-auto">
+      <div className="bg-white dark:bg-background rounded-xl border border-border p-6 shadow-sm max-h-[700px] overflow-y-auto">
+        <div>
           <pre className="whitespace-pre-wrap font-mono text-xs text-foreground">{proposalText}</pre>
         </div>
         <div className="flex gap-3 mt-4">
