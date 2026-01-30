@@ -205,7 +205,7 @@ ${email}
 
   return (
     <div className="grid lg:grid-cols-2 gap-8">
-      <div className="space-y-4 max-h-[700px] overflow-y-auto pr-2">
+      <div className="space-y-4 lg:max-h-[700px] lg:overflow-y-auto lg:pr-2">
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border space-y-4">
           <h3 className="font-semibold text-foreground">Your Company</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -394,7 +394,7 @@ ${email}
         </Button>
       </div>
 
-      <div className="bg-white dark:bg-background rounded-xl border border-border p-6 shadow-sm max-h-[700px] overflow-y-auto">
+      <div className="bg-white dark:bg-background rounded-xl border border-border p-6 shadow-sm lg:max-h-[700px] lg:overflow-y-auto">
         <div>
           <pre className="whitespace-pre-wrap font-mono text-xs text-foreground">{proposalText}</pre>
         </div>
