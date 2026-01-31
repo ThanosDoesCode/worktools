@@ -24,6 +24,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { NDAGenerator } from "@/components/business-docs/NDAGenerator";
+import { ProposalGenerator } from "@/components/business-docs/ProposalGenerator";
+
+/** Moat layer (adjust paths if your project differs) */
+import { useMoat } from "@/hooks/moat/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
+
 type CurrencyCode =
   | "EUR"
   | "USD"
@@ -75,8 +84,8 @@ function downloadBlob(filename: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
-function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text);
+async function copyToClipboard(text: string) {
+  await navigator.clipboard.writeText(text);
   toast.success("Copied");
 }
 
@@ -90,151 +99,216 @@ function todayISO() {
 }
 
 /* -----------------------------
-   Print styles – only .print-preview shows on print
+   INVOICE (MOAT ENABLED)
 ------------------------------*/
-const PRINT_STYLE = `
-@media print {
-  body * { visibility: hidden !important; }
-  .print-preview, .print-preview * { visibility: visible !important; }
-  .print-preview {
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    margin: 0 !important;
-    padding: 2rem !important;
-    border: none !important;
-    border-radius: 0 !important;
-    background: white !important;
-    color: #1e293b !important;
-    box-shadow: none !important;
-    overflow: visible !important;
-    max-height: none !important;
-  }
-}
-`;
+type InvoiceSettings = {
+  sellerName: string;
+  sellerAddress: string;
+  sellerEmail: string;
 
-function PrintStyleTag() {
-  return <style dangerouslySetInnerHTML={{ __html: PRINT_STYLE }} />;
-}
+  clientName: string;
+  clientAddress: string;
+  clientEmail: string;
 
-/* -----------------------------
-   Mobile-friendly Invoice
-------------------------------*/
+  invoiceNumber: string;
+  invoiceDate: string;
+  dueDate: string;
+
+  currency: CurrencyCode;
+  vatRate: number;
+
+  notes: string;
+  lineItems: LineItem[];
+};
+
+const DEFAULT_SETTINGS_INVOICE: InvoiceSettings = {
+  sellerName: "",
+  sellerAddress: "",
+  sellerEmail: "",
+
+  clientName: "",
+  clientAddress: "",
+  clientEmail: "",
+
+  invoiceNumber: "INV-001",
+  invoiceDate: todayISO(),
+  dueDate: "",
+
+  currency: "EUR",
+  vatRate: 20,
+
+  notes: "",
+  lineItems: [{ id: "1", description: "", quantity: 1, unitPrice: 0 }],
+};
+
+const RECOMMENDED_PRESETS_INVOICE = [
+  {
+    name: "Freelancer EU VAT 20%",
+    settings: {
+      ...DEFAULT_SETTINGS_INVOICE,
+      currency: "EUR",
+      vatRate: 20,
+      notes: "Payment due within 14 days.\nIBAN: ________\nThank you!",
+      lineItems: [{ id: "1", description: "Consulting services", quantity: 1, unitPrice: 0 }],
+    } satisfies InvoiceSettings,
+  },
+  {
+    name: "US No Tax",
+    settings: {
+      ...DEFAULT_SETTINGS_INVOICE,
+      currency: "USD",
+      vatRate: 0,
+      notes: "Payment due within 14 days.\nThank you!",
+      lineItems: [{ id: "1", description: "Professional services", quantity: 1, unitPrice: 0 }],
+    } satisfies InvoiceSettings,
+  },
+  {
+    name: "Consulting Invoice",
+    settings: {
+      ...DEFAULT_SETTINGS_INVOICE,
+      currency: "EUR",
+      vatRate: 0,
+      notes: "Payment terms: Net 30.\nPlease include invoice number on transfer.",
+      lineItems: [
+        { id: "1", description: "Discovery & planning", quantity: 1, unitPrice: 0 },
+        { id: "2", description: "Implementation", quantity: 1, unitPrice: 0 },
+      ],
+    } satisfies InvoiceSettings,
+  },
+];
+
 function InvoiceGeneratorEmbedded() {
-  const [sellerName, setSellerName] = useState("");
-  const [sellerAddress, setSellerAddress] = useState("");
-  const [sellerEmail, setSellerEmail] = useState("");
+  const toolSlug = "business-docs-invoice";
 
-  const [clientName, setClientName] = useState("");
-  const [clientAddress, setClientAddress] = useState("");
-  const [clientEmail, setClientEmail] = useState("");
+  const [settings, setSettings] = useState<InvoiceSettings>(DEFAULT_SETTINGS_INVOICE);
 
-  const [invoiceNumber, setInvoiceNumber] = useState("INV-001");
-  const [invoiceDate, setInvoiceDate] = useState(todayISO());
-  const [dueDate, setDueDate] = useState("");
+  const moat = useMoat(settings, setSettings, {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS_INVOICE,
+    recommendedPresets: RECOMMENDED_PRESETS_INVOICE,
+  });
 
-  const [currency, setCurrency] = useState<CurrencyCode>("EUR");
-  const [vatRate, setVatRate] = useState(20);
+  const update = <K extends keyof InvoiceSettings>(key: K, value: InvoiceSettings[K]) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  };
 
-  const [notes, setNotes] = useState("");
-  const [lineItems, setLineItems] = useState<LineItem[]>([{ id: "1", description: "", quantity: 1, unitPrice: 0 }]);
-
-  const subtotal = useMemo(() => lineItems.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0), [lineItems]);
-  const vatAmount = useMemo(() => subtotal * (vatRate / 100), [subtotal, vatRate]);
+  const subtotal = useMemo(
+    () => settings.lineItems.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0),
+    [settings.lineItems],
+  );
+  const vatAmount = useMemo(() => subtotal * (settings.vatRate / 100), [subtotal, settings.vatRate]);
   const total = useMemo(() => subtotal + vatAmount, [subtotal, vatAmount]);
 
   const addLine = () => {
-    setLineItems((prev) => [...prev, { id: Date.now().toString(), description: "", quantity: 1, unitPrice: 0 }]);
+    setSettings((prev) => ({
+      ...prev,
+      lineItems: [...prev.lineItems, { id: Date.now().toString(), description: "", quantity: 1, unitPrice: 0 }],
+    }));
   };
 
   const removeLine = (id: string) => {
-    setLineItems((prev) => (prev.length <= 1 ? prev : prev.filter((x) => x.id !== id)));
+    setSettings((prev) => ({
+      ...prev,
+      lineItems: prev.lineItems.length <= 1 ? prev.lineItems : prev.lineItems.filter((x) => x.id !== id),
+    }));
   };
 
   const updateLine = (id: string, patch: Partial<LineItem>) => {
-    setLineItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    setSettings((prev) => ({
+      ...prev,
+      lineItems: prev.lineItems.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+    }));
   };
 
   const reset = () => {
-    setSellerName("");
-    setSellerAddress("");
-    setSellerEmail("");
-    setClientName("");
-    setClientAddress("");
-    setClientEmail("");
-    setInvoiceNumber("INV-001");
-    setInvoiceDate(todayISO());
-    setDueDate("");
-    setCurrency("EUR");
-    setVatRate(20);
-    setNotes("");
-    setLineItems([{ id: "1", description: "", quantity: 1, unitPrice: 0 }]);
+    setSettings({ ...DEFAULT_SETTINGS_INVOICE, invoiceDate: todayISO() });
     toast.success("Invoice reset");
   };
 
-  const print = () => window.print();
-
   const invoiceText = useMemo(() => {
-    const lines = lineItems
+    const lines = settings.lineItems
       .map(
         (it) =>
-          `- ${it.description || "—"} | Qty ${it.quantity} x ${formatMoney(it.unitPrice, currency)} = ${formatMoney(
+          `- ${it.description || "—"} | Qty ${it.quantity} x ${formatMoney(it.unitPrice, settings.currency)} = ${formatMoney(
             it.quantity * it.unitPrice,
-            currency,
+            settings.currency,
           )}`,
       )
       .join("\n");
 
     return [
-      `INVOICE ${invoiceNumber}`,
+      `INVOICE ${settings.invoiceNumber}`,
       ``,
-      `From: ${sellerName || "Your Company"}`,
-      `${sellerAddress || ""}`.trim(),
-      sellerEmail ? `Email: ${sellerEmail}` : "",
+      `From: ${settings.sellerName || "Your Company"}`,
+      `${settings.sellerAddress || ""}`.trim(),
+      settings.sellerEmail ? `Email: ${settings.sellerEmail}` : "",
       ``,
-      `Bill To: ${clientName || "Client Name"}`,
-      `${clientAddress || ""}`.trim(),
-      clientEmail ? `Email: ${clientEmail}` : "",
+      `Bill To: ${settings.clientName || "Client Name"}`,
+      `${settings.clientAddress || ""}`.trim(),
+      settings.clientEmail ? `Email: ${settings.clientEmail}` : "",
       ``,
-      `Date: ${invoiceDate}`,
-      dueDate ? `Due: ${dueDate}` : "",
+      `Date: ${settings.invoiceDate}`,
+      settings.dueDate ? `Due: ${settings.dueDate}` : "",
       ``,
       `Items:`,
       lines || "- —",
       ``,
-      `Subtotal: ${formatMoney(subtotal, currency)}`,
-      `VAT (${vatRate}%): ${formatMoney(vatAmount, currency)}`,
-      `Total: ${formatMoney(total, currency)}`,
+      `Subtotal: ${formatMoney(subtotal, settings.currency)}`,
+      `VAT (${settings.vatRate}%): ${formatMoney(vatAmount, settings.currency)}`,
+      `Total: ${formatMoney(total, settings.currency)}`,
       ``,
-      notes ? `Notes:\n${notes}` : "",
+      settings.notes ? `Notes:\n${settings.notes}` : "",
     ]
       .filter(Boolean)
       .join("\n");
-  }, [
-    clientAddress,
-    clientEmail,
-    clientName,
-    currency,
-    dueDate,
-    invoiceDate,
-    invoiceNumber,
-    lineItems,
-    notes,
-    sellerAddress,
-    sellerEmail,
-    sellerName,
-    subtotal,
-    total,
-    vatAmount,
-    vatRate,
-  ]);
+  }, [settings, subtotal, vatAmount, total]);
+
+  const doPrint = () => {
+    window.print();
+    moat?.recordJob?.({
+      action: "print",
+      toolSlug,
+      inputMeta: [],
+    });
+  };
+
+  const doCopy = async () => {
+    await copyToClipboard(invoiceText);
+    moat?.recordJob?.({
+      action: "copy",
+      toolSlug,
+      inputMeta: [],
+    });
+  };
+
+  const doDownload = () => {
+    downloadBlob(
+      `invoice-${settings.invoiceNumber}.txt`,
+      new Blob([invoiceText], { type: "text/plain;charset=utf-8" }),
+    );
+    toast.success("Downloaded");
+    moat?.recordJob?.({
+      action: "download",
+      toolSlug,
+      inputMeta: [],
+    });
+  };
 
   return (
-    <div className="grid lg:grid-cols-2 gap-8">
+    <div className="grid lg:grid-cols-3 gap-8">
+      {/* Presets */}
+      <div className="order-3 lg:order-1 print:hidden">
+        <LocalStatusIndicator />
+        <div className="mt-3">
+          <PresetsPanel />
+        </div>
+        <div className="mt-3">
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+      </div>
+
       {/* INPUTS */}
-      <div className="space-y-6 print:hidden">
-        {/* Seller */}
+      <div className="space-y-6 print:hidden order-1 lg:order-2">
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
           <h3 className="font-semibold text-foreground mb-4">Your Information</h3>
           <div className="space-y-4">
@@ -242,8 +316,8 @@ function InvoiceGeneratorEmbedded() {
               <Label htmlFor="inv-sellerName">Company / Name</Label>
               <Input
                 id="inv-sellerName"
-                value={sellerName}
-                onChange={(e) => setSellerName(e.target.value)}
+                value={settings.sellerName}
+                onChange={(e) => update("sellerName", e.target.value)}
                 placeholder="Your Company Ltd"
               />
             </div>
@@ -251,8 +325,8 @@ function InvoiceGeneratorEmbedded() {
               <Label htmlFor="inv-sellerAddress">Address</Label>
               <Textarea
                 id="inv-sellerAddress"
-                value={sellerAddress}
-                onChange={(e) => setSellerAddress(e.target.value)}
+                value={settings.sellerAddress}
+                onChange={(e) => update("sellerAddress", e.target.value)}
                 placeholder={"123 Business Street\nCity, Country"}
                 rows={2}
               />
@@ -262,15 +336,14 @@ function InvoiceGeneratorEmbedded() {
               <Input
                 id="inv-sellerEmail"
                 type="email"
-                value={sellerEmail}
-                onChange={(e) => setSellerEmail(e.target.value)}
+                value={settings.sellerEmail}
+                onChange={(e) => update("sellerEmail", e.target.value)}
                 placeholder="billing@company.com"
               />
             </div>
           </div>
         </div>
 
-        {/* Client */}
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
           <h3 className="font-semibold text-foreground mb-4">Client Information</h3>
           <div className="space-y-4">
@@ -278,8 +351,8 @@ function InvoiceGeneratorEmbedded() {
               <Label htmlFor="inv-clientName">Client Name</Label>
               <Input
                 id="inv-clientName"
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
+                value={settings.clientName}
+                onChange={(e) => update("clientName", e.target.value)}
                 placeholder="Client Company"
               />
             </div>
@@ -287,8 +360,8 @@ function InvoiceGeneratorEmbedded() {
               <Label htmlFor="inv-clientAddress">Address</Label>
               <Textarea
                 id="inv-clientAddress"
-                value={clientAddress}
-                onChange={(e) => setClientAddress(e.target.value)}
+                value={settings.clientAddress}
+                onChange={(e) => update("clientAddress", e.target.value)}
                 placeholder={"456 Client Avenue\nCity, Country"}
                 rows={2}
               />
@@ -298,26 +371,29 @@ function InvoiceGeneratorEmbedded() {
               <Input
                 id="inv-clientEmail"
                 type="email"
-                value={clientEmail}
-                onChange={(e) => setClientEmail(e.target.value)}
+                value={settings.clientEmail}
+                onChange={(e) => update("clientEmail", e.target.value)}
                 placeholder="contact@client.com"
               />
             </div>
           </div>
         </div>
 
-        {/* Details */}
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
           <h3 className="font-semibold text-foreground mb-4">Invoice Details</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="inv-number">Invoice Number</Label>
-              <Input id="inv-number" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+              <Input
+                id="inv-number"
+                value={settings.invoiceNumber}
+                onChange={(e) => update("invoiceNumber", e.target.value)}
+              />
             </div>
 
             <div>
               <Label htmlFor="inv-currency">Currency</Label>
-              <Select value={currency} onValueChange={(v) => setCurrency(v as CurrencyCode)}>
+              <Select value={settings.currency} onValueChange={(v) => update("currency", v as CurrencyCode)}>
                 <SelectTrigger id="inv-currency">
                   <SelectValue />
                 </SelectTrigger>
@@ -333,12 +409,22 @@ function InvoiceGeneratorEmbedded() {
 
             <div>
               <Label htmlFor="inv-date">Invoice Date</Label>
-              <Input id="inv-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+              <Input
+                id="inv-date"
+                type="date"
+                value={settings.invoiceDate}
+                onChange={(e) => update("invoiceDate", e.target.value)}
+              />
             </div>
 
             <div>
               <Label htmlFor="inv-due">Due Date</Label>
-              <Input id="inv-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <Input
+                id="inv-due"
+                type="date"
+                value={settings.dueDate}
+                onChange={(e) => update("dueDate", e.target.value)}
+              />
             </div>
 
             <div className="sm:col-span-2">
@@ -348,14 +434,13 @@ function InvoiceGeneratorEmbedded() {
                 type="number"
                 min={0}
                 max={100}
-                value={vatRate}
-                onChange={(e) => setVatRate(Number(e.target.value))}
+                value={settings.vatRate}
+                onChange={(e) => update("vatRate", Number(e.target.value))}
               />
             </div>
           </div>
         </div>
 
-        {/* Line items */}
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
           <div className="flex items-center justify-between gap-3 mb-4">
             <h3 className="font-semibold text-foreground">Line Items</h3>
@@ -364,9 +449,8 @@ function InvoiceGeneratorEmbedded() {
             </Button>
           </div>
 
-          {/* Mobile cards */}
           <div className="space-y-4 sm:hidden">
-            {lineItems.map((it, idx) => (
+            {settings.lineItems.map((it, idx) => (
               <div key={it.id} className="rounded-lg border border-border bg-background p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-foreground">Item {idx + 1}</p>
@@ -374,7 +458,7 @@ function InvoiceGeneratorEmbedded() {
                     variant="ghost"
                     size="icon"
                     onClick={() => removeLine(it.id)}
-                    disabled={lineItems.length === 1}
+                    disabled={settings.lineItems.length === 1}
                     aria-label="Remove line"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -414,15 +498,16 @@ function InvoiceGeneratorEmbedded() {
 
                 <div className="flex items-center justify-between pt-2 border-t border-border">
                   <span className="text-sm text-muted-foreground">Amount</span>
-                  <span className="text-sm font-semibold">{formatMoney(it.quantity * it.unitPrice, currency)}</span>
+                  <span className="text-sm font-semibold">
+                    {formatMoney(it.quantity * it.unitPrice, settings.currency)}
+                  </span>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Desktop grid */}
           <div className="hidden sm:block space-y-3">
-            {lineItems.map((it, index) => (
+            {settings.lineItems.map((it, index) => (
               <div key={it.id} className="grid grid-cols-12 gap-2 items-end">
                 <div className="col-span-6 lg:col-span-6">
                   {index === 0 && <Label>Description</Label>}
@@ -459,7 +544,7 @@ function InvoiceGeneratorEmbedded() {
                     variant="ghost"
                     size="icon"
                     onClick={() => removeLine(it.id)}
-                    disabled={lineItems.length === 1}
+                    disabled={settings.lineItems.length === 1}
                     aria-label="Remove line"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -470,36 +555,25 @@ function InvoiceGeneratorEmbedded() {
           </div>
         </div>
 
-        {/* Notes */}
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
           <Label htmlFor="inv-notes">Notes / Payment Terms</Label>
           <Textarea
             id="inv-notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            value={settings.notes}
+            onChange={(e) => update("notes", e.target.value)}
             placeholder="Payment due within 30 days..."
             rows={3}
           />
         </div>
 
-        {/* Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Button onClick={print} className="h-11 sm:col-span-1">
+          <Button onClick={doPrint} className="h-11 sm:col-span-1">
             <Printer className="h-4 w-4 mr-2" /> Print / PDF
           </Button>
-          <Button variant="outline" className="h-11 sm:col-span-1" onClick={() => copyToClipboard(invoiceText)}>
+          <Button variant="outline" className="h-11 sm:col-span-1" onClick={doCopy}>
             <Copy className="h-4 w-4 mr-2" /> Copy
           </Button>
-          <Button
-            variant="outline"
-            className="h-11 sm:col-span-1"
-            onClick={() =>
-              downloadBlob(
-                `invoice-${invoiceNumber}.txt`,
-                new Blob([invoiceText], { type: "text/plain;charset=utf-8" }),
-              )
-            }
-          >
+          <Button variant="outline" className="h-11 sm:col-span-1" onClick={doDownload}>
             <Download className="h-4 w-4 mr-2" /> Download
           </Button>
 
@@ -510,38 +584,38 @@ function InvoiceGeneratorEmbedded() {
       </div>
 
       {/* PREVIEW */}
-      <div className="print-preview bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8 max-h-[700px] overflow-y-auto">
+      <div className="bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none max-h-[700px] overflow-y-auto order-2 lg:order-3">
         <div className="space-y-6">
           <div className="flex justify-between items-start gap-4">
             <div className="min-w-0">
-              <h2 className="text-2xl font-bold text-foreground break-words">{sellerName || "Your Company"}</h2>
-              <p className="text-muted-foreground whitespace-pre-line text-sm mt-1">
-                {sellerAddress || "Your address"}
+              <h2 className="text-2xl font-bold text-slate-900 break-words">{settings.sellerName || "Your Company"}</h2>
+              <p className="text-slate-600 whitespace-pre-line text-sm mt-1">
+                {settings.sellerAddress || "Your address"}
               </p>
-              {sellerEmail && <p className="text-muted-foreground text-sm break-words">{sellerEmail}</p>}
+              {settings.sellerEmail && <p className="text-slate-600 text-sm break-words">{settings.sellerEmail}</p>}
             </div>
             <div className="text-right shrink-0">
               <h1 className="text-3xl font-bold text-primary">INVOICE</h1>
-              <p className="text-foreground font-medium mt-2">{invoiceNumber}</p>
+              <p className="text-slate-900 font-medium mt-2">{settings.invoiceNumber}</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-border">
             <div>
-              <h3 className="font-semibold text-foreground mb-2">Bill To:</h3>
-              <p className="font-medium">{clientName || "Client Name"}</p>
-              <p className="text-muted-foreground whitespace-pre-line text-sm">{clientAddress || "Client address"}</p>
-              {clientEmail && <p className="text-muted-foreground text-sm break-words">{clientEmail}</p>}
+              <h3 className="font-semibold text-slate-900 mb-2">Bill To:</h3>
+              <p className="font-medium">{settings.clientName || "Client Name"}</p>
+              <p className="text-slate-600 whitespace-pre-line text-sm">{settings.clientAddress || "Client address"}</p>
+              {settings.clientEmail && <p className="text-slate-600 text-sm break-words">{settings.clientEmail}</p>}
             </div>
             <div className="sm:text-right">
               <div className="space-y-1 text-sm">
                 <p>
-                  <span className="text-muted-foreground">Date:</span>{" "}
-                  <span className="font-medium">{invoiceDate}</span>
+                  <span className="text-slate-600">Date:</span>{" "}
+                  <span className="font-medium">{settings.invoiceDate}</span>
                 </p>
-                {dueDate && (
+                {settings.dueDate && (
                   <p>
-                    <span className="text-muted-foreground">Due:</span> <span className="font-medium">{dueDate}</span>
+                    <span className="text-slate-600">Due:</span> <span className="font-medium">{settings.dueDate}</span>
                   </p>
                 )}
               </div>
@@ -559,13 +633,13 @@ function InvoiceGeneratorEmbedded() {
                 </tr>
               </thead>
               <tbody>
-                {lineItems.map((it) => (
+                {settings.lineItems.map((it) => (
                   <tr key={it.id} className="border-t border-border">
                     <td className="p-3 text-sm">{it.description || "—"}</td>
                     <td className="p-3 text-sm text-right">{it.quantity}</td>
-                    <td className="p-3 text-sm text-right">{formatMoney(it.unitPrice, currency)}</td>
+                    <td className="p-3 text-sm text-right">{formatMoney(it.unitPrice, settings.currency)}</td>
                     <td className="p-3 text-sm text-right font-medium">
-                      {formatMoney(it.quantity * it.unitPrice, currency)}
+                      {formatMoney(it.quantity * it.unitPrice, settings.currency)}
                     </td>
                   </tr>
                 ))}
@@ -576,24 +650,24 @@ function InvoiceGeneratorEmbedded() {
           <div className="flex justify-end">
             <div className="w-full sm:w-64 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span>{formatMoney(subtotal, currency)}</span>
+                <span className="text-slate-600">Subtotal</span>
+                <span>{formatMoney(subtotal, settings.currency)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">VAT ({vatRate}%)</span>
-                <span>{formatMoney(vatAmount, currency)}</span>
+                <span className="text-slate-600">VAT ({settings.vatRate}%)</span>
+                <span>{formatMoney(vatAmount, settings.currency)}</span>
               </div>
               <div className="flex justify-between text-lg font-bold pt-2 border-t border-border">
                 <span>Total</span>
-                <span className="text-primary">{formatMoney(total, currency)}</span>
+                <span className="text-primary">{formatMoney(total, settings.currency)}</span>
               </div>
             </div>
           </div>
 
-          {notes && (
+          {settings.notes && (
             <div className="pt-4 border-t border-border">
-              <h3 className="font-semibold text-foreground mb-2">Notes</h3>
-              <p className="text-muted-foreground text-sm whitespace-pre-line">{notes}</p>
+              <h3 className="font-semibold text-slate-900 mb-2">Notes</h3>
+              <p className="text-slate-600 text-sm whitespace-pre-line">{settings.notes}</p>
             </div>
           )}
         </div>
@@ -603,116 +677,201 @@ function InvoiceGeneratorEmbedded() {
 }
 
 /* -----------------------------
-   Receipt Generator
+   RECEIPT (MOAT ENABLED)
 ------------------------------*/
+type ReceiptSettings = {
+  merchantName: string;
+  merchantAddress: string;
+  merchantEmail: string;
+
+  receiptNumber: string;
+  date: string;
+  currency: CurrencyCode;
+
+  customerName: string;
+  paymentMethod: "Card" | "Cash" | "Bank Transfer" | "Other";
+  taxRate: number;
+
+  items: LineItem[];
+  footer: string;
+};
+
+const DEFAULT_SETTINGS_RECEIPT: ReceiptSettings = {
+  merchantName: "",
+  merchantAddress: "",
+  merchantEmail: "",
+
+  receiptNumber: "RCP-001",
+  date: todayISO(),
+  currency: "EUR",
+
+  customerName: "",
+  paymentMethod: "Card",
+  taxRate: 0,
+
+  items: [{ id: "1", description: "", quantity: 1, unitPrice: 0 }],
+  footer: "Thank you for your purchase!",
+};
+
+const RECOMMENDED_PRESETS_RECEIPT = [
+  {
+    name: "Retail Cash",
+    settings: {
+      ...DEFAULT_SETTINGS_RECEIPT,
+      paymentMethod: "Cash",
+      footer: "Thanks! Returns within 14 days with receipt.",
+    } satisfies ReceiptSettings,
+  },
+  {
+    name: "Card + VAT 20",
+    settings: {
+      ...DEFAULT_SETTINGS_RECEIPT,
+      paymentMethod: "Card",
+      taxRate: 20,
+      footer: "Thank you!",
+    } satisfies ReceiptSettings,
+  },
+  {
+    name: "Service Receipt",
+    settings: {
+      ...DEFAULT_SETTINGS_RECEIPT,
+      taxRate: 0,
+      items: [{ id: "1", description: "Service fee", quantity: 1, unitPrice: 0 }],
+      footer: "Payment received. Thank you for your business!",
+    } satisfies ReceiptSettings,
+  },
+];
+
 function ReceiptGeneratorEmbedded() {
-  const [merchantName, setMerchantName] = useState("");
-  const [merchantAddress, setMerchantAddress] = useState("");
-  const [merchantEmail, setMerchantEmail] = useState("");
-  const [receiptNumber, setReceiptNumber] = useState("RCP-001");
-  const [date, setDate] = useState(todayISO());
-  const [currency, setCurrency] = useState<CurrencyCode>("EUR");
+  const toolSlug = "business-docs-receipt";
 
-  const [customerName, setCustomerName] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"Card" | "Cash" | "Bank Transfer" | "Other">("Card");
-  const [taxRate, setTaxRate] = useState(0);
+  const [settings, setSettings] = useState<ReceiptSettings>(DEFAULT_SETTINGS_RECEIPT);
 
-  const [items, setItems] = useState<LineItem[]>([{ id: "1", description: "", quantity: 1, unitPrice: 0 }]);
-  const [footer, setFooter] = useState("Thank you for your purchase!");
+  const moat = useMoat(settings, setSettings, {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS_RECEIPT,
+    recommendedPresets: RECOMMENDED_PRESETS_RECEIPT,
+  });
 
-  const subtotal = useMemo(() => items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0), [items]);
-  const taxAmount = useMemo(() => subtotal * (taxRate / 100), [subtotal, taxRate]);
+  const update = <K extends keyof ReceiptSettings>(key: K, value: ReceiptSettings[K]) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const subtotal = useMemo(
+    () => settings.items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0),
+    [settings.items],
+  );
+  const taxAmount = useMemo(() => subtotal * (settings.taxRate / 100), [subtotal, settings.taxRate]);
   const total = useMemo(() => subtotal + taxAmount, [subtotal, taxAmount]);
 
   const addItem = () =>
-    setItems((p) => [...p, { id: Date.now().toString(), description: "", quantity: 1, unitPrice: 0 }]);
-  const removeItem = (id: string) => setItems((p) => (p.length <= 1 ? p : p.filter((x) => x.id !== id)));
+    setSettings((p) => ({
+      ...p,
+      items: [...p.items, { id: Date.now().toString(), description: "", quantity: 1, unitPrice: 0 }],
+    }));
+
+  const removeItem = (id: string) =>
+    setSettings((p) => ({
+      ...p,
+      items: p.items.length <= 1 ? p.items : p.items.filter((x) => x.id !== id),
+    }));
+
   const updateItem = (id: string, patch: Partial<LineItem>) =>
-    setItems((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+    setSettings((p) => ({
+      ...p,
+      items: p.items.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+    }));
 
   const reset = () => {
-    setMerchantName("");
-    setMerchantAddress("");
-    setMerchantEmail("");
-    setReceiptNumber("RCP-001");
-    setDate(todayISO());
-    setCurrency("EUR");
-    setCustomerName("");
-    setPaymentMethod("Card");
-    setTaxRate(0);
-    setItems([{ id: "1", description: "", quantity: 1, unitPrice: 0 }]);
-    setFooter("Thank you for your purchase!");
+    setSettings({ ...DEFAULT_SETTINGS_RECEIPT, date: todayISO() });
     toast.success("Receipt reset");
   };
 
-  const print = () => window.print();
-
   const receiptText = useMemo(() => {
-    const lines = items
+    const lines = settings.items
       .map(
         (it) =>
-          `- ${it.description || "—"} | Qty ${it.quantity} x ${formatMoney(it.unitPrice, currency)} = ${formatMoney(
+          `- ${it.description || "—"} | Qty ${it.quantity} x ${formatMoney(it.unitPrice, settings.currency)} = ${formatMoney(
             it.quantity * it.unitPrice,
-            currency,
+            settings.currency,
           )}`,
       )
       .join("\n");
 
     return [
-      `RECEIPT ${receiptNumber}`,
+      `RECEIPT ${settings.receiptNumber}`,
       ``,
-      `${merchantName || "Merchant"}`,
-      `${merchantAddress || ""}`.trim(),
-      merchantEmail ? `Email: ${merchantEmail}` : "",
+      `${settings.merchantName || "Merchant"}`,
+      `${settings.merchantAddress || ""}`.trim(),
+      settings.merchantEmail ? `Email: ${settings.merchantEmail}` : "",
       ``,
-      `Date: ${date}`,
-      customerName ? `Customer: ${customerName}` : "",
-      `Payment: ${paymentMethod}`,
+      `Date: ${settings.date}`,
+      settings.customerName ? `Customer: ${settings.customerName}` : "",
+      `Payment: ${settings.paymentMethod}`,
       ``,
       `Items:`,
       lines || "- —",
       ``,
-      `Subtotal: ${formatMoney(subtotal, currency)}`,
-      `Tax (${taxRate}%): ${formatMoney(taxAmount, currency)}`,
-      `Total: ${formatMoney(total, currency)}`,
+      `Subtotal: ${formatMoney(subtotal, settings.currency)}`,
+      `Tax (${settings.taxRate}%): ${formatMoney(taxAmount, settings.currency)}`,
+      `Total: ${formatMoney(total, settings.currency)}`,
       ``,
-      footer ? footer : "",
+      settings.footer ? settings.footer : "",
     ]
       .filter(Boolean)
       .join("\n");
-  }, [
-    currency,
-    customerName,
-    date,
-    footer,
-    items,
-    merchantAddress,
-    merchantEmail,
-    merchantName,
-    paymentMethod,
-    receiptNumber,
-    subtotal,
-    taxAmount,
-    taxRate,
-    total,
-  ]);
+  }, [settings, subtotal, taxAmount, total]);
+
+  const doPrint = () => {
+    window.print();
+    moat?.recordJob?.({ action: "print", toolSlug, inputMeta: [] });
+  };
+
+  const doCopy = async () => {
+    await copyToClipboard(receiptText);
+    moat?.recordJob?.({ action: "copy", toolSlug, inputMeta: [] });
+  };
+
+  const doDownload = () => {
+    downloadBlob(
+      `receipt-${settings.receiptNumber}.txt`,
+      new Blob([receiptText], { type: "text/plain;charset=utf-8" }),
+    );
+    toast.success("Downloaded");
+    moat?.recordJob?.({ action: "download", toolSlug, inputMeta: [] });
+  };
 
   return (
-    <div className="grid lg:grid-cols-2 gap-8">
+    <div className="grid lg:grid-cols-3 gap-8">
+      {/* Presets */}
+      <div className="order-3 lg:order-1 print:hidden">
+        <LocalStatusIndicator />
+        <div className="mt-3">
+          <PresetsPanel />
+        </div>
+        <div className="mt-3">
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+      </div>
+
       {/* Inputs */}
-      <div className="space-y-6 print:hidden">
+      <div className="space-y-6 print:hidden order-1 lg:order-2">
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
           <h3 className="font-semibold text-foreground mb-4">Merchant</h3>
           <div className="space-y-4">
             <div>
               <Label>Merchant Name</Label>
-              <Input value={merchantName} onChange={(e) => setMerchantName(e.target.value)} placeholder="My Store" />
+              <Input
+                value={settings.merchantName}
+                onChange={(e) => update("merchantName", e.target.value)}
+                placeholder="My Store"
+              />
             </div>
             <div>
               <Label>Address</Label>
               <Textarea
-                value={merchantAddress}
-                onChange={(e) => setMerchantAddress(e.target.value)}
+                value={settings.merchantAddress}
+                onChange={(e) => update("merchantAddress", e.target.value)}
                 rows={2}
                 placeholder={"Street\nCity, Country"}
               />
@@ -721,8 +880,8 @@ function ReceiptGeneratorEmbedded() {
               <Label>Email</Label>
               <Input
                 type="email"
-                value={merchantEmail}
-                onChange={(e) => setMerchantEmail(e.target.value)}
+                value={settings.merchantEmail}
+                onChange={(e) => update("merchantEmail", e.target.value)}
                 placeholder="support@store.com"
               />
             </div>
@@ -734,11 +893,11 @@ function ReceiptGeneratorEmbedded() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label>Receipt Number</Label>
-              <Input value={receiptNumber} onChange={(e) => setReceiptNumber(e.target.value)} />
+              <Input value={settings.receiptNumber} onChange={(e) => update("receiptNumber", e.target.value)} />
             </div>
             <div>
               <Label>Currency</Label>
-              <Select value={currency} onValueChange={(v) => setCurrency(v as CurrencyCode)}>
+              <Select value={settings.currency} onValueChange={(v) => update("currency", v as CurrencyCode)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -753,19 +912,19 @@ function ReceiptGeneratorEmbedded() {
             </div>
             <div>
               <Label>Date</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Input type="date" value={settings.date} onChange={(e) => update("date", e.target.value)} />
             </div>
             <div>
               <Label>Customer (optional)</Label>
               <Input
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
+                value={settings.customerName}
+                onChange={(e) => update("customerName", e.target.value)}
                 placeholder="Customer name"
               />
             </div>
             <div>
               <Label>Payment Method</Label>
-              <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as any)}>
+              <Select value={settings.paymentMethod} onValueChange={(v) => update("paymentMethod", v as any)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -783,8 +942,8 @@ function ReceiptGeneratorEmbedded() {
                 type="number"
                 min={0}
                 max={100}
-                value={taxRate}
-                onChange={(e) => setTaxRate(Number(e.target.value))}
+                value={settings.taxRate}
+                onChange={(e) => update("taxRate", Number(e.target.value))}
               />
             </div>
           </div>
@@ -798,13 +957,17 @@ function ReceiptGeneratorEmbedded() {
             </Button>
           </div>
 
-          {/* Mobile cards */}
           <div className="space-y-4 sm:hidden">
-            {items.map((it, idx) => (
+            {settings.items.map((it, idx) => (
               <div key={it.id} className="rounded-lg border border-border bg-background p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium">Item {idx + 1}</p>
-                  <Button variant="ghost" size="icon" onClick={() => removeItem(it.id)} disabled={items.length === 1}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeItem(it.id)}
+                    disabled={settings.items.length === 1}
+                  >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -839,15 +1002,16 @@ function ReceiptGeneratorEmbedded() {
                 </div>
                 <div className="flex items-center justify-between pt-2 border-t border-border">
                   <span className="text-sm text-muted-foreground">Amount</span>
-                  <span className="text-sm font-semibold">{formatMoney(it.quantity * it.unitPrice, currency)}</span>
+                  <span className="text-sm font-semibold">
+                    {formatMoney(it.quantity * it.unitPrice, settings.currency)}
+                  </span>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Desktop grid */}
           <div className="hidden sm:block space-y-3">
-            {items.map((it, index) => (
+            {settings.items.map((it, index) => (
               <div key={it.id} className="grid grid-cols-12 gap-2 items-end">
                 <div className="col-span-6">
                   {index === 0 && <Label>Description</Label>}
@@ -877,7 +1041,12 @@ function ReceiptGeneratorEmbedded() {
                   />
                 </div>
                 <div className="col-span-1 flex justify-end">
-                  <Button variant="ghost" size="icon" onClick={() => removeItem(it.id)} disabled={items.length === 1}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeItem(it.id)}
+                    disabled={settings.items.length === 1}
+                  >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -888,26 +1057,22 @@ function ReceiptGeneratorEmbedded() {
 
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
           <Label>Footer (optional)</Label>
-          <Textarea value={footer} onChange={(e) => setFooter(e.target.value)} rows={2} placeholder="Thank you!" />
+          <Textarea
+            value={settings.footer}
+            onChange={(e) => update("footer", e.target.value)}
+            rows={2}
+            placeholder="Thank you!"
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <Button className="h-11" onClick={print}>
+          <Button className="h-11" onClick={doPrint}>
             <Printer className="h-4 w-4 mr-2" /> Print / PDF
           </Button>
-          <Button variant="outline" className="h-11" onClick={() => copyToClipboard(receiptText)}>
+          <Button variant="outline" className="h-11" onClick={doCopy}>
             <Copy className="h-4 w-4 mr-2" /> Copy
           </Button>
-          <Button
-            variant="outline"
-            className="h-11"
-            onClick={() =>
-              downloadBlob(
-                `receipt-${receiptNumber}.txt`,
-                new Blob([receiptText], { type: "text/plain;charset=utf-8" }),
-              )
-            }
-          >
+          <Button variant="outline" className="h-11" onClick={doDownload}>
             <Download className="h-4 w-4 mr-2" /> Download
           </Button>
           <Button variant="outline" className="h-11" onClick={reset}>
@@ -917,67 +1082,67 @@ function ReceiptGeneratorEmbedded() {
       </div>
 
       {/* Preview */}
-      <div className="print-preview bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8">
+      <div className="bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none order-2 lg:order-3">
         <div className="max-w-md mx-auto">
           <div className="text-center">
-            <h2 className="text-xl font-bold">{merchantName || "Merchant"}</h2>
-            <p className="text-sm text-muted-foreground whitespace-pre-line">{merchantAddress || "Address"}</p>
-            {merchantEmail && <p className="text-sm text-muted-foreground">{merchantEmail}</p>}
+            <h2 className="text-xl font-bold">{settings.merchantName || "Merchant"}</h2>
+            <p className="text-sm text-slate-600 whitespace-pre-line">{settings.merchantAddress || "Address"}</p>
+            {settings.merchantEmail && <p className="text-sm text-slate-600">{settings.merchantEmail}</p>}
           </div>
 
           <div className="mt-6 text-sm space-y-1">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Receipt</span>
-              <span className="font-medium">{receiptNumber}</span>
+              <span className="text-slate-600">Receipt</span>
+              <span className="font-medium">{settings.receiptNumber}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Date</span>
-              <span className="font-medium">{date}</span>
+              <span className="text-slate-600">Date</span>
+              <span className="font-medium">{settings.date}</span>
             </div>
-            {customerName && (
+            {settings.customerName && (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Customer</span>
-                <span className="font-medium">{customerName}</span>
+                <span className="text-slate-600">Customer</span>
+                <span className="font-medium">{settings.customerName}</span>
               </div>
             )}
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Payment</span>
-              <span className="font-medium">{paymentMethod}</span>
+              <span className="text-slate-600">Payment</span>
+              <span className="font-medium">{settings.paymentMethod}</span>
             </div>
           </div>
 
           <div className="mt-6 border-t border-border pt-4 space-y-2 text-sm">
-            {items.map((it) => (
+            {settings.items.map((it) => (
               <div key={it.id} className="flex justify-between gap-4">
                 <div className="min-w-0">
                   <p className="font-medium truncate">{it.description || "—"}</p>
-                  <p className="text-muted-foreground">
-                    {it.quantity} x {formatMoney(it.unitPrice, currency)}
+                  <p className="text-slate-600">
+                    {it.quantity} x {formatMoney(it.unitPrice, settings.currency)}
                   </p>
                 </div>
-                <p className="font-semibold">{formatMoney(it.quantity * it.unitPrice, currency)}</p>
+                <p className="font-semibold">{formatMoney(it.quantity * it.unitPrice, settings.currency)}</p>
               </div>
             ))}
           </div>
 
           <div className="mt-6 border-t border-border pt-4 text-sm space-y-2">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span>{formatMoney(subtotal, currency)}</span>
+              <span className="text-slate-600">Subtotal</span>
+              <span>{formatMoney(subtotal, settings.currency)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Tax ({taxRate}%)</span>
-              <span>{formatMoney(taxAmount, currency)}</span>
+              <span className="text-slate-600">Tax ({settings.taxRate}%)</span>
+              <span>{formatMoney(taxAmount, settings.currency)}</span>
             </div>
             <div className="flex justify-between text-base font-bold">
               <span>Total</span>
-              <span>{formatMoney(total, currency)}</span>
+              <span>{formatMoney(total, settings.currency)}</span>
             </div>
           </div>
 
-          {footer && (
-            <div className="mt-6 border-t border-border pt-4 text-center text-sm text-muted-foreground whitespace-pre-line">
-              {footer}
+          {settings.footer && (
+            <div className="mt-6 border-t border-border pt-4 text-center text-sm text-slate-600 whitespace-pre-line">
+              {settings.footer}
             </div>
           )}
         </div>
@@ -987,79 +1152,159 @@ function ReceiptGeneratorEmbedded() {
 }
 
 /* -----------------------------
-   Contract / Letter Generator
+   CONTRACT / LETTER (MOAT ENABLED)
 ------------------------------*/
 type ContractTemplate = "Service Agreement" | "Simple Contract" | "Formal Letter";
 
+type ContractSettings = {
+  template: ContractTemplate;
+
+  senderName: string;
+  senderAddress: string;
+  senderEmail: string;
+
+  recipientName: string;
+  recipientAddress: string;
+  recipientEmail: string;
+
+  date: string;
+  subject: string;
+
+  serviceDescription: string;
+  paymentTerms: string;
+  term: string;
+  governingLaw: string;
+  confidentiality: boolean;
+
+  letterBody: string;
+  closing: string;
+};
+
+const DEFAULT_SETTINGS_CONTRACT: ContractSettings = {
+  template: "Service Agreement",
+
+  senderName: "",
+  senderAddress: "",
+  senderEmail: "",
+
+  recipientName: "",
+  recipientAddress: "",
+  recipientEmail: "",
+
+  date: todayISO(),
+  subject: "Re: Agreement",
+
+  serviceDescription: "Describe the services to be provided...",
+  paymentTerms: "Payment due within 14 days of invoice.",
+  term: "This agreement starts on the Effective Date and continues until completed.",
+  governingLaw: "Governing law: Greece.",
+  confidentiality: true,
+
+  letterBody: "I’m writing regarding...",
+  closing: "Sincerely,",
+};
+
+const RECOMMENDED_PRESETS_CONTRACT = [
+  {
+    name: "Service Agreement",
+    settings: {
+      ...DEFAULT_SETTINGS_CONTRACT,
+      template: "Service Agreement",
+      confidentiality: true,
+    } satisfies ContractSettings,
+  },
+  {
+    name: "Simple Contract",
+    settings: {
+      ...DEFAULT_SETTINGS_CONTRACT,
+      template: "Simple Contract",
+      confidentiality: false,
+      governingLaw: "Governing law: Greece.",
+    } satisfies ContractSettings,
+  },
+  {
+    name: "Formal Letter",
+    settings: {
+      ...DEFAULT_SETTINGS_CONTRACT,
+      template: "Formal Letter",
+      subject: "Regarding our agreement",
+      letterBody: "Dear ______,\n\nI’m writing regarding...\n\nBest regards,",
+      closing: "Best regards,",
+    } satisfies ContractSettings,
+  },
+];
+
 function ContractLetterGeneratorEmbedded() {
-  const [template, setTemplate] = useState<ContractTemplate>("Service Agreement");
+  const toolSlug = "business-docs-contract";
 
-  const [senderName, setSenderName] = useState("");
-  const [senderAddress, setSenderAddress] = useState("");
-  const [senderEmail, setSenderEmail] = useState("");
+  const [settings, setSettings] = useState<ContractSettings>(DEFAULT_SETTINGS_CONTRACT);
 
-  const [recipientName, setRecipientName] = useState("");
-  const [recipientAddress, setRecipientAddress] = useState("");
-  const [recipientEmail, setRecipientEmail] = useState("");
+  const moat = useMoat(settings, setSettings, {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS_CONTRACT,
+    recommendedPresets: RECOMMENDED_PRESETS_CONTRACT,
+  });
 
-  const [date, setDate] = useState(todayISO());
-  const [subject, setSubject] = useState("Re: Agreement");
-
-  const [serviceDescription, setServiceDescription] = useState("Describe the services to be provided...");
-  const [paymentTerms, setPaymentTerms] = useState("Payment due within 14 days of invoice.");
-  const [term, setTerm] = useState("This agreement starts on the Effective Date and continues until completed.");
-  const [governingLaw, setGoverningLaw] = useState("Governing law: Greece.");
-  const [confidentiality, setConfidentiality] = useState(true);
-
-  const [letterBody, setLetterBody] = useState("I'm writing regarding...");
-  const [closing, setClosing] = useState("Sincerely,");
+  const update = <K extends keyof ContractSettings>(key: K, value: ContractSettings[K]) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  };
 
   const output = useMemo(() => {
-    const senderBlock = [senderName, senderAddress, senderEmail ? `Email: ${senderEmail}` : ""]
+    const senderBlock = [
+      settings.senderName,
+      settings.senderAddress,
+      settings.senderEmail ? `Email: ${settings.senderEmail}` : "",
+    ]
       .filter(Boolean)
       .join("\n");
-    const recipientBlock = [recipientName, recipientAddress, recipientEmail ? `Email: ${recipientEmail}` : ""]
+    const recipientBlock = [
+      settings.recipientName,
+      settings.recipientAddress,
+      settings.recipientEmail ? `Email: ${settings.recipientEmail}` : "",
+    ]
       .filter(Boolean)
       .join("\n");
 
-    if (template === "Formal Letter") {
+    if (settings.template === "Formal Letter") {
       return [
         senderBlock || "Sender Name\nSender Address\nEmail: sender@email.com",
         "",
-        date,
+        settings.date,
         "",
         recipientBlock || "Recipient Name\nRecipient Address\nEmail: recipient@email.com",
         "",
-        `Subject: ${subject || "Subject"}`,
+        `Subject: ${settings.subject || "Subject"}`,
         "",
-        letterBody || "",
+        settings.letterBody || "",
         "",
-        closing,
-        senderName || "Sender Name",
+        settings.closing,
+        settings.senderName || "Sender Name",
       ].join("\n");
     }
 
-    if (template === "Simple Contract") {
+    if (settings.template === "Simple Contract") {
       return [
         `SIMPLE CONTRACT`,
         "",
-        `Date: ${date}`,
+        `Date: ${settings.date}`,
         "",
         `Parties:`,
-        `- ${senderName || "Party A"} ("Party A")`,
-        `- ${recipientName || "Party B"} ("Party B")`,
+        `- ${settings.senderName || "Party A"} ("Party A")`,
+        `- ${settings.recipientName || "Party B"} ("Party B")`,
         "",
         `1) Scope`,
-        serviceDescription || "Describe scope...",
+        settings.serviceDescription || "Describe scope...",
         "",
         `2) Payment`,
-        paymentTerms || "Payment terms...",
+        settings.paymentTerms || "Payment terms...",
         "",
         `3) Term`,
-        term || "",
+        settings.term || "",
         "",
-        confidentiality ? `4) Confidentiality\nBoth parties agree to keep confidential information private.\n` : "",
-        `5) ${governingLaw || "Governing law: ______."}`,
+        settings.confidentiality
+          ? `4) Confidentiality\nBoth parties agree to keep confidential information private.\n`
+          : "",
+        `5) ${settings.governingLaw || "Governing law: ______."}`,
         "",
         `Signatures`,
         "",
@@ -1073,27 +1318,27 @@ function ContractLetterGeneratorEmbedded() {
     return [
       `SERVICE AGREEMENT`,
       "",
-      `Date: ${date}`,
+      `Date: ${settings.date}`,
       "",
       `This Service Agreement ("Agreement") is entered into between:`,
-      `${senderName || "Service Provider"} ("Provider") and ${recipientName || "Client"} ("Client").`,
+      `${settings.senderName || "Service Provider"} ("Provider") and ${settings.recipientName || "Client"} ("Client").`,
       "",
       `1) Services`,
-      serviceDescription || "",
+      settings.serviceDescription || "",
       "",
       `2) Fees & Payment`,
-      paymentTerms || "",
+      settings.paymentTerms || "",
       "",
       `3) Term`,
-      term || "",
+      settings.term || "",
       "",
-      confidentiality
+      settings.confidentiality
         ? `4) Confidentiality\nEach party shall keep confidential information of the other party and not disclose it to third parties except as required by law.\n`
         : "",
       `5) Liability`,
       `Provider will perform services with reasonable care. Except for willful misconduct, total liability is limited to fees paid in the last 3 months.`,
       "",
-      `6) ${governingLaw || "Governing law: ______."}`,
+      `6) ${settings.governingLaw || "Governing law: ______."}`,
       "",
       `Signatures`,
       "",
@@ -1102,55 +1347,50 @@ function ContractLetterGeneratorEmbedded() {
     ]
       .filter(Boolean)
       .join("\n");
-  }, [
-    template,
-    senderName,
-    senderAddress,
-    senderEmail,
-    recipientName,
-    recipientAddress,
-    recipientEmail,
-    date,
-    subject,
-    serviceDescription,
-    paymentTerms,
-    term,
-    governingLaw,
-    confidentiality,
-    letterBody,
-    closing,
-  ]);
+  }, [settings]);
 
   const reset = () => {
-    setTemplate("Service Agreement");
-    setSenderName("");
-    setSenderAddress("");
-    setSenderEmail("");
-    setRecipientName("");
-    setRecipientAddress("");
-    setRecipientEmail("");
-    setDate(todayISO());
-    setSubject("Re: Agreement");
-    setServiceDescription("Describe the services to be provided...");
-    setPaymentTerms("Payment due within 14 days of invoice.");
-    setTerm("This agreement starts on the Effective Date and continues until completed.");
-    setGoverningLaw("Governing law: Greece.");
-    setConfidentiality(true);
-    setLetterBody("I'm writing regarding...");
-    setClosing("Sincerely,");
+    setSettings({ ...DEFAULT_SETTINGS_CONTRACT, date: todayISO() });
     toast.success("Reset");
   };
 
-  const print = () => window.print();
+  const doPrint = () => {
+    window.print();
+    moat?.recordJob?.({ action: "print", toolSlug, inputMeta: [] });
+  };
+
+  const doCopy = async () => {
+    await copyToClipboard(output);
+    moat?.recordJob?.({ action: "copy", toolSlug, inputMeta: [] });
+  };
+
+  const doDownload = () => {
+    downloadBlob(
+      `${settings.template.toLowerCase().replace(/\s+/g, "-")}.txt`,
+      new Blob([output], { type: "text/plain;charset=utf-8" }),
+    );
+    toast.success("Downloaded");
+    moat?.recordJob?.({ action: "download", toolSlug, inputMeta: [] });
+  };
 
   return (
-    <div className="grid lg:grid-cols-2 gap-8">
+    <div className="grid lg:grid-cols-3 gap-8">
+      {/* Presets */}
+      <div className="order-3 lg:order-1 print:hidden">
+        <LocalStatusIndicator />
+        <div className="mt-3">
+          <PresetsPanel />
+        </div>
+        <div className="mt-3">
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+      </div>
+
       {/* Inputs */}
-      <div className="space-y-6 print:hidden">
-        {/* Template selector */}
+      <div className="space-y-6 print:hidden order-1 lg:order-2">
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
           <h3 className="font-semibold text-foreground mb-4">Template</h3>
-          <Select value={template} onValueChange={(v) => setTemplate(v as ContractTemplate)}>
+          <Select value={settings.template} onValueChange={(v) => update("template", v as ContractTemplate)}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -1162,647 +1402,133 @@ function ContractLetterGeneratorEmbedded() {
           </Select>
         </div>
 
-        {/* Sender / Party A */}
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
-          <h3 className="font-semibold text-foreground mb-4">
-            {template === "Formal Letter"
-              ? "From (Sender)"
-              : template === "Simple Contract"
-                ? "Party A"
-                : "Service Provider"}
-          </h3>
+          <h3 className="font-semibold text-foreground mb-4">Sender</h3>
           <div className="space-y-4">
             <div>
               <Label>Name</Label>
-              <Input
-                value={senderName}
-                onChange={(e) => setSenderName(e.target.value)}
-                placeholder="Your name or company"
-              />
+              <Input value={settings.senderName} onChange={(e) => update("senderName", e.target.value)} />
             </div>
             <div>
               <Label>Address</Label>
               <Textarea
-                value={senderAddress}
-                onChange={(e) => setSenderAddress(e.target.value)}
+                value={settings.senderAddress}
+                onChange={(e) => update("senderAddress", e.target.value)}
                 rows={2}
-                placeholder={"123 Street\nCity, Country"}
               />
             </div>
             <div>
               <Label>Email</Label>
               <Input
                 type="email"
-                value={senderEmail}
-                onChange={(e) => setSenderEmail(e.target.value)}
-                placeholder="you@email.com"
+                value={settings.senderEmail}
+                onChange={(e) => update("senderEmail", e.target.value)}
               />
             </div>
           </div>
         </div>
 
-        {/* Recipient / Party B */}
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
-          <h3 className="font-semibold text-foreground mb-4">
-            {template === "Formal Letter" ? "To (Recipient)" : template === "Simple Contract" ? "Party B" : "Client"}
-          </h3>
+          <h3 className="font-semibold text-foreground mb-4">Recipient</h3>
           <div className="space-y-4">
             <div>
               <Label>Name</Label>
-              <Input
-                value={recipientName}
-                onChange={(e) => setRecipientName(e.target.value)}
-                placeholder="Recipient name or company"
-              />
+              <Input value={settings.recipientName} onChange={(e) => update("recipientName", e.target.value)} />
             </div>
             <div>
               <Label>Address</Label>
               <Textarea
-                value={recipientAddress}
-                onChange={(e) => setRecipientAddress(e.target.value)}
+                value={settings.recipientAddress}
+                onChange={(e) => update("recipientAddress", e.target.value)}
                 rows={2}
-                placeholder={"456 Avenue\nCity, Country"}
               />
             </div>
             <div>
               <Label>Email</Label>
               <Input
                 type="email"
-                value={recipientEmail}
-                onChange={(e) => setRecipientEmail(e.target.value)}
-                placeholder="them@email.com"
+                value={settings.recipientEmail}
+                onChange={(e) => update("recipientEmail", e.target.value)}
               />
             </div>
           </div>
         </div>
 
-        {/* Date + subject (letter) / contract fields */}
         <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
-          <h3 className="font-semibold text-foreground mb-4">Details</h3>
-          <div className="space-y-4">
+          <h3 className="font-semibold text-foreground mb-4">Core Fields</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label>Date</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-
-            {template === "Formal Letter" && (
-              <>
-                <div>
-                  <Label>Subject</Label>
-                  <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Re: ..." />
-                </div>
-                <div>
-                  <Label>Letter Body</Label>
-                  <Textarea
-                    value={letterBody}
-                    onChange={(e) => setLetterBody(e.target.value)}
-                    rows={5}
-                    placeholder="Write your letter here..."
-                  />
-                </div>
-                <div>
-                  <Label>Closing</Label>
-                  <Input value={closing} onChange={(e) => setClosing(e.target.value)} placeholder="Sincerely," />
-                </div>
-              </>
-            )}
-
-            {(template === "Service Agreement" || template === "Simple Contract") && (
-              <>
-                <div>
-                  <Label>Scope / Service Description</Label>
-                  <Textarea
-                    value={serviceDescription}
-                    onChange={(e) => setServiceDescription(e.target.value)}
-                    rows={3}
-                    placeholder="Describe services or scope..."
-                  />
-                </div>
-                <div>
-                  <Label>Payment Terms</Label>
-                  <Textarea
-                    value={paymentTerms}
-                    onChange={(e) => setPaymentTerms(e.target.value)}
-                    rows={2}
-                    placeholder="Payment due within..."
-                  />
-                </div>
-                <div>
-                  <Label>Term / Duration</Label>
-                  <Textarea
-                    value={term}
-                    onChange={(e) => setTerm(e.target.value)}
-                    rows={2}
-                    placeholder="Duration of the agreement..."
-                  />
-                </div>
-                <div>
-                  <Label>Governing Law</Label>
-                  <Input
-                    value={governingLaw}
-                    onChange={(e) => setGoverningLaw(e.target.value)}
-                    placeholder="Governing law: ..."
-                  />
-                </div>
-                <div className="flex items-center gap-3 pt-2">
-                  <input
-                    type="checkbox"
-                    id="contract-confidentiality"
-                    checked={confidentiality}
-                    onChange={(e) => setConfidentiality(e.target.checked)}
-                    className="w-4 h-4 rounded border-border"
-                  />
-                  <Label htmlFor="contract-confidentiality" className="cursor-pointer">
-                    Include Confidentiality Clause
-                  </Label>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <Button className="h-11" onClick={print}>
-            <Printer className="h-4 w-4 mr-2" /> Print / PDF
-          </Button>
-          <Button variant="outline" className="h-11" onClick={() => copyToClipboard(output)}>
-            <Copy className="h-4 w-4 mr-2" /> Copy
-          </Button>
-          <Button
-            variant="outline"
-            className="h-11"
-            onClick={() =>
-              downloadBlob(
-                `${template.toLowerCase().replace(/\s+/g, "-")}.txt`,
-                new Blob([output], { type: "text/plain;charset=utf-8" }),
-              )
-            }
-          >
-            <Download className="h-4 w-4 mr-2" /> Download
-          </Button>
-          <Button variant="outline" className="h-11" onClick={reset}>
-            <RotateCcw className="h-4 w-4 mr-2" /> Reset
-          </Button>
-        </div>
-      </div>
-
-      {/* Preview */}
-      <div className="print-preview bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8">
-        <pre className="tool-preview whitespace-pre-wrap break-words text-sm leading-relaxed">{output}</pre>
-      </div>
-    </div>
-  );
-}
-
-/* -----------------------------
-   NDA Generator (inlined)
-------------------------------*/
-function NDAGenerator() {
-  const [partyAName, setPartyAName] = useState("");
-  const [partyAAddress, setPartyAAddress] = useState("");
-  const [partyBName, setPartyBName] = useState("");
-  const [partyBAddress, setPartyBAddress] = useState("");
-  const [date, setDate] = useState(todayISO());
-  const [purpose, setPurpose] = useState("Evaluation of a potential business relationship.");
-  const [duration, setDuration] = useState("2 years from the Effective Date.");
-  const [governingLaw, setGoverningLaw] = useState("Governing law: Sweden.");
-  const [ndaType, setNdaType] = useState<"Mutual" | "One-Way">("Mutual");
-
-  const output = useMemo(() => {
-    const header = ndaType === "Mutual" ? "MUTUAL NON-DISCLOSURE AGREEMENT" : "NON-DISCLOSURE AGREEMENT";
-    const disclosureClause =
-      ndaType === "Mutual"
-        ? `Each Party may disclose Confidential Information to the other Party solely for the Purpose. Both Parties agree to maintain confidentiality and not disclose, copy, or use such information without prior written consent.`
-        : `Party A may disclose Confidential Information to Party B solely for the Purpose. Party B agrees to maintain confidentiality and not disclose, copy, or use such information without prior written consent of Party A.`;
-
-    return [
-      header,
-      "",
-      `Effective Date: ${date}`,
-      "",
-      `Party A: ${partyAName || "Party A Name"}`,
-      partyAAddress ? `Address: ${partyAAddress}` : "",
-      "",
-      `Party B: ${partyBName || "Party B Name"}`,
-      partyBAddress ? `Address: ${partyBAddress}` : "",
-      "",
-      `1) Purpose`,
-      purpose || "To be defined.",
-      "",
-      `2) Definition of Confidential Information`,
-      `"Confidential Information" means any non-public information disclosed by one Party to the other, whether orally, in writing, electronically, or by any other means, that is designated as confidential or that reasonably should be understood to be confidential.`,
-      "",
-      `3) Obligations`,
-      disclosureClause,
-      "",
-      `4) Exclusions`,
-      `Confidential Information does not include information that: (a) is or becomes publicly known through no fault of the Receiving Party; (b) was already known to the Receiving Party prior to disclosure; (c) is independently developed by the Receiving Party; or (d) is required to be disclosed by law or court order.`,
-      "",
-      `5) Duration`,
-      duration || "To be defined.",
-      "",
-      `6) ${governingLaw || "Governing law: ______."}`,
-      "",
-      `7) Remedies`,
-      `Each Party acknowledges that a breach of this Agreement may cause irreparable harm and that the non-breaching Party shall be entitled to seek equitable remedies, including injunctive relief.`,
-      "",
-      `Signatures`,
-      "",
-      `Party A: _______________________   Date: __________`,
-      `Party B: _______________________   Date: __________`,
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }, [partyAName, partyAAddress, partyBName, partyBAddress, date, purpose, duration, governingLaw, ndaType]);
-
-  const reset = () => {
-    setPartyAName("");
-    setPartyAAddress("");
-    setPartyBName("");
-    setPartyBAddress("");
-    setDate(todayISO());
-    setPurpose("Evaluation of a potential business relationship.");
-    setDuration("2 years from the Effective Date.");
-    setGoverningLaw("Governing law: Sweden.");
-    setNdaType("Mutual");
-    toast.success("NDA reset");
-  };
-
-  const print = () => window.print();
-
-  return (
-    <div className="grid lg:grid-cols-2 gap-8">
-      <div className="space-y-6 print:hidden">
-        {/* NDA Type */}
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
-          <h3 className="font-semibold text-foreground mb-4">NDA Type</h3>
-          <Select value={ndaType} onValueChange={(v) => setNdaType(v as "Mutual" | "One-Way")}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Mutual">Mutual (Both Parties)</SelectItem>
-              <SelectItem value="One-Way">One-Way (Party A → Party B)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Party A */}
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
-          <h3 className="font-semibold text-foreground mb-4">Party A</h3>
-          <div className="space-y-4">
-            <div>
-              <Label>Name</Label>
-              <Input
-                value={partyAName}
-                onChange={(e) => setPartyAName(e.target.value)}
-                placeholder="Company or individual name"
-              />
+              <Input type="date" value={settings.date} onChange={(e) => update("date", e.target.value)} />
             </div>
             <div>
-              <Label>Address</Label>
-              <Textarea
-                value={partyAAddress}
-                onChange={(e) => setPartyAAddress(e.target.value)}
-                rows={2}
-                placeholder={"Street\nCity, Country"}
-              />
+              <Label>Subject</Label>
+              <Input value={settings.subject} onChange={(e) => update("subject", e.target.value)} />
             </div>
           </div>
-        </div>
 
-        {/* Party B */}
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
-          <h3 className="font-semibold text-foreground mb-4">Party B</h3>
-          <div className="space-y-4">
+          <div className="mt-4 space-y-3">
             <div>
-              <Label>Name</Label>
-              <Input
-                value={partyBName}
-                onChange={(e) => setPartyBName(e.target.value)}
-                placeholder="Company or individual name"
-              />
-            </div>
-            <div>
-              <Label>Address</Label>
+              <Label>Service Description</Label>
               <Textarea
-                value={partyBAddress}
-                onChange={(e) => setPartyBAddress(e.target.value)}
-                rows={2}
-                placeholder={"Street\nCity, Country"}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* NDA Details */}
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
-          <h3 className="font-semibold text-foreground mb-4">NDA Details</h3>
-          <div className="space-y-4">
-            <div>
-              <Label>Effective Date</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-            <div>
-              <Label>Purpose</Label>
-              <Textarea
-                value={purpose}
-                onChange={(e) => setPurpose(e.target.value)}
-                rows={2}
-                placeholder="Why is this NDA being signed?"
-              />
-            </div>
-            <div>
-              <Label>Duration</Label>
-              <Input
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                placeholder="How long the NDA lasts..."
-              />
-            </div>
-            <div>
-              <Label>Governing Law</Label>
-              <Input
-                value={governingLaw}
-                onChange={(e) => setGoverningLaw(e.target.value)}
-                placeholder="Governing law: ..."
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <Button className="h-11" onClick={print}>
-            <Printer className="h-4 w-4 mr-2" /> Print / PDF
-          </Button>
-          <Button variant="outline" className="h-11" onClick={() => copyToClipboard(output)}>
-            <Copy className="h-4 w-4 mr-2" /> Copy
-          </Button>
-          <Button
-            variant="outline"
-            className="h-11"
-            onClick={() => downloadBlob("nda.txt", new Blob([output], { type: "text/plain;charset=utf-8" }))}
-          >
-            <Download className="h-4 w-4 mr-2" /> Download
-          </Button>
-          <Button variant="outline" className="h-11" onClick={reset}>
-            <RotateCcw className="h-4 w-4 mr-2" /> Reset
-          </Button>
-        </div>
-      </div>
-
-      {/* Preview */}
-      <div className="print-preview bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8">
-        <pre className="tool-preview whitespace-pre-wrap break-words text-sm leading-relaxed">{output}</pre>
-      </div>
-    </div>
-  );
-}
-
-/* -----------------------------
-   Proposal Generator (inlined)
-------------------------------*/
-function ProposalGenerator() {
-  const [companyName, setCompanyName] = useState("");
-  const [companyAddress, setCompanyAddress] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [clientAddress, setClientAddress] = useState("");
-  const [date, setDate] = useState(todayISO());
-  const [validUntil, setValidUntil] = useState("");
-  const [projectTitle, setProjectTitle] = useState("Project Proposal");
-  const [executiveSummary, setExecutiveSummary] = useState("Brief overview of the proposed project and objectives.");
-  const [scopeOfWork, setScopeOfWork] = useState("Detailed description of deliverables and responsibilities.");
-  const [timeline, setTimeline] = useState(
-    "Phase 1: Planning – 2 weeks\nPhase 2: Development – 4 weeks\nPhase 3: Delivery – 1 week",
-  );
-  const [pricing, setPricing] = useState("Total project cost: To be discussed.");
-  const [paymentTerms, setPaymentTerms] = useState("50% upfront, 50% upon delivery.");
-  const [termsAndConditions, setTermsAndConditions] = useState(
-    "This proposal is valid for the period stated above. All work is subject to a formal contract.",
-  );
-
-  const output = useMemo(() => {
-    return [
-      `BUSINESS PROPOSAL`,
-      "",
-      `${companyName || "Your Company"}`,
-      companyAddress ? companyAddress : "",
-      "",
-      `Date: ${date}`,
-      validUntil ? `Valid Until: ${validUntil}` : "",
-      "",
-      `Prepared for:`,
-      `${clientName || "Client Name"}`,
-      clientAddress ? clientAddress : "",
-      "",
-      `─────────────────────────────`,
-      "",
-      `Project: ${projectTitle}`,
-      "",
-      `1) Executive Summary`,
-      executiveSummary || "",
-      "",
-      `2) Scope of Work`,
-      scopeOfWork || "",
-      "",
-      `3) Timeline`,
-      timeline || "",
-      "",
-      `4) Pricing`,
-      pricing || "",
-      "",
-      `5) Payment Terms`,
-      paymentTerms || "",
-      "",
-      `6) Terms & Conditions`,
-      termsAndConditions || "",
-      "",
-      `─────────────────────────────`,
-      "",
-      `We look forward to working with you. Please do not hesitate to reach out with any questions.`,
-      "",
-      `Sincerely,`,
-      `${companyName || "Your Company"}`,
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }, [
-    companyName,
-    companyAddress,
-    clientName,
-    clientAddress,
-    date,
-    validUntil,
-    projectTitle,
-    executiveSummary,
-    scopeOfWork,
-    timeline,
-    pricing,
-    paymentTerms,
-    termsAndConditions,
-  ]);
-
-  const reset = () => {
-    setCompanyName("");
-    setCompanyAddress("");
-    setClientName("");
-    setClientAddress("");
-    setDate(todayISO());
-    setValidUntil("");
-    setProjectTitle("Project Proposal");
-    setExecutiveSummary("Brief overview of the proposed project and objectives.");
-    setScopeOfWork("Detailed description of deliverables and responsibilities.");
-    setTimeline("Phase 1: Planning – 2 weeks\nPhase 2: Development – 4 weeks\nPhase 3: Delivery – 1 week");
-    setPricing("Total project cost: To be discussed.");
-    setPaymentTerms("50% upfront, 50% upon delivery.");
-    setTermsAndConditions(
-      "This proposal is valid for the period stated above. All work is subject to a formal contract.",
-    );
-    toast.success("Proposal reset");
-  };
-
-  const print = () => window.print();
-
-  return (
-    <div className="grid lg:grid-cols-2 gap-8">
-      <div className="space-y-6 print:hidden">
-        {/* Your Company */}
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
-          <h3 className="font-semibold text-foreground mb-4">Your Company</h3>
-          <div className="space-y-4">
-            <div>
-              <Label>Company Name</Label>
-              <Input
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Your Company Ltd"
-              />
-            </div>
-            <div>
-              <Label>Address</Label>
-              <Textarea
-                value={companyAddress}
-                onChange={(e) => setCompanyAddress(e.target.value)}
-                rows={2}
-                placeholder={"Street\nCity, Country"}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Client */}
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
-          <h3 className="font-semibold text-foreground mb-4">Client</h3>
-          <div className="space-y-4">
-            <div>
-              <Label>Client Name</Label>
-              <Input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Client Company" />
-            </div>
-            <div>
-              <Label>Address</Label>
-              <Textarea
-                value={clientAddress}
-                onChange={(e) => setClientAddress(e.target.value)}
-                rows={2}
-                placeholder={"Street\nCity, Country"}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Proposal Details */}
-        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
-          <h3 className="font-semibold text-foreground mb-4">Proposal Details</h3>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label>Date</Label>
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-              </div>
-              <div>
-                <Label>Valid Until</Label>
-                <Input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
-              </div>
-            </div>
-            <div>
-              <Label>Project Title</Label>
-              <Input
-                value={projectTitle}
-                onChange={(e) => setProjectTitle(e.target.value)}
-                placeholder="Project name..."
-              />
-            </div>
-            <div>
-              <Label>Executive Summary</Label>
-              <Textarea
-                value={executiveSummary}
-                onChange={(e) => setExecutiveSummary(e.target.value)}
+                value={settings.serviceDescription}
+                onChange={(e) => update("serviceDescription", e.target.value)}
                 rows={3}
-                placeholder="Brief overview..."
-              />
-            </div>
-            <div>
-              <Label>Scope of Work</Label>
-              <Textarea
-                value={scopeOfWork}
-                onChange={(e) => setScopeOfWork(e.target.value)}
-                rows={3}
-                placeholder="Deliverables and responsibilities..."
-              />
-            </div>
-            <div>
-              <Label>Timeline</Label>
-              <Textarea
-                value={timeline}
-                onChange={(e) => setTimeline(e.target.value)}
-                rows={3}
-                placeholder={"Phase 1: ...\nPhase 2: ..."}
-              />
-            </div>
-            <div>
-              <Label>Pricing</Label>
-              <Textarea
-                value={pricing}
-                onChange={(e) => setPricing(e.target.value)}
-                rows={2}
-                placeholder="Pricing breakdown..."
               />
             </div>
             <div>
               <Label>Payment Terms</Label>
-              <Input
-                value={paymentTerms}
-                onChange={(e) => setPaymentTerms(e.target.value)}
-                placeholder="Payment schedule..."
+              <Textarea
+                value={settings.paymentTerms}
+                onChange={(e) => update("paymentTerms", e.target.value)}
+                rows={2}
               />
             </div>
             <div>
-              <Label>Terms & Conditions</Label>
-              <Textarea
-                value={termsAndConditions}
-                onChange={(e) => setTermsAndConditions(e.target.value)}
-                rows={2}
-                placeholder="Any terms or conditions..."
-              />
+              <Label>Term</Label>
+              <Textarea value={settings.term} onChange={(e) => update("term", e.target.value)} rows={2} />
             </div>
+            <div>
+              <Label>Governing Law</Label>
+              <Input value={settings.governingLaw} onChange={(e) => update("governingLaw", e.target.value)} />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="conf"
+                type="checkbox"
+                checked={settings.confidentiality}
+                onChange={(e) => update("confidentiality", e.target.checked)}
+              />
+              <Label htmlFor="conf">Include confidentiality</Label>
+            </div>
+
+            {settings.template === "Formal Letter" && (
+              <>
+                <div>
+                  <Label>Letter Body</Label>
+                  <Textarea
+                    value={settings.letterBody}
+                    onChange={(e) => update("letterBody", e.target.value)}
+                    rows={6}
+                  />
+                </div>
+                <div>
+                  <Label>Closing</Label>
+                  <Input value={settings.closing} onChange={(e) => update("closing", e.target.value)} />
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <Button className="h-11" onClick={print}>
+          <Button className="h-11" onClick={doPrint}>
             <Printer className="h-4 w-4 mr-2" /> Print / PDF
           </Button>
-          <Button variant="outline" className="h-11" onClick={() => copyToClipboard(output)}>
+          <Button variant="outline" className="h-11" onClick={doCopy}>
             <Copy className="h-4 w-4 mr-2" /> Copy
           </Button>
-          <Button
-            variant="outline"
-            className="h-11"
-            onClick={() => downloadBlob("proposal.txt", new Blob([output], { type: "text/plain;charset=utf-8" }))}
-          >
+          <Button variant="outline" className="h-11" onClick={doDownload}>
             <Download className="h-4 w-4 mr-2" /> Download
           </Button>
           <Button variant="outline" className="h-11" onClick={reset}>
@@ -1812,8 +1538,8 @@ function ProposalGenerator() {
       </div>
 
       {/* Preview */}
-      <div className="print-preview bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8">
-        <pre className="tool-preview whitespace-pre-wrap break-words text-sm leading-relaxed">{output}</pre>
+      <div className="bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none order-2 lg:order-3">
+        <pre className="whitespace-pre-wrap text-sm leading-relaxed">{output}</pre>
       </div>
     </div>
   );
@@ -1860,7 +1586,6 @@ export default function BusinessDocs() {
 
   return (
     <ToolLayout title="Business Docs" description="Invoices, receipts, and contracts — all in one tool.">
-      <PrintStyleTag />
       <Card>
         <CardContent className="p-4 sm:p-6">
           <Tabs defaultValue="invoice" className="w-full">
@@ -1954,6 +1679,7 @@ export default function BusinessDocs() {
               <ContractLetterGeneratorEmbedded />
             </TabsContent>
 
+            {/* Leave as-is for now (imported components) */}
             <TabsContent value="nda" className="space-y-6">
               <NDAGenerator />
             </TabsContent>
