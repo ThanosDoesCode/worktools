@@ -71,8 +71,8 @@ function SignatureGeneratorEmbedded() {
 
   // Exclusive transparency mode:
   // - "draw": exported PNG is transparent ONLY for drawing
-  // - "type": exported PNG is transparent ONLY for typed
-  // - "none": solid bg export
+  // - "type": exported PNG is transparent ONLY for typing
+  // - "none": solid background export
   type TransparentMode = "none" | "draw" | "type";
   const [transparentMode, setTransparentMode] = useState<TransparentMode>("none");
   const [bgTransparent, setBgTransparent] = useState(false);
@@ -83,24 +83,19 @@ function SignatureGeneratorEmbedded() {
   };
 
   /* -----------------------------
-     Presets (ALL in dropdowns)
+     Presets
   ------------------------------*/
-  // Ink/Draw presets (pen width + pen color)
   const INK_PRESETS: InkPreset[] = [
-    // Basics
     { label: "Classic Black (3px)", penWidth: 3, penColor: "#0f172a" },
     { label: "Bold Black (6px)", penWidth: 6, penColor: "#0f172a" },
     { label: "Marker Black (9px)", penWidth: 9, penColor: "#0f172a" },
 
-    // Blue family
     { label: "Ballpoint Blue (3px)", penWidth: 3, penColor: "#1d4ed8" },
     { label: "Navy Ink (4px)", penWidth: 4, penColor: "#0b1f4a" },
 
-    // Professional tones
     { label: "Slate Ink (3px)", penWidth: 3, penColor: "#334155" },
     { label: "Charcoal Ink (4px)", penWidth: 4, penColor: "#111827" },
 
-    // Accent inks
     { label: "Green Ink (3px)", penWidth: 3, penColor: "#16a34a" },
     { label: "Emerald Ink (4px)", penWidth: 4, penColor: "#059669" },
     { label: "Red Ink (3px)", penWidth: 3, penColor: "#dc2626" },
@@ -109,7 +104,6 @@ function SignatureGeneratorEmbedded() {
     { label: "Indigo Ink (4px)", penWidth: 4, penColor: "#4f46e5" },
   ];
 
-  // Background presets (includes transparent option for DRAW exports)
   const BG_PRESETS: BgPreset[] = [
     { label: "White", bg: "#ffffff" },
     { label: "Paper (Cool)", bg: "#f8fafc" },
@@ -119,13 +113,11 @@ function SignatureGeneratorEmbedded() {
     { label: "Soft Pink", bg: "#fce7f3" },
     { label: "Light Gray", bg: "#f3f4f6" },
 
-    // Transparent (exclusive with typed transparent)
+    // Transparent for DRAW exports (exclusive with typed transparent)
     { label: "Transparent Background (Draw PNG)", transparent: true },
   ];
 
-  // Typed presets (font style + size + color + background or transparent)
   const TYPED_PRESETS: TypedPreset[] = [
-    // Cursive / signature-like
     { label: "Cursive — Elegant Black", typedStyle: "cursive", typedSize: 60, typedColor: "#0f172a", bg: "#ffffff" },
     { label: "Cursive — Slate", typedStyle: "cursive", typedSize: 60, typedColor: "#334155", bg: "#ffffff" },
     { label: "Cursive — Navy", typedStyle: "cursive", typedSize: 60, typedColor: "#0b1f4a", bg: "#ffffff" },
@@ -133,7 +125,6 @@ function SignatureGeneratorEmbedded() {
     { label: "Cursive — Burgundy", typedStyle: "cursive", typedSize: 60, typedColor: "#7f1d1d", bg: "#ffffff" },
     { label: "Cursive — Purple", typedStyle: "cursive", typedSize: 60, typedColor: "#7c3aed", bg: "#ffffff" },
 
-    // Serif styles (formal)
     {
       label: "Elegant Serif — Luxury Black",
       typedStyle: "elegant",
@@ -144,16 +135,14 @@ function SignatureGeneratorEmbedded() {
     { label: "Classic Serif — Black", typedStyle: "serif", typedSize: 58, typedColor: "#0f172a", bg: "#ffffff" },
     { label: "Classic Serif — Slate", typedStyle: "serif", typedSize: 58, typedColor: "#334155", bg: "#ffffff" },
 
-    // Modern (clean)
     { label: "Modern Sans — Black", typedStyle: "modern", typedSize: 56, typedColor: "#0f172a", bg: "#ffffff" },
     { label: "Modern Sans — Blue", typedStyle: "modern", typedSize: 56, typedColor: "#1d4ed8", bg: "#ffffff" },
     { label: "Simple Sans — Charcoal", typedStyle: "sans", typedSize: 54, typedColor: "#111827", bg: "#ffffff" },
 
-    // Paper backgrounds (typed)
     { label: "Cursive on Warm Paper", typedStyle: "cursive", typedSize: 60, typedColor: "#0f172a", bg: "#fef3c7" },
     { label: "Modern on Cool Paper", typedStyle: "modern", typedSize: 56, typedColor: "#0f172a", bg: "#f8fafc" },
 
-    // Transparent (exclusive with draw transparent)
+    // Transparent for TYPE exports (exclusive with draw transparent)
     { label: "Transparent (Type PNG)", typedStyle: "cursive", typedSize: 60, typedColor: "#0f172a", transparent: true },
   ];
 
@@ -162,21 +151,63 @@ function SignatureGeneratorEmbedded() {
   const [typedPreset, setTypedPreset] = useState(TYPED_PRESETS[0].label);
 
   /* -----------------------------
-     Checkerboard (visible in darkmode)
+     IMPORTANT: Light checkerboard ALWAYS
+     (Even in dark mode so black ink is visible)
   ------------------------------*/
-  const checkerboardStyle: React.CSSProperties = {
+  const lightCheckerboardStyle: React.CSSProperties = {
+    backgroundColor: "#ffffff",
     backgroundImage: `
-      linear-gradient(45deg, rgba(255,255,255,.12) 25%, transparent 25%),
-      linear-gradient(-45deg, rgba(255,255,255,.12) 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, rgba(0,0,0,.28) 75%),
-      linear-gradient(-45deg, transparent 75%, rgba(0,0,0,.28) 75%)
+      linear-gradient(45deg, rgba(0,0,0,.06) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(0,0,0,.06) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(0,0,0,.06) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(0,0,0,.06) 75%)
     `,
     backgroundSize: "16px 16px",
     backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
   };
 
   const previewStyle: React.CSSProperties =
-    transparentMode !== "none" ? checkerboardStyle : { backgroundColor: bgColor };
+    transparentMode !== "none" ? lightCheckerboardStyle : { backgroundColor: bgColor };
+
+  /* -----------------------------
+     Mode switching with mutual reset
+     - When switching to DRAW: deactivate typed transparency preset (if active)
+     - When switching to TYPE: deactivate draw transparency preset (if active)
+  ------------------------------*/
+  const switchToDraw = () => {
+    setMode("draw");
+
+    // If type transparency was active, turn it off and reset typed preset
+    if (transparentMode === "type") {
+      setTransparency("none");
+      setBgPreset(BG_PRESETS[0].label);
+      setBgColor(BG_PRESETS[0].bg || "#ffffff");
+    }
+
+    // Reset typed preset selection (deactivate typed option)
+    const tp = TYPED_PRESETS[0];
+    setTypedPreset(tp.label);
+    setTypedStyle(tp.typedStyle);
+    setTypedSize(tp.typedSize);
+    setTypedColor(tp.typedColor);
+  };
+
+  const switchToType = () => {
+    setMode("type");
+
+    // If draw transparency was active, turn it off and reset bg preset
+    if (transparentMode === "draw") {
+      setTransparency("none");
+      setBgPreset(BG_PRESETS[0].label);
+      setBgColor(BG_PRESETS[0].bg || "#ffffff");
+    }
+
+    // Reset ink preset selection (deactivate draw option)
+    const ip = INK_PRESETS[0];
+    setInkPreset(ip.label);
+    setPenWidth(ip.penWidth);
+    setPenColor(ip.penColor);
+  };
 
   /* -----------------------------
      Canvas drawing
@@ -217,9 +248,7 @@ function SignatureGeneratorEmbedded() {
       ctx.lineWidth = s.width;
       ctx.beginPath();
       ctx.moveTo(s.points[0].x, s.points[0].y);
-      for (let i = 1; i < s.points.length; i++) {
-        ctx.lineTo(s.points[i].x, s.points[i].y);
-      }
+      for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
       ctx.stroke();
     }
   };
@@ -296,11 +325,12 @@ function SignatureGeneratorEmbedded() {
     const p = INK_PRESETS.find((x) => x.label === label);
     if (!p) return;
 
+    // activate draw and reset type
+    switchToDraw();
+
     setInkPreset(label);
-    setMode("draw");
     setPenWidth(p.penWidth);
     setPenColor(p.penColor);
-
     toast.success(`Ink preset: ${p.label}`);
   };
 
@@ -311,15 +341,15 @@ function SignatureGeneratorEmbedded() {
     setBgPreset(label);
 
     if (p.transparent) {
-      // exclusive: can ONLY be draw transparency
-      setMode("draw");
+      // transparent background for DRAW only
+      switchToDraw();
       setTransparency("draw");
       toast.success("Background: Transparent (Draw exports as transparent PNG)");
       return;
     }
 
     if (p.bg) {
-      // picking a solid bg disables transparency
+      // solid bg disables transparency
       setTransparency("none");
       setBgColor(p.bg);
       toast.success(`Background: ${p.label}`);
@@ -330,14 +360,15 @@ function SignatureGeneratorEmbedded() {
     const p = TYPED_PRESETS.find((x) => x.label === label);
     if (!p) return;
 
+    // activate type and reset draw
+    switchToType();
+
     setTypedPreset(label);
-    setMode("type");
     setTypedStyle(p.typedStyle);
     setTypedSize(p.typedSize);
     setTypedColor(p.typedColor);
 
     if (p.transparent) {
-      // exclusive: type transparency only
       setTransparency("type");
       toast.success("Typed: Transparent (Type exports as transparent PNG)");
       return;
@@ -355,7 +386,6 @@ function SignatureGeneratorEmbedded() {
   ------------------------------*/
   const downloadPNG = () => {
     if (mode === "type") {
-      // Separate export canvas to guarantee true transparency
       const exportCanvas = document.createElement("canvas");
       const w = 1200;
       const h = 420;
@@ -365,7 +395,7 @@ function SignatureGeneratorEmbedded() {
       const ctx = exportCanvas.getContext("2d");
       if (!ctx) return;
 
-      // Background: only fill when NOT type-transparent
+      // Background: fill only when NOT type-transparent
       if (transparentMode !== "type") {
         ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, w, h);
@@ -390,7 +420,6 @@ function SignatureGeneratorEmbedded() {
       return;
     }
 
-    // Draw mode export: canvas already rendered with/without background depending on bgTransparent
     canvasRef.current?.toBlob((b) => b && downloadBlob("signature.png", b));
   };
 
@@ -415,7 +444,7 @@ function SignatureGeneratorEmbedded() {
         <Button
           size="sm"
           variant={mode === "draw" ? "default" : "outline"}
-          onClick={() => setMode("draw")}
+          onClick={switchToDraw}
           className="flex-1 sm:flex-none min-w-0"
         >
           <PenTool className="w-4 h-4 mr-2 shrink-0" />
@@ -424,7 +453,7 @@ function SignatureGeneratorEmbedded() {
         <Button
           size="sm"
           variant={mode === "type" ? "default" : "outline"}
-          onClick={() => setMode("type")}
+          onClick={switchToType}
           className="flex-1 sm:flex-none min-w-0"
         >
           <span className="truncate">Type</span>
@@ -503,7 +532,6 @@ function SignatureGeneratorEmbedded() {
               <SelectContent>
                 {BG_PRESETS.map((p) => {
                   const isTransparentOption = !!p.transparent;
-                  // If type-transparent is active, you can't pick draw-transparent.
                   const disabled = isTransparentOption && transparentMode === "type";
                   return (
                     <SelectItem key={p.label} value={p.label} disabled={disabled}>
@@ -529,7 +557,6 @@ function SignatureGeneratorEmbedded() {
               <SelectContent>
                 {TYPED_PRESETS.map((p) => {
                   const isTransparentOption = !!p.transparent;
-                  // If draw-transparent is active, you can't pick type-transparent.
                   const disabled = isTransparentOption && transparentMode === "draw";
                   return (
                     <SelectItem key={p.label} value={p.label} disabled={disabled}>
