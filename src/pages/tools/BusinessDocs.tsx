@@ -28,7 +28,7 @@ import { NDAGenerator } from "@/components/business-docs/NDAGenerator";
 import { ProposalGenerator } from "@/components/business-docs/ProposalGenerator";
 
 /** Moat layer (adjust paths if your project differs) */
-import { useMoat } from "@/hooks/moat/useMoat";
+import { useMoat } from "@/hooks/useMoat";
 import { PresetsPanel } from "@/components/moat/PresetsPanel";
 import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
 import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
@@ -182,10 +182,12 @@ function InvoiceGeneratorEmbedded() {
 
   const [settings, setSettings] = useState<InvoiceSettings>(DEFAULT_SETTINGS_INVOICE);
 
-  const moat = useMoat(settings, setSettings, {
+  const setSettingsForMoat = (s: Record<string, unknown>) => setSettings(s as InvoiceSettings);
+
+  const moat = useMoat(settings as Record<string, unknown>, setSettingsForMoat, {
     toolSlug,
-    defaultSettings: DEFAULT_SETTINGS_INVOICE,
-    recommendedPresets: RECOMMENDED_PRESETS_INVOICE,
+    defaultSettings: DEFAULT_SETTINGS_INVOICE as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS_INVOICE.map((p) => ({ id: p.name, ...p, settings: p.settings as Record<string, unknown> })),
   });
 
   const update = <K extends keyof InvoiceSettings>(key: K, value: InvoiceSettings[K]) => {
@@ -265,20 +267,12 @@ function InvoiceGeneratorEmbedded() {
 
   const doPrint = () => {
     window.print();
-    moat?.recordJob?.({
-      action: "print",
-      toolSlug,
-      inputMeta: [],
-    });
+    moat.recordJob();
   };
 
   const doCopy = async () => {
     await copyToClipboard(invoiceText);
-    moat?.recordJob?.({
-      action: "copy",
-      toolSlug,
-      inputMeta: [],
-    });
+    moat.recordJob();
   };
 
   const doDownload = () => {
@@ -287,11 +281,7 @@ function InvoiceGeneratorEmbedded() {
       new Blob([invoiceText], { type: "text/plain;charset=utf-8" }),
     );
     toast.success("Downloaded");
-    moat?.recordJob?.({
-      action: "download",
-      toolSlug,
-      inputMeta: [],
-    });
+    moat.recordJob();
   };
 
   return (
@@ -300,7 +290,18 @@ function InvoiceGeneratorEmbedded() {
       <div className="order-3 lg:order-1 print:hidden">
         <LocalStatusIndicator />
         <div className="mt-3">
-          <PresetsPanel />
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
         </div>
         <div className="mt-3">
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
@@ -747,10 +748,12 @@ function ReceiptGeneratorEmbedded() {
 
   const [settings, setSettings] = useState<ReceiptSettings>(DEFAULT_SETTINGS_RECEIPT);
 
-  const moat = useMoat(settings, setSettings, {
+  const setSettingsForMoat = (s: Record<string, unknown>) => setSettings(s as ReceiptSettings);
+
+  const moat = useMoat(settings as Record<string, unknown>, setSettingsForMoat, {
     toolSlug,
-    defaultSettings: DEFAULT_SETTINGS_RECEIPT,
-    recommendedPresets: RECOMMENDED_PRESETS_RECEIPT,
+    defaultSettings: DEFAULT_SETTINGS_RECEIPT as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS_RECEIPT.map((p) => ({ id: p.name, ...p, settings: p.settings as Record<string, unknown> })),
   });
 
   const update = <K extends keyof ReceiptSettings>(key: K, value: ReceiptSettings[K]) => {
@@ -824,12 +827,12 @@ function ReceiptGeneratorEmbedded() {
 
   const doPrint = () => {
     window.print();
-    moat?.recordJob?.({ action: "print", toolSlug, inputMeta: [] });
+    moat.recordJob();
   };
 
   const doCopy = async () => {
     await copyToClipboard(receiptText);
-    moat?.recordJob?.({ action: "copy", toolSlug, inputMeta: [] });
+    moat.recordJob();
   };
 
   const doDownload = () => {
@@ -838,7 +841,7 @@ function ReceiptGeneratorEmbedded() {
       new Blob([receiptText], { type: "text/plain;charset=utf-8" }),
     );
     toast.success("Downloaded");
-    moat?.recordJob?.({ action: "download", toolSlug, inputMeta: [] });
+    moat.recordJob();
   };
 
   return (
@@ -847,7 +850,18 @@ function ReceiptGeneratorEmbedded() {
       <div className="order-3 lg:order-1 print:hidden">
         <LocalStatusIndicator />
         <div className="mt-3">
-          <PresetsPanel />
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
         </div>
         <div className="mt-3">
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
@@ -1239,10 +1253,12 @@ function ContractLetterGeneratorEmbedded() {
 
   const [settings, setSettings] = useState<ContractSettings>(DEFAULT_SETTINGS_CONTRACT);
 
-  const moat = useMoat(settings, setSettings, {
+  const setSettingsForMoat = (s: Record<string, unknown>) => setSettings(s as ContractSettings);
+
+  const moat = useMoat(settings as Record<string, unknown>, setSettingsForMoat, {
     toolSlug,
-    defaultSettings: DEFAULT_SETTINGS_CONTRACT,
-    recommendedPresets: RECOMMENDED_PRESETS_CONTRACT,
+    defaultSettings: DEFAULT_SETTINGS_CONTRACT as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS_CONTRACT.map((p) => ({ id: p.name, ...p, settings: p.settings as Record<string, unknown> })),
   });
 
   const update = <K extends keyof ContractSettings>(key: K, value: ContractSettings[K]) => {
@@ -1356,12 +1372,12 @@ function ContractLetterGeneratorEmbedded() {
 
   const doPrint = () => {
     window.print();
-    moat?.recordJob?.({ action: "print", toolSlug, inputMeta: [] });
+    moat.recordJob();
   };
 
   const doCopy = async () => {
     await copyToClipboard(output);
-    moat?.recordJob?.({ action: "copy", toolSlug, inputMeta: [] });
+    moat.recordJob();
   };
 
   const doDownload = () => {
@@ -1370,7 +1386,7 @@ function ContractLetterGeneratorEmbedded() {
       new Blob([output], { type: "text/plain;charset=utf-8" }),
     );
     toast.success("Downloaded");
-    moat?.recordJob?.({ action: "download", toolSlug, inputMeta: [] });
+    moat.recordJob();
   };
 
   return (
@@ -1379,7 +1395,18 @@ function ContractLetterGeneratorEmbedded() {
       <div className="order-3 lg:order-1 print:hidden">
         <LocalStatusIndicator />
         <div className="mt-3">
-          <PresetsPanel />
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
         </div>
         <div className="mt-3">
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
