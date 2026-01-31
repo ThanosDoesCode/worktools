@@ -12,7 +12,7 @@ import { PenTool, FileUser, Mail, Download, Copy, Trash2, Plus, X, Undo2, ArrowL
 import { toast } from "sonner";
 import { Header } from "@/components/layout/Header";
 
-function downloadBlob(filename: string, blob: Blob) {
+function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -21,56 +21,141 @@ function downloadBlob(filename: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
-function copyToClipboard(text: string) {
+function copyToClipboard(text) {
   navigator.clipboard.writeText(text);
   toast.success("Copied to clipboard");
 }
 
-/* ---------------------------------
-  Signature Generator (dropdown presets + transparent export)
-----------------------------------*/
-function SignatureGeneratorEmbedded() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
+// ✅ CHANGE 1: replace your existing checkerboardStyle with this (works in dark mode too)
+const checkerboardStyle = {
+  // light tiles + dark tiles mixed so it's visible in both themes
+  backgroundImage: `
+    linear-gradient(45deg, rgba(255,255,255,.10) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,.10) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(0,0,0,.22) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(0,0,0,.22) 75%)
+  `,
+  backgroundSize: "16px 16px",
+  backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+};
 
-  const [mode, setMode] = useState<"draw" | "type">("draw");
+// Preset configurations
+const BG_PRESETS = [
+  { label: "White", bg: "#ffffff" },
+  { label: "Light Gray", bg: "#f8fafc" },
+  { label: "Cream", bg: "#fef3c7" },
+  { label: "Light Blue", bg: "#dbeafe" },
+  { label: "Transparent", transparent: true },
+];
+
+const TYPED_PRESETS = [
+  { label: "Classic Black", typedStyle: "elegant", typedSize: 56, typedColor: "#0f172a", bg: "#ffffff" },
+  { label: "Modern Blue", typedStyle: "modern", typedSize: 48, typedColor: "#1e40af", bg: "#f8fafc" },
+  { label: "Elegant Serif", typedStyle: "serif", typedSize: 52, typedColor: "#334155", bg: "#ffffff" },
+  { label: "Bold Sans", typedStyle: "sans", typedSize: 60, typedColor: "#0f172a", bg: "#f8fafc" },
+  { label: "Cursive Classic", typedStyle: "cursive", typedSize: 64, typedColor: "#16a34a", bg: "#ffffff" },
+  { label: "Transparent", typedStyle: "cursive", typedSize: 56, typedColor: "#0f172a", transparent: true },
+];
+
+const INK_PRESETS = [
+  { label: "Fine Black", penWidth: 2, penColor: "#0f172a", bg: "#ffffff" },
+  { label: "Medium Black", penWidth: 3, penColor: "#0f172a", bg: "#ffffff" },
+  { label: "Bold Black", penWidth: 5, penColor: "#0f172a", bg: "#ffffff" },
+  { label: "Blue Ink", penWidth: 3, penColor: "#1e40af", bg: "#ffffff" },
+  { label: "Green Signature", penWidth: 4, penColor: "#16a34a", bg: "#f8fafc" },
+];
+
+function SignatureGeneratorEmbedded() {
+  const canvasRef = useRef(null);
+  const wrapRef = useRef(null);
+
+  const [mode, setMode] = useState("draw");
   const [penWidth, setPenWidth] = useState(3);
   const [penColor, setPenColor] = useState("#0f172a");
-
-  // Export behavior: true => PNG alpha background
-  const [bgTransparent, setBgTransparent] = useState(false);
   const [bgColor, setBgColor] = useState("#ffffff");
-
-  const [strokes, setStrokes] = useState<{ points: { x: number; y: number }[]; width: number; color: string }[]>([]);
+  const [bgTransparent, setBgTransparent] = useState(false);
+  const [strokes, setStrokes] = useState([]);
   const [isDrawing, setIsDrawing] = useState(false);
 
   const [typedName, setTypedName] = useState("Your Name");
   const [typedSize, setTypedSize] = useState(56);
-  const [typedStyle, setTypedStyle] = useState<"cursive" | "serif" | "sans" | "elegant" | "modern">("cursive");
+  const [typedStyle, setTypedStyle] = useState("cursive");
   const [typedColor, setTypedColor] = useState("#0f172a");
 
-  const palette = ["#0f172a", "#334155", "#16a34a", "#dc2626", "#7c3aed"];
+  const [bgPreset, setBgPreset] = useState("White");
+  const [typedPreset, setTypedPreset] = useState("Classic Black");
+  const [inkPreset, setInkPreset] = useState("Medium Black");
 
-  const fontFamily =
-    typedStyle === "cursive"
-      ? "cursive"
-      : typedStyle === "elegant"
-        ? "'Times New Roman', serif"
-        : typedStyle === "modern"
-          ? "'Helvetica Neue', sans-serif"
-          : typedStyle === "serif"
-            ? "Georgia, serif"
-            : "Arial, sans-serif";
+  // ✅ CHANGE 2: add this new state + helpers INSIDE SignatureGeneratorEmbedded (near your other useState)
+  const [transparentMode, setTransparentMode] = useState("none");
 
-  // Checkerboard background is UI-only (preview), not exported unless bgTransparent=false (we fill solid bgColor).
-  const checkerboardStyle: React.CSSProperties = {
-    backgroundImage:
-      "linear-gradient(45deg, rgba(0,0,0,.06) 25%, transparent 25%), linear-gradient(-45deg, rgba(0,0,0,.06) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(0,0,0,.06) 75%), linear-gradient(-45deg, transparent 75%, rgba(0,0,0,.06) 75%)",
-    backgroundSize: "16px 16px",
-    backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+  const setTransparency = (mode) => {
+    setTransparentMode(mode);
+    setBgTransparent(mode !== "none");
   };
 
-  const previewStyle: React.CSSProperties = bgTransparent ? checkerboardStyle : { backgroundColor: bgColor };
+  // ✅ CHANGE 3: replace your previewStyle logic with this (still shows checkerboard when transparent)
+  const previewStyle = transparentMode !== "none" ? checkerboardStyle : { backgroundColor: bgColor };
+
+  // ✅ CHANGE 4: update applyBgPreset to enforce exclusive transparency
+  const applyBgPreset = (label) => {
+    const p = BG_PRESETS.find((x) => x.label === label);
+    if (!p) return;
+    setBgPreset(label);
+
+    if (p.transparent) {
+      // choosing transparent background means transparent DRAW export only (exclusive)
+      setTransparency("draw");
+      toast.success("Background: Transparent (exports transparent PNG)");
+      return;
+    }
+
+    if (p.bg) {
+      setTransparency("none");
+      setBgColor(p.bg);
+      toast.success(`Background: ${p.label}`);
+    }
+  };
+
+  // ✅ CHANGE 5: update applyTypedPreset to enforce exclusive transparency
+  const applyTypedPreset = (label) => {
+    const p = TYPED_PRESETS.find((x) => x.label === label);
+    if (!p) return;
+    setTypedPreset(label);
+
+    setMode("type");
+    setTypedStyle(p.typedStyle);
+    setTypedSize(p.typedSize);
+    setTypedColor(p.typedColor);
+
+    if (p.transparent) {
+      // choosing typed transparent means transparent TYPE export only (exclusive)
+      setTransparency("type");
+    } else if (p.bg) {
+      setTransparency("none");
+      setBgColor(p.bg);
+    }
+
+    toast.success(`Preset: ${p.label}`);
+  };
+
+  // ✅ CHANGE 6: update applyInkPreset to NOT set transparency (ink preset shouldn't fight background/typed)
+  const applyInkPreset = (label) => {
+    const p = INK_PRESETS.find((x) => x.label === label);
+    if (!p) return;
+    setInkPreset(label);
+
+    setMode("draw");
+    setPenWidth(p.penWidth);
+    setPenColor(p.penColor);
+
+    // keep ink preset focused on ink only; do not toggle transparency here
+    if (p.bg) {
+      setBgColor(p.bg);
+    }
+
+    toast.success(`Preset: ${p.label}`);
+  };
 
   const drawAll = () => {
     const canvas = canvasRef.current;
@@ -83,13 +168,11 @@ function SignatureGeneratorEmbedded() {
 
     ctx.clearRect(0, 0, w, h);
 
-    // IMPORTANT: if bgTransparent === true => do NOT fill background (keeps alpha)
     if (!bgTransparent) {
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, w, h);
     }
 
-    // guide line in draw mode
     if (mode === "draw") {
       ctx.strokeStyle = "rgba(15, 23, 42, 0.06)";
       ctx.lineWidth = 1;
@@ -108,7 +191,9 @@ function SignatureGeneratorEmbedded() {
       ctx.lineWidth = s.width;
       ctx.beginPath();
       ctx.moveTo(s.points[0].x, s.points[0].y);
-      for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+      for (let i = 1; i < s.points.length; i++) {
+        ctx.lineTo(s.points[i].x, s.points[i].y);
+      }
       ctx.stroke();
     }
   };
@@ -140,22 +225,20 @@ function SignatureGeneratorEmbedded() {
     const ro = new ResizeObserver(() => resizeCanvas());
     if (wrapRef.current) ro.observe(wrapRef.current);
     return () => ro.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   useEffect(() => {
     if (mode === "draw") drawAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [strokes, penWidth, penColor, bgColor, bgTransparent, mode]);
+  }, [strokes, penWidth, mode, bgColor, bgTransparent]);
 
-  const getPos = (ev: PointerEvent) => {
+  const getPos = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
 
-  const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const onPointerDown = (e) => {
     if (mode !== "draw") return;
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -167,7 +250,7 @@ function SignatureGeneratorEmbedded() {
     setStrokes((prev) => [...prev, { points: [pos], width: penWidth, color: penColor }]);
   };
 
-  const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const onPointerMove = (e) => {
     if (mode !== "draw" || !isDrawing) return;
     const pos = getPos(e.nativeEvent);
     setStrokes((prev) => {
@@ -178,269 +261,59 @@ function SignatureGeneratorEmbedded() {
     });
   };
 
-  const exportDrawToPNG = () => {
-    const srcCanvas = canvasRef.current;
-    if (!srcCanvas) return;
-
-    const cw = srcCanvas.clientWidth || 600;
-    const ch = srcCanvas.clientHeight || 220;
-
-    const out = document.createElement("canvas");
-    const W = 1200;
-    const H = 420;
-    out.width = W;
-    out.height = H;
-
-    const ctx = out.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, W, H);
-
-    // Solid background only when NOT transparent
-    if (!bgTransparent) {
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, W, H);
-    }
-
-    const sx = W / cw;
-    const sy = H / ch;
-    const s = Math.min(sx, sy);
-
-    const scaledW = cw * s;
-    const scaledH = ch * s;
-    const ox = (W - scaledW) / 2;
-    const oy = (H - scaledH) / 2;
-
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    for (const stroke of strokes) {
-      if (stroke.points.length < 2) continue;
-      ctx.strokeStyle = stroke.color;
-      ctx.lineWidth = stroke.width * s;
-      ctx.beginPath();
-      ctx.moveTo(ox + stroke.points[0].x * s, oy + stroke.points[0].y * s);
-      for (let i = 1; i < stroke.points.length; i++) {
-        ctx.lineTo(ox + stroke.points[i].x * s, oy + stroke.points[i].y * s);
-      }
-      ctx.stroke();
-    }
-
-    out.toBlob((b) => b && downloadBlob("signature.png", b));
-  };
-
-  const exportTypedToPNG = () => {
-    const out = document.createElement("canvas");
-    const W = 1200;
-    const H = 420;
-    out.width = W;
-    out.height = H;
-
-    const ctx = out.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, W, H);
-
-    // Solid background only when NOT transparent
-    if (!bgTransparent) {
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, W, H);
-    }
-
-    const fontMap: Record<string, string> = {
-      cursive: "cursive",
-      serif: "Georgia, serif",
-      sans: "Arial, sans-serif",
-      elegant: "'Times New Roman', serif",
-      modern: "'Helvetica Neue', sans-serif",
-    };
-
-    ctx.fillStyle = typedColor;
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "center";
-    ctx.font = `${typedSize * 4}px ${fontMap[typedStyle]}`;
-    ctx.fillText(typedName || "Your Name", W / 2, H / 2);
-
-    out.toBlob((b) => b && downloadBlob("signature.png", b));
-  };
-
   const downloadPNG = () => {
-    if (mode === "type") exportTypedToPNG();
-    else exportDrawToPNG();
+    if (mode === "type") {
+      const canvas = document.createElement("canvas");
+      const w = 1200;
+      const h = 420;
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      if (!bgTransparent) {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, w, h);
+      }
+
+      ctx.fillStyle = typedColor;
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "center";
+
+      const fontMap = {
+        cursive: "cursive",
+        serif: "Georgia, serif",
+        sans: "Arial, sans-serif",
+        elegant: "'Times New Roman', serif",
+        modern: "'Helvetica Neue', sans-serif",
+      };
+      ctx.font = `${typedSize * 4}px ${fontMap[typedStyle]}`;
+      ctx.fillText(typedName || "Your Name", w / 2, h / 2);
+
+      canvas.toBlob((b) => b && downloadBlob("signature.png", b));
+      return;
+    }
+
+    canvasRef.current?.toBlob((b) => b && downloadBlob("signature.png", b));
   };
 
   const isEmpty = strokes.length === 0;
 
-  // ----- Preset sets (for dropdowns) -----
-  type InkPreset = { label: string; penWidth: number; penColor: string; bg?: string; transparent?: boolean };
-  type BgPreset = { label: string; bg?: string; transparent?: boolean };
-  type TypedPreset = {
-    label: string;
-    typedStyle: any;
-    typedSize: number;
-    typedColor: string;
-    bg?: string;
-    transparent?: boolean;
-  };
+  const fontFamily =
+    typedStyle === "cursive"
+      ? "cursive"
+      : typedStyle === "elegant"
+        ? "'Times New Roman', serif"
+        : typedStyle === "modern"
+          ? "'Helvetica Neue', sans-serif"
+          : typedStyle === "serif"
+            ? "Georgia, serif"
+            : "Arial, sans-serif";
 
-  const INK_PRESETS: InkPreset[] = [
-    { label: "Black Ballpoint", penWidth: 3, penColor: "#0f172a", bg: "#ffffff" },
-    { label: "Blue Ballpoint", penWidth: 3, penColor: "#1d4ed8", bg: "#ffffff" },
-    { label: "Fountain Pen", penWidth: 6, penColor: "#0b1220", bg: "#ffffff" },
-    { label: "Thin Elegant", penWidth: 2, penColor: "#0f172a", bg: "#ffffff" },
-    { label: "Contract Grey", penWidth: 3, penColor: "#0f172a", bg: "#f8fafc" },
-    { label: "Scanned Paper", penWidth: 3, penColor: "#0f172a", bg: "#fef3c7" },
-    { label: "Transparent Ink", penWidth: 3, penColor: "#0f172a", transparent: true },
-  ];
-
-  const BG_PRESETS: BgPreset[] = [
-    { label: "White", bg: "#ffffff" },
-    { label: "Light Gray", bg: "#f8fafc" },
-    { label: "Warm Paper", bg: "#fef3c7" },
-    { label: "Cool Paper", bg: "#dbeafe" },
-    { label: "Transparent (PNG)", transparent: true },
-  ];
-
-  const TYPED_PRESETS: TypedPreset[] = [
-    { label: "Typed Cursive Large", typedStyle: "cursive", typedSize: 64, typedColor: "#0f172a", bg: "#ffffff" },
-    { label: "Typed Modern Minimal", typedStyle: "modern", typedSize: 48, typedColor: "#0f172a", bg: "#ffffff" },
-    { label: "Typed Executive Serif", typedStyle: "elegant", typedSize: 56, typedColor: "#0f172a", bg: "#ffffff" },
-    { label: "Typed Cursive Blue", typedStyle: "cursive", typedSize: 64, typedColor: "#1d4ed8", bg: "#ffffff" },
-    { label: "Typed Transparent", typedStyle: "cursive", typedSize: 64, typedColor: "#0f172a", transparent: true },
-  ];
-
-  const [inkPreset, setInkPreset] = useState<string>("");
-  const [bgPreset, setBgPreset] = useState<string>("");
-  const [typedPreset, setTypedPreset] = useState<string>("");
-
-  const applyInkPreset = (label: string) => {
-    const p = INK_PRESETS.find((x) => x.label === label);
-    if (!p) return;
-    setInkPreset(label);
-
-    setMode("draw");
-    setPenWidth(p.penWidth);
-    setPenColor(p.penColor);
-
-    if (p.transparent) {
-      setBgTransparent(true);
-    } else if (p.bg) {
-      setBgTransparent(false);
-      setBgColor(p.bg);
-    }
-
-    toast.success(`Preset: ${p.label}`);
-  };
-
-  const applyBgPreset = (label: string) => {
-    const p = BG_PRESETS.find((x) => x.label === label);
-    if (!p) return;
-    setBgPreset(label);
-
-    if (p.transparent) {
-      setBgTransparent(true);
-      toast.success("Background: Transparent (exports transparent PNG)");
-      return;
-    }
-    if (p.bg) {
-      setBgTransparent(false);
-      setBgColor(p.bg);
-      toast.success(`Background: ${p.label}`);
-    }
-  };
-
-  const applyTypedPreset = (label: string) => {
-    const p = TYPED_PRESETS.find((x) => x.label === label);
-    if (!p) return;
-    setTypedPreset(label);
-
-    setMode("type");
-    setTypedStyle(p.typedStyle);
-    setTypedSize(p.typedSize);
-    setTypedColor(p.typedColor);
-
-    if (p.transparent) {
-      setBgTransparent(true);
-    } else if (p.bg) {
-      setBgTransparent(false);
-      setBgColor(p.bg);
-    }
-
-    toast.success(`Preset: ${p.label}`);
-  };
+  const palette = ["#0f172a", "#334155", "#16a34a", "#dc2626", "#7c3aed"];
 
   return (
     <div className="space-y-4 w-full max-w-full">
-      {/* Presets - dropdowns (better UX on mobile + desktop) */}
-      <Card className="shadow-none w-full max-w-full">
-        <CardContent className="pt-4 sm:pt-6 space-y-4 w-full">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-sm font-medium">Presets</div>
-            <div className="text-xs text-muted-foreground">
-              {bgTransparent ? "Transparent export ON" : "Solid background export"}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="space-y-2">
-              <Label className="text-sm">Ink</Label>
-              <Select value={inkPreset} onValueChange={(v) => applyInkPreset(v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Choose ink preset" />
-                </SelectTrigger>
-                <SelectContent>
-                  {INK_PRESETS.map((p) => (
-                    <SelectItem key={p.label} value={p.label}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm">Background</Label>
-              <Select value={bgPreset} onValueChange={(v) => applyBgPreset(v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Choose background" />
-                </SelectTrigger>
-                <SelectContent>
-                  {BG_PRESETS.map((p) => (
-                    <SelectItem key={p.label} value={p.label}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="text-xs text-muted-foreground">
-                Transparent shows a checkerboard in preview, but downloads as transparent PNG.
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm">Typed</Label>
-              <Select value={typedPreset} onValueChange={(v) => applyTypedPreset(v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Choose typed preset" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TYPED_PRESETS.map((p) => (
-                    <SelectItem key={p.label} value={p.label}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground">
-            Transparent mode uses a checkerboard preview for visibility, but exports a real transparent PNG (alpha).
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Mode */}
       <div className="flex gap-2 w-full">
         <Button
           size="sm"
@@ -461,7 +334,6 @@ function SignatureGeneratorEmbedded() {
         </Button>
       </div>
 
-      {/* Preview */}
       <div className="rounded-lg border bg-background p-3 sm:p-4 w-full max-w-full">
         <div className="text-sm font-medium mb-3">Preview</div>
         <div
@@ -496,10 +368,25 @@ function SignatureGeneratorEmbedded() {
         </div>
       </div>
 
-      {/* Controls */}
       <div className="rounded-lg border bg-background p-3 sm:p-4 space-y-4 w-full max-w-full">
         {mode === "draw" ? (
           <>
+            <div className="space-y-2 w-full">
+              <Label className="text-sm">Ink Preset</Label>
+              <Select value={inkPreset} onValueChange={applyInkPreset}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {INK_PRESETS.map((p) => (
+                    <SelectItem key={p.label} value={p.label}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2 w-full">
               <Label className="text-sm">Pen Width: {penWidth}px</Label>
               <Slider
@@ -536,6 +423,53 @@ function SignatureGeneratorEmbedded() {
               </div>
             </div>
 
+            <div className="space-y-2 w-full">
+              <Label className="text-sm">Background Preset</Label>
+              <Select value={bgPreset} onValueChange={applyBgPreset}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {/* ✅ CHANGE 7: make BG_PRESETS disable their transparent options when the other is active */}
+                  {BG_PRESETS.map((p) => {
+                    const isTransparentOption = !!p.transparent;
+                    const disabled = isTransparentOption && transparentMode === "type"; // block bg transparent if typed transparent active
+                    return (
+                      <SelectItem key={p.label} value={p.label} disabled={disabled}>
+                        {p.label}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2 w-full max-w-full">
+              <Label className="text-sm">Background Color</Label>
+              <div className="flex items-start gap-2 w-full max-w-full">
+                <Input
+                  type="color"
+                  value={bgColor}
+                  onChange={(e) => setBgColor(e.target.value)}
+                  className="w-12 h-10 p-1 shrink-0"
+                  disabled={bgTransparent}
+                />
+                <div className="flex gap-2 flex-wrap flex-1 min-w-0">
+                  {["#ffffff", "#f8fafc", "#fef3c7", "#dbeafe"].map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => !bgTransparent && setBgColor(c)}
+                      className={`h-9 w-9 shrink-0 rounded-md border ${bgColor === c ? "ring-2 ring-ring" : ""} ${bgTransparent ? "opacity-50 cursor-not-allowed" : ""}`}
+                      style={{ backgroundColor: c }}
+                      aria-label={`Set background ${c}`}
+                      disabled={bgTransparent}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-2 w-full">
               <Button
                 size="sm"
@@ -560,6 +494,27 @@ function SignatureGeneratorEmbedded() {
         ) : (
           <>
             <div className="space-y-2 w-full">
+              <Label className="text-sm">Typed Preset</Label>
+              <Select value={typedPreset} onValueChange={applyTypedPreset}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {/* ✅ CHANGE 7: make TYPED_PRESETS disable their transparent options when the other is active */}
+                  {TYPED_PRESETS.map((p) => {
+                    const isTransparentOption = !!p.transparent;
+                    const disabled = isTransparentOption && transparentMode === "draw"; // block typed transparent if bg transparent active
+                    return (
+                      <SelectItem key={p.label} value={p.label} disabled={disabled}>
+                        {p.label}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2 w-full">
               <Label className="text-sm">Name</Label>
               <Input value={typedName} onChange={(e) => setTypedName(e.target.value)} className="w-full" />
             </div>
@@ -578,7 +533,7 @@ function SignatureGeneratorEmbedded() {
 
             <div className="space-y-2 w-full">
               <Label className="text-sm">Font Style</Label>
-              <Select value={typedStyle} onValueChange={(v) => setTypedStyle(v as any)}>
+              <Select value={typedStyle} onValueChange={(v) => setTypedStyle(v)}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -615,20 +570,52 @@ function SignatureGeneratorEmbedded() {
                 </div>
               </div>
             </div>
+
+            <div className="space-y-2 w-full max-w-full">
+              <Label className="text-sm">Background Color</Label>
+              <div className="flex items-start gap-2 w-full max-w-full">
+                <Input
+                  type="color"
+                  value={bgColor}
+                  onChange={(e) => setBgColor(e.target.value)}
+                  className="w-12 h-10 p-1 shrink-0"
+                  disabled={bgTransparent}
+                />
+                <div className="flex gap-2 flex-wrap flex-1 min-w-0">
+                  {["#ffffff", "#f8fafc", "#fef3c7", "#dbeafe"].map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => !bgTransparent && setBgColor(c)}
+                      className={`h-9 w-9 shrink-0 rounded-md border ${bgColor === c ? "ring-2 ring-ring" : ""} ${bgTransparent ? "opacity-50 cursor-not-allowed" : ""}`}
+                      style={{ backgroundColor: c }}
+                      aria-label={`Set background ${c}`}
+                      disabled={bgTransparent}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
           </>
         )}
       </div>
 
       <Button className="w-full" onClick={downloadPNG}>
-        <Download className="w-4 h-4 mr-2" /> Download Signature (PNG{bgTransparent ? " • Transparent" : ""})
+        <Download className="w-4 h-4 mr-2" /> Download Signature
       </Button>
+
+      {/* ✅ CHANGE 8: make the "status text" use transparentMode instead of bgTransparent */}
+      <div className="text-xs text-muted-foreground">
+        {transparentMode === "none"
+          ? "Solid background export"
+          : transparentMode === "draw"
+            ? "Transparent export: Draw"
+            : "Transparent export: Type"}
+      </div>
     </div>
   );
 }
 
-/* ---------------------------------
-  Resume Generator (dropdown presets)
-----------------------------------*/
 function ResumeGeneratorEmbedded() {
   const [fullName, setFullName] = useState("");
   const [title, setTitle] = useState("");
@@ -640,9 +627,10 @@ function ResumeGeneratorEmbedded() {
   const [summary, setSummary] = useState("");
 
   const [experiences, setExperiences] = useState([{ id: "1", role: "", company: "", start: "", end: "", bullets: "" }]);
+
   const [education, setEducation] = useState([{ id: "1", school: "", degree: "", start: "", end: "", details: "" }]);
 
-  const [skills, setSkills] = useState<{ id: string; name: string }[]>([]);
+  const [skills, setSkills] = useState([]);
   const [newSkill, setNewSkill] = useState("");
 
   const output = useMemo(() => {
@@ -685,248 +673,8 @@ function ResumeGeneratorEmbedded() {
     setNewSkill("");
   };
 
-  const RESUME_PROFILE_PRESETS = [
-    {
-      label: "Student / Graduate",
-      title: "Student / Graduate",
-      summary:
-        "Motivated student with hands-on projects and strong fundamentals. Quick learner with a focus on clean communication, problem solving, and reliable execution.",
-      skills: [
-        "Communication",
-        "Teamwork",
-        "Problem Solving",
-        "Research",
-        "Time Management",
-        "Microsoft Office / Google Workspace",
-      ],
-      exp: [
-        {
-          role: "Student Project",
-          company: "University / Personal",
-          start: "2025",
-          end: "Present",
-          bullets:
-            "- Built and delivered a project from requirements to final result\n- Documented decisions and results clearly\n- Collaborated with teammates and met deadlines",
-        },
-      ],
-      edu: [
-        {
-          school: "University",
-          degree: "BSc / Program",
-          start: "2023",
-          end: "Present",
-          details: "Relevant coursework, projects, and achievements.",
-        },
-      ],
-    },
-    {
-      label: "Sales / BDR",
-      title: "Business Development Representative (BDR)",
-      summary:
-        "Commercial and outbound-focused professional with experience in prospecting, qualification, and pipeline creation. Strong at messaging, objection handling, and turning conversations into meetings.",
-      skills: [
-        "Prospecting",
-        "Cold Calling",
-        "Email Outreach",
-        "Qualification",
-        "Pipeline Management",
-        "CRM (Salesforce/HubSpot)",
-      ],
-      exp: [
-        {
-          role: "BDR / Sales Development",
-          company: "Company",
-          start: "2024",
-          end: "Present",
-          bullets:
-            "- Prospected and qualified leads via calls, email, and LinkedIn\n- Booked meetings and supported account executives with handoffs\n- Maintained CRM hygiene and improved conversion with structured follow-ups",
-        },
-      ],
-    },
-    {
-      label: "Account Executive",
-      title: "Account Executive (AE)",
-      summary:
-        "Quota-carrying seller with end-to-end ownership: discovery, solution positioning, negotiation, and closing. Strong at stakeholder management and building repeatable deal processes.",
-      skills: [
-        "Discovery",
-        "Consultative Selling",
-        "Negotiation",
-        "Forecasting",
-        "Stakeholder Management",
-        "Contracting",
-      ],
-      exp: [
-        {
-          role: "Account Executive",
-          company: "Company",
-          start: "2023",
-          end: "Present",
-          bullets:
-            "- Managed full sales cycle from discovery to close\n- Built multi-threaded relationships and presented value to decision-makers\n- Improved win rate via better qualification and clear next steps",
-        },
-      ],
-    },
-    {
-      label: "Customer Support",
-      title: "Customer Support Specialist",
-      summary:
-        "Customer-focused support professional with experience resolving issues fast and clearly. Strong at prioritization, de-escalation, and improving customer experience through feedback loops.",
-      skills: [
-        "Customer Support",
-        "Troubleshooting",
-        "De-escalation",
-        "Ticketing Systems",
-        "Documentation",
-        "Communication",
-      ],
-    },
-    {
-      label: "Marketing",
-      title: "Marketing Specialist",
-      summary:
-        "Data-informed marketer focused on growth, content, and conversion. Comfortable running campaigns, analyzing performance, and iterating based on customer behavior.",
-      skills: ["Content", "SEO", "Campaigns", "Analytics", "Copywriting", "Social Media"],
-    },
-    {
-      label: "Software / Web Developer",
-      title: "Software Developer",
-      summary:
-        "Developer focused on building clean, reliable products. Comfortable shipping features, debugging issues, and improving performance with practical engineering tradeoffs.",
-      skills: ["JavaScript/TypeScript", "React", "APIs", "Databases", "Testing", "Git"],
-    },
-    {
-      label: "Operations / Project",
-      title: "Operations / Project Coordinator",
-      summary:
-        "Operations-minded contributor who brings structure, clarity, and accountability. Experienced coordinating tasks, stakeholders, and timelines to deliver on measurable outcomes.",
-      skills: [
-        "Project Coordination",
-        "Process Improvement",
-        "Stakeholder Management",
-        "Documentation",
-        "Reporting",
-        "Problem Solving",
-      ],
-    },
-    {
-      label: "Executive / Director",
-      title: "Director / Head of Function",
-      summary:
-        "Senior leader with experience setting strategy, driving execution, and leading teams. Focused on measurable impact, operational discipline, and cross-functional alignment.",
-      skills: ["Leadership", "Strategy", "P&L / Budgeting", "KPI Management", "Hiring & Coaching", "Execution"],
-    },
-  ];
-
-  const RESUME_STYLE_PRESETS = [
-    {
-      label: "Concise (1-page)",
-      summaryAdd:
-        "Keeps writing tight and impact-focused. Prioritizes only the strongest achievements and removes noise.",
-      bulletsTemplate:
-        "- [Impact] using [Method] resulting in [Metric]\n- Reduced / improved [X] by [Y]%\n- Owned [Task] end-to-end with clear outcomes",
-    },
-    {
-      label: "Achievement-heavy",
-      summaryAdd: "Highlights measurable achievements and business outcomes (metrics, rankings, revenue, time saved).",
-      bulletsTemplate:
-        "- Achieved [Result] by [Action] (impact: [Metric])\n- Increased [KPI] from [A] to [B]\n- Built a repeatable process that improved [Outcome]",
-    },
-    {
-      label: "ATS-safe",
-      summaryAdd: "Uses simple wording, standard section titles, and role-relevant keywords to improve ATS parsing.",
-      bulletsTemplate:
-        "- Tools: [CRM/Stack] • Methods: [Methodologies] • Keywords: [Role keywords]\n- Documented processes and maintained clean records\n- Collaborated cross-functionally with clear handoffs",
-    },
-  ];
-
-  const [profilePreset, setProfilePreset] = useState("");
-  const [stylePreset, setStylePreset] = useState("");
-
-  const applyResumeProfilePreset = (label: string) => {
-    const p = RESUME_PROFILE_PRESETS.find((x) => x.label === label);
-    if (!p) return;
-    setProfilePreset(label);
-
-    setTitle(p.title);
-    setSummary(p.summary);
-    setSkills(p.skills.map((s) => ({ id: `${Date.now()}-${s}`, name: s })));
-
-    if ((p as any).exp?.length) {
-      setExperiences((p as any).exp.map((e: any, idx: number) => ({ id: `${Date.now()}-exp-${idx}`, ...e })));
-    }
-    if ((p as any).edu?.length) {
-      setEducation((p as any).edu.map((e: any, idx: number) => ({ id: `${Date.now()}-edu-${idx}`, ...e })));
-    }
-
-    toast.success(`Resume preset: ${p.label}`);
-  };
-
-  const applyResumeStylePreset = (label: string) => {
-    const p = RESUME_STYLE_PRESETS.find((x) => x.label === label);
-    if (!p) return;
-    setStylePreset(label);
-
-    if (p.summaryAdd) setSummary((prev) => (prev ? `${prev}\n${p.summaryAdd}` : p.summaryAdd));
-    if (p.bulletsTemplate) {
-      setExperiences((prev) =>
-        prev.map((e, idx) =>
-          idx === 0 ? { ...e, bullets: e.bullets ? `${e.bullets}\n${p.bulletsTemplate}` : p.bulletsTemplate } : e,
-        ),
-      );
-    }
-
-    toast.success(`Style: ${p.label}`);
-  };
-
   return (
     <div className="space-y-4 w-full max-w-full">
-      {/* Presets as dropdowns */}
-      <Card className="shadow-none w-full max-w-full">
-        <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
-          <div className="text-sm font-medium">Presets</div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label className="text-sm">Profile</Label>
-              <Select value={profilePreset} onValueChange={(v) => applyResumeProfilePreset(v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Choose profile preset" />
-                </SelectTrigger>
-                <SelectContent>
-                  {RESUME_PROFILE_PRESETS.map((p) => (
-                    <SelectItem key={p.label} value={p.label}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm">Writing style</Label>
-              <Select value={stylePreset} onValueChange={(v) => applyResumeStylePreset(v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Choose style preset" />
-                </SelectTrigger>
-                <SelectContent>
-                  {RESUME_STYLE_PRESETS.map((p) => (
-                    <SelectItem key={p.label} value={p.label}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground">
-            Presets fill examples + structure. Replace placeholders with your real info and metrics.
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Mobile Preview */}
       <Card className="shadow-none lg:hidden w-full max-w-full">
         <CardContent className="pt-4 sm:pt-6 w-full">
           <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
@@ -1242,9 +990,6 @@ function ResumeGeneratorEmbedded() {
   );
 }
 
-/* ---------------------------------
-  Cover Letter Generator (dropdown presets)
-----------------------------------*/
 function CoverLetterGeneratorEmbedded() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -1253,86 +998,11 @@ function CoverLetterGeneratorEmbedded() {
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
   const [hiringManager, setHiringManager] = useState("");
-  const [tone, setTone] = useState<"Professional" | "Bold" | "Friendly" | "Concise" | "Enthusiastic">("Professional");
+  const [tone, setTone] = useState("Professional");
   const [content, setContent] = useState("");
 
-  const COVER_PRESETS = [
-    {
-      label: "Cold Application (Professional)",
-      tone: "Professional",
-      content:
-        "With a track record of delivering results and collaborating cross-functionally, I’m confident I can contribute quickly. I’m especially drawn to this role because it aligns with my strengths in execution, communication, and ownership. I’d welcome the chance to discuss how I can help the team achieve its goals.",
-    },
-    {
-      label: "Referral / Warm Intro",
-      tone: "Professional",
-      content:
-        "I was encouraged to apply after speaking with a colleague/referral who shared positive feedback about the team’s work and culture. My background aligns well with the role, and I’d love to bring my experience in delivering outcomes, building relationships, and driving execution to your team.",
-    },
-    {
-      label: "Career Switcher",
-      tone: "Professional",
-      content:
-        "I’m transitioning into this field with a strong foundation in transferable skills: problem solving, ownership, and clear communication. Through focused learning and hands-on projects, I’ve built practical capability and I’m excited to apply it in a real business environment.",
-    },
-    {
-      label: "Short & Punchy",
-      tone: "Concise",
-      content:
-        "I’m applying for this role because I can bring measurable impact fast. I’m strong in execution, stakeholder communication, and structured delivery. If helpful, I can share examples of work that matches your needs.",
-    },
-    {
-      label: "Enthusiastic",
-      tone: "Enthusiastic",
-      content:
-        "I’m genuinely excited about the opportunity to join your team. I love environments where people move fast, own outcomes, and learn constantly. I’d be thrilled to contribute my energy, skills, and drive to help the team win.",
-    },
-    {
-      label: "Bold (Confident)",
-      tone: "Bold",
-      content:
-        "You’re hiring for impact — and that’s exactly what I deliver. I’m comfortable taking ownership, working with ambiguity, and driving results under pressure. I’d like to show you how I approach problems and build outcomes.",
-    },
-    {
-      label: "Tech Role",
-      tone: "Professional",
-      content:
-        "I build solutions with a focus on reliability, clarity, and practical tradeoffs. I’m comfortable collaborating with stakeholders, translating requirements into deliverables, and shipping iteratively. I’d love to contribute to a team that values clean execution and real user value.",
-    },
-    {
-      label: "Sales Role",
-      tone: "Professional",
-      content:
-        "I’m motivated by targets, process, and repeatable performance. I’m strong in discovery, messaging, and moving deals forward with clear next steps. I’d be excited to bring a structured, metrics-driven approach to pipeline creation and closing.",
-    },
-    {
-      label: "Leadership Role",
-      tone: "Professional",
-      content:
-        "I lead through clarity, accountability, and measurable outcomes. I’m experienced aligning stakeholders, building repeatable execution rhythms, and developing teams to perform consistently. I’d welcome the chance to contribute leadership and operating discipline to your organization.",
-    },
-    {
-      label: "Internship / Graduate",
-      tone: "Friendly",
-      content:
-        "I’m eager to learn, contribute, and grow quickly. I’ve built a foundation through coursework and projects, and I’m ready to apply it in a real team setting. I’d love an opportunity to bring energy, curiosity, and strong work ethic to the role.",
-    },
-  ];
-
-  const [coverPreset, setCoverPreset] = useState("");
-
-  const applyCoverPreset = (label: string) => {
-    const p = COVER_PRESETS.find((x) => x.label === label);
-    if (!p) return;
-
-    setCoverPreset(label);
-    setTone(p.tone as any);
-    setContent(p.content);
-    toast.success(`Cover letter preset: ${p.label}`);
-  };
-
   const letter = useMemo(() => {
-    const greetings: Record<string, string> = {
+    const greetings = {
       Professional: hiringManager ? `Dear ${hiringManager},` : "Dear Hiring Manager,",
       Bold: `To the Team at ${company || "the Company"},`,
       Friendly: hiringManager ? `Hi ${hiringManager.split(" ")[0]},` : "Hi there!",
@@ -1340,7 +1010,7 @@ function CoverLetterGeneratorEmbedded() {
       Enthusiastic: hiringManager ? `Dear ${hiringManager},` : "Dear Hiring Team!",
     };
 
-    const closings: Record<string, string> = {
+    const closings = {
       Professional: "Sincerely,",
       Bold: "Looking forward to hearing from you,",
       Friendly: "Best regards,",
@@ -1358,7 +1028,7 @@ ${company}
 
 ${greetings[tone]}
 
-I am writing to express my ${tone === "Enthusiastic" ? "strong " : ""}interest in the ${role || "open position"}${company ? ` at ${company}` : ""}. ${content}
+I am writing to express my ${tone === "Enthusiastic" ? "strong" : ""} interest in the ${role || "open position"}${company ? ` at ${company}` : ""}. ${content}
 
 ${closings[tone]}
 ${fullName}`.trim();
@@ -1366,32 +1036,6 @@ ${fullName}`.trim();
 
   return (
     <div className="space-y-4 w-full max-w-full">
-      {/* Preset dropdown */}
-      <Card className="shadow-none w-full max-w-full">
-        <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
-          <div className="text-sm font-medium">Presets</div>
-          <div className="space-y-2">
-            <Label className="text-sm">Scenario</Label>
-            <Select value={coverPreset} onValueChange={(v) => applyCoverPreset(v)}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Choose a cover letter preset" />
-              </SelectTrigger>
-              <SelectContent>
-                {COVER_PRESETS.map((p) => (
-                  <SelectItem key={p.label} value={p.label}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground">
-            Presets fill a solid base. Customize with your metrics, projects, and why this company.
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Mobile Preview */}
       <Card className="shadow-none lg:hidden w-full max-w-full">
         <CardContent className="pt-4 sm:pt-6 w-full">
           <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
@@ -1464,7 +1108,7 @@ ${fullName}`.trim();
 
               <div className="space-y-2 w-full">
                 <Label className="text-sm">Tone</Label>
-                <Select value={tone} onValueChange={(v) => setTone(v as any)}>
+                <Select value={tone} onValueChange={(v) => setTone(v)}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
@@ -1521,9 +1165,6 @@ ${fullName}`.trim();
   );
 }
 
-/* ---------------------------------
-  Page
-----------------------------------*/
 export default function CareerToolkit() {
   return (
     <div className="min-h-screen bg-background w-full overflow-x-hidden">
