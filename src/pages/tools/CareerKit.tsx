@@ -372,6 +372,27 @@ function SignatureGeneratorEmbedded() {
         {mode === "draw" ? (
           <>
             <div className="space-y-2 w-full">
+              <Label className="text-sm">Background Preset</Label>
+              <Select value={bgPreset} onValueChange={applyBgPreset}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {/* ✅ CHANGE 7: make BG_PRESETS disable their transparent options when the other is active */}
+                  {BG_PRESETS.map((p) => {
+                    const isTransparentOption = !!p.transparent;
+                    const disabled = isTransparentOption && transparentMode === "type"; // block bg transparent if typed transparent active
+                    return (
+                      <SelectItem key={p.label} value={p.label} disabled={disabled}>
+                        {p.label}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2 w-full">
               <Label className="text-sm">Ink Preset</Label>
               <Select value={inkPreset} onValueChange={applyInkPreset}>
                 <SelectTrigger className="w-full">
@@ -421,27 +442,6 @@ function SignatureGeneratorEmbedded() {
                   ))}
                 </div>
               </div>
-            </div>
-
-            <div className="space-y-2 w-full">
-              <Label className="text-sm">Background Preset</Label>
-              <Select value={bgPreset} onValueChange={applyBgPreset}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {/* ✅ CHANGE 7: make BG_PRESETS disable their transparent options when the other is active */}
-                  {BG_PRESETS.map((p) => {
-                    const isTransparentOption = !!p.transparent;
-                    const disabled = isTransparentOption && transparentMode === "type"; // block bg transparent if typed transparent active
-                    return (
-                      <SelectItem key={p.label} value={p.label} disabled={disabled}>
-                        {p.label}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2 w-full max-w-full">
