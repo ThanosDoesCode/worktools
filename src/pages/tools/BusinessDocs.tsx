@@ -23,8 +23,6 @@ import {
   Download,
 } from "lucide-react";
 import { toast } from "sonner";
-import { NDAGenerator } from "@/components/business-docs/NDAGenerator";
-import { ProposalGenerator } from "@/components/business-docs/ProposalGenerator";
 
 type CurrencyCode =
   | "EUR"
@@ -89,6 +87,35 @@ function formatMoney(amount: number, currency: CurrencyCode) {
 
 function todayISO() {
   return new Date().toISOString().split("T")[0];
+}
+
+/* -----------------------------
+   Print styles – only .print-preview shows on print
+------------------------------*/
+const PRINT_STYLE = `
+@media print {
+  body * { visibility: hidden !important; }
+  .print-preview, .print-preview * { visibility: visible !important; }
+  .print-preview {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    padding: 2rem !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: white !important;
+    color: #1e293b !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+}
+`;
+
+function PrintStyleTag() {
+  return <style dangerouslySetInnerHTML={{ __html: PRINT_STYLE }} />;
 }
 
 /* -----------------------------
@@ -483,12 +510,10 @@ function InvoiceGeneratorEmbedded() {
       </div>
 
       {/* PREVIEW */}
-      <div className="bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none max-h-[700px] overflow-y-auto">
+      <div className="print-preview bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8 max-h-[700px] overflow-y-auto">
         <div className="space-y-6">
           <div className="flex justify-between items-start gap-4">
             <div className="min-w-0">
-              {/* IMPORTANT: these were text-foreground/text-muted-foreground which may become light on white in some themes.
-                  We keep them, but if you ever see low contrast again, change them to text-slate-900 / text-slate-600 */}
               <h2 className="text-2xl font-bold text-foreground break-words">{sellerName || "Your Company"}</h2>
               <p className="text-muted-foreground whitespace-pre-line text-sm mt-1">
                 {sellerAddress || "Your address"}
@@ -892,7 +917,7 @@ function ReceiptGeneratorEmbedded() {
       </div>
 
       {/* Preview */}
-      <div className="bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none">
+      <div className="print-preview bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8">
         <div className="max-w-md mx-auto">
           <div className="text-center">
             <h2 className="text-xl font-bold">{merchantName || "Merchant"}</h2>
@@ -986,7 +1011,7 @@ function ContractLetterGeneratorEmbedded() {
   const [governingLaw, setGoverningLaw] = useState("Governing law: Greece.");
   const [confidentiality, setConfidentiality] = useState(true);
 
-  const [letterBody, setLetterBody] = useState("I’m writing regarding...");
+  const [letterBody, setLetterBody] = useState("I'm writing regarding...");
   const [closing, setClosing] = useState("Sincerely,");
 
   const output = useMemo(() => {
@@ -1111,7 +1136,7 @@ function ContractLetterGeneratorEmbedded() {
     setTerm("This agreement starts on the Effective Date and continues until completed.");
     setGoverningLaw("Governing law: Greece.");
     setConfidentiality(true);
-    setLetterBody("I’m writing regarding...");
+    setLetterBody("I'm writing regarding...");
     setClosing("Sincerely,");
     toast.success("Reset");
   };
@@ -1122,8 +1147,179 @@ function ContractLetterGeneratorEmbedded() {
     <div className="grid lg:grid-cols-2 gap-8">
       {/* Inputs */}
       <div className="space-y-6 print:hidden">
-        {/* ... your inputs stay the same ... */}
-        {/* (You already have them correct above.) */}
+        {/* Template selector */}
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+          <h3 className="font-semibold text-foreground mb-4">Template</h3>
+          <Select value={template} onValueChange={(v) => setTemplate(v as ContractTemplate)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Service Agreement">Service Agreement</SelectItem>
+              <SelectItem value="Simple Contract">Simple Contract</SelectItem>
+              <SelectItem value="Formal Letter">Formal Letter</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Sender / Party A */}
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+          <h3 className="font-semibold text-foreground mb-4">
+            {template === "Formal Letter"
+              ? "From (Sender)"
+              : template === "Simple Contract"
+                ? "Party A"
+                : "Service Provider"}
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <Label>Name</Label>
+              <Input
+                value={senderName}
+                onChange={(e) => setSenderName(e.target.value)}
+                placeholder="Your name or company"
+              />
+            </div>
+            <div>
+              <Label>Address</Label>
+              <Textarea
+                value={senderAddress}
+                onChange={(e) => setSenderAddress(e.target.value)}
+                rows={2}
+                placeholder={"123 Street\nCity, Country"}
+              />
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={senderEmail}
+                onChange={(e) => setSenderEmail(e.target.value)}
+                placeholder="you@email.com"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Recipient / Party B */}
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+          <h3 className="font-semibold text-foreground mb-4">
+            {template === "Formal Letter" ? "To (Recipient)" : template === "Simple Contract" ? "Party B" : "Client"}
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <Label>Name</Label>
+              <Input
+                value={recipientName}
+                onChange={(e) => setRecipientName(e.target.value)}
+                placeholder="Recipient name or company"
+              />
+            </div>
+            <div>
+              <Label>Address</Label>
+              <Textarea
+                value={recipientAddress}
+                onChange={(e) => setRecipientAddress(e.target.value)}
+                rows={2}
+                placeholder={"456 Avenue\nCity, Country"}
+              />
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+                placeholder="them@email.com"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Date + subject (letter) / contract fields */}
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+          <h3 className="font-semibold text-foreground mb-4">Details</h3>
+          <div className="space-y-4">
+            <div>
+              <Label>Date</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+
+            {template === "Formal Letter" && (
+              <>
+                <div>
+                  <Label>Subject</Label>
+                  <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Re: ..." />
+                </div>
+                <div>
+                  <Label>Letter Body</Label>
+                  <Textarea
+                    value={letterBody}
+                    onChange={(e) => setLetterBody(e.target.value)}
+                    rows={5}
+                    placeholder="Write your letter here..."
+                  />
+                </div>
+                <div>
+                  <Label>Closing</Label>
+                  <Input value={closing} onChange={(e) => setClosing(e.target.value)} placeholder="Sincerely," />
+                </div>
+              </>
+            )}
+
+            {(template === "Service Agreement" || template === "Simple Contract") && (
+              <>
+                <div>
+                  <Label>Scope / Service Description</Label>
+                  <Textarea
+                    value={serviceDescription}
+                    onChange={(e) => setServiceDescription(e.target.value)}
+                    rows={3}
+                    placeholder="Describe services or scope..."
+                  />
+                </div>
+                <div>
+                  <Label>Payment Terms</Label>
+                  <Textarea
+                    value={paymentTerms}
+                    onChange={(e) => setPaymentTerms(e.target.value)}
+                    rows={2}
+                    placeholder="Payment due within..."
+                  />
+                </div>
+                <div>
+                  <Label>Term / Duration</Label>
+                  <Textarea
+                    value={term}
+                    onChange={(e) => setTerm(e.target.value)}
+                    rows={2}
+                    placeholder="Duration of the agreement..."
+                  />
+                </div>
+                <div>
+                  <Label>Governing Law</Label>
+                  <Input
+                    value={governingLaw}
+                    onChange={(e) => setGoverningLaw(e.target.value)}
+                    placeholder="Governing law: ..."
+                  />
+                </div>
+                <div className="flex items-center gap-3 pt-2">
+                  <input
+                    type="checkbox"
+                    id="contract-confidentiality"
+                    checked={confidentiality}
+                    onChange={(e) => setConfidentiality(e.target.checked)}
+                    className="w-4 h-4 rounded border-border"
+                  />
+                  <Label htmlFor="contract-confidentiality" className="cursor-pointer">
+                    Include Confidentiality Clause
+                  </Label>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
 
         {/* Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
@@ -1152,8 +1348,472 @@ function ContractLetterGeneratorEmbedded() {
       </div>
 
       {/* Preview */}
-      <div className="bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8 print:p-0 print:border-none">
-        <pre className="tool-preview">{output}</pre>
+      <div className="print-preview bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8">
+        <pre className="tool-preview whitespace-pre-wrap break-words text-sm leading-relaxed">{output}</pre>
+      </div>
+    </div>
+  );
+}
+
+/* -----------------------------
+   NDA Generator (inlined)
+------------------------------*/
+function NDAGenerator() {
+  const [partyAName, setPartyAName] = useState("");
+  const [partyAAddress, setPartyAAddress] = useState("");
+  const [partyBName, setPartyBName] = useState("");
+  const [partyBAddress, setPartyBAddress] = useState("");
+  const [date, setDate] = useState(todayISO());
+  const [purpose, setPurpose] = useState("Evaluation of a potential business relationship.");
+  const [duration, setDuration] = useState("2 years from the Effective Date.");
+  const [governingLaw, setGoverningLaw] = useState("Governing law: Sweden.");
+  const [ndaType, setNdaType] = useState<"Mutual" | "One-Way">("Mutual");
+
+  const output = useMemo(() => {
+    const header = ndaType === "Mutual" ? "MUTUAL NON-DISCLOSURE AGREEMENT" : "NON-DISCLOSURE AGREEMENT";
+    const disclosureClause =
+      ndaType === "Mutual"
+        ? `Each Party may disclose Confidential Information to the other Party solely for the Purpose. Both Parties agree to maintain confidentiality and not disclose, copy, or use such information without prior written consent.`
+        : `Party A may disclose Confidential Information to Party B solely for the Purpose. Party B agrees to maintain confidentiality and not disclose, copy, or use such information without prior written consent of Party A.`;
+
+    return [
+      header,
+      "",
+      `Effective Date: ${date}`,
+      "",
+      `Party A: ${partyAName || "Party A Name"}`,
+      partyAAddress ? `Address: ${partyAAddress}` : "",
+      "",
+      `Party B: ${partyBName || "Party B Name"}`,
+      partyBAddress ? `Address: ${partyBAddress}` : "",
+      "",
+      `1) Purpose`,
+      purpose || "To be defined.",
+      "",
+      `2) Definition of Confidential Information`,
+      `"Confidential Information" means any non-public information disclosed by one Party to the other, whether orally, in writing, electronically, or by any other means, that is designated as confidential or that reasonably should be understood to be confidential.`,
+      "",
+      `3) Obligations`,
+      disclosureClause,
+      "",
+      `4) Exclusions`,
+      `Confidential Information does not include information that: (a) is or becomes publicly known through no fault of the Receiving Party; (b) was already known to the Receiving Party prior to disclosure; (c) is independently developed by the Receiving Party; or (d) is required to be disclosed by law or court order.`,
+      "",
+      `5) Duration`,
+      duration || "To be defined.",
+      "",
+      `6) ${governingLaw || "Governing law: ______."}`,
+      "",
+      `7) Remedies`,
+      `Each Party acknowledges that a breach of this Agreement may cause irreparable harm and that the non-breaching Party shall be entitled to seek equitable remedies, including injunctive relief.`,
+      "",
+      `Signatures`,
+      "",
+      `Party A: _______________________   Date: __________`,
+      `Party B: _______________________   Date: __________`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }, [partyAName, partyAAddress, partyBName, partyBAddress, date, purpose, duration, governingLaw, ndaType]);
+
+  const reset = () => {
+    setPartyAName("");
+    setPartyAAddress("");
+    setPartyBName("");
+    setPartyBAddress("");
+    setDate(todayISO());
+    setPurpose("Evaluation of a potential business relationship.");
+    setDuration("2 years from the Effective Date.");
+    setGoverningLaw("Governing law: Sweden.");
+    setNdaType("Mutual");
+    toast.success("NDA reset");
+  };
+
+  const print = () => window.print();
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-8">
+      <div className="space-y-6 print:hidden">
+        {/* NDA Type */}
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+          <h3 className="font-semibold text-foreground mb-4">NDA Type</h3>
+          <Select value={ndaType} onValueChange={(v) => setNdaType(v as "Mutual" | "One-Way")}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Mutual">Mutual (Both Parties)</SelectItem>
+              <SelectItem value="One-Way">One-Way (Party A → Party B)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Party A */}
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+          <h3 className="font-semibold text-foreground mb-4">Party A</h3>
+          <div className="space-y-4">
+            <div>
+              <Label>Name</Label>
+              <Input
+                value={partyAName}
+                onChange={(e) => setPartyAName(e.target.value)}
+                placeholder="Company or individual name"
+              />
+            </div>
+            <div>
+              <Label>Address</Label>
+              <Textarea
+                value={partyAAddress}
+                onChange={(e) => setPartyAAddress(e.target.value)}
+                rows={2}
+                placeholder={"Street\nCity, Country"}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Party B */}
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+          <h3 className="font-semibold text-foreground mb-4">Party B</h3>
+          <div className="space-y-4">
+            <div>
+              <Label>Name</Label>
+              <Input
+                value={partyBName}
+                onChange={(e) => setPartyBName(e.target.value)}
+                placeholder="Company or individual name"
+              />
+            </div>
+            <div>
+              <Label>Address</Label>
+              <Textarea
+                value={partyBAddress}
+                onChange={(e) => setPartyBAddress(e.target.value)}
+                rows={2}
+                placeholder={"Street\nCity, Country"}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* NDA Details */}
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+          <h3 className="font-semibold text-foreground mb-4">NDA Details</h3>
+          <div className="space-y-4">
+            <div>
+              <Label>Effective Date</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div>
+              <Label>Purpose</Label>
+              <Textarea
+                value={purpose}
+                onChange={(e) => setPurpose(e.target.value)}
+                rows={2}
+                placeholder="Why is this NDA being signed?"
+              />
+            </div>
+            <div>
+              <Label>Duration</Label>
+              <Input
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                placeholder="How long the NDA lasts..."
+              />
+            </div>
+            <div>
+              <Label>Governing Law</Label>
+              <Input
+                value={governingLaw}
+                onChange={(e) => setGoverningLaw(e.target.value)}
+                placeholder="Governing law: ..."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <Button className="h-11" onClick={print}>
+            <Printer className="h-4 w-4 mr-2" /> Print / PDF
+          </Button>
+          <Button variant="outline" className="h-11" onClick={() => copyToClipboard(output)}>
+            <Copy className="h-4 w-4 mr-2" /> Copy
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11"
+            onClick={() => downloadBlob("nda.txt", new Blob([output], { type: "text/plain;charset=utf-8" }))}
+          >
+            <Download className="h-4 w-4 mr-2" /> Download
+          </Button>
+          <Button variant="outline" className="h-11" onClick={reset}>
+            <RotateCcw className="h-4 w-4 mr-2" /> Reset
+          </Button>
+        </div>
+      </div>
+
+      {/* Preview */}
+      <div className="print-preview bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8">
+        <pre className="tool-preview whitespace-pre-wrap break-words text-sm leading-relaxed">{output}</pre>
+      </div>
+    </div>
+  );
+}
+
+/* -----------------------------
+   Proposal Generator (inlined)
+------------------------------*/
+function ProposalGenerator() {
+  const [companyName, setCompanyName] = useState("");
+  const [companyAddress, setCompanyAddress] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [clientAddress, setClientAddress] = useState("");
+  const [date, setDate] = useState(todayISO());
+  const [validUntil, setValidUntil] = useState("");
+  const [projectTitle, setProjectTitle] = useState("Project Proposal");
+  const [executiveSummary, setExecutiveSummary] = useState("Brief overview of the proposed project and objectives.");
+  const [scopeOfWork, setScopeOfWork] = useState("Detailed description of deliverables and responsibilities.");
+  const [timeline, setTimeline] = useState(
+    "Phase 1: Planning – 2 weeks\nPhase 2: Development – 4 weeks\nPhase 3: Delivery – 1 week",
+  );
+  const [pricing, setPricing] = useState("Total project cost: To be discussed.");
+  const [paymentTerms, setPaymentTerms] = useState("50% upfront, 50% upon delivery.");
+  const [termsAndConditions, setTermsAndConditions] = useState(
+    "This proposal is valid for the period stated above. All work is subject to a formal contract.",
+  );
+
+  const output = useMemo(() => {
+    return [
+      `BUSINESS PROPOSAL`,
+      "",
+      `${companyName || "Your Company"}`,
+      companyAddress ? companyAddress : "",
+      "",
+      `Date: ${date}`,
+      validUntil ? `Valid Until: ${validUntil}` : "",
+      "",
+      `Prepared for:`,
+      `${clientName || "Client Name"}`,
+      clientAddress ? clientAddress : "",
+      "",
+      `─────────────────────────────`,
+      "",
+      `Project: ${projectTitle}`,
+      "",
+      `1) Executive Summary`,
+      executiveSummary || "",
+      "",
+      `2) Scope of Work`,
+      scopeOfWork || "",
+      "",
+      `3) Timeline`,
+      timeline || "",
+      "",
+      `4) Pricing`,
+      pricing || "",
+      "",
+      `5) Payment Terms`,
+      paymentTerms || "",
+      "",
+      `6) Terms & Conditions`,
+      termsAndConditions || "",
+      "",
+      `─────────────────────────────`,
+      "",
+      `We look forward to working with you. Please do not hesitate to reach out with any questions.`,
+      "",
+      `Sincerely,`,
+      `${companyName || "Your Company"}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }, [
+    companyName,
+    companyAddress,
+    clientName,
+    clientAddress,
+    date,
+    validUntil,
+    projectTitle,
+    executiveSummary,
+    scopeOfWork,
+    timeline,
+    pricing,
+    paymentTerms,
+    termsAndConditions,
+  ]);
+
+  const reset = () => {
+    setCompanyName("");
+    setCompanyAddress("");
+    setClientName("");
+    setClientAddress("");
+    setDate(todayISO());
+    setValidUntil("");
+    setProjectTitle("Project Proposal");
+    setExecutiveSummary("Brief overview of the proposed project and objectives.");
+    setScopeOfWork("Detailed description of deliverables and responsibilities.");
+    setTimeline("Phase 1: Planning – 2 weeks\nPhase 2: Development – 4 weeks\nPhase 3: Delivery – 1 week");
+    setPricing("Total project cost: To be discussed.");
+    setPaymentTerms("50% upfront, 50% upon delivery.");
+    setTermsAndConditions(
+      "This proposal is valid for the period stated above. All work is subject to a formal contract.",
+    );
+    toast.success("Proposal reset");
+  };
+
+  const print = () => window.print();
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-8">
+      <div className="space-y-6 print:hidden">
+        {/* Your Company */}
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+          <h3 className="font-semibold text-foreground mb-4">Your Company</h3>
+          <div className="space-y-4">
+            <div>
+              <Label>Company Name</Label>
+              <Input
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Your Company Ltd"
+              />
+            </div>
+            <div>
+              <Label>Address</Label>
+              <Textarea
+                value={companyAddress}
+                onChange={(e) => setCompanyAddress(e.target.value)}
+                rows={2}
+                placeholder={"Street\nCity, Country"}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Client */}
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+          <h3 className="font-semibold text-foreground mb-4">Client</h3>
+          <div className="space-y-4">
+            <div>
+              <Label>Client Name</Label>
+              <Input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Client Company" />
+            </div>
+            <div>
+              <Label>Address</Label>
+              <Textarea
+                value={clientAddress}
+                onChange={(e) => setClientAddress(e.target.value)}
+                rows={2}
+                placeholder={"Street\nCity, Country"}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Proposal Details */}
+        <div className="bg-surface-elevated rounded-xl p-5 sm:p-6 border border-border">
+          <h3 className="font-semibold text-foreground mb-4">Proposal Details</h3>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label>Date</Label>
+                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>Valid Until</Label>
+                <Input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <Label>Project Title</Label>
+              <Input
+                value={projectTitle}
+                onChange={(e) => setProjectTitle(e.target.value)}
+                placeholder="Project name..."
+              />
+            </div>
+            <div>
+              <Label>Executive Summary</Label>
+              <Textarea
+                value={executiveSummary}
+                onChange={(e) => setExecutiveSummary(e.target.value)}
+                rows={3}
+                placeholder="Brief overview..."
+              />
+            </div>
+            <div>
+              <Label>Scope of Work</Label>
+              <Textarea
+                value={scopeOfWork}
+                onChange={(e) => setScopeOfWork(e.target.value)}
+                rows={3}
+                placeholder="Deliverables and responsibilities..."
+              />
+            </div>
+            <div>
+              <Label>Timeline</Label>
+              <Textarea
+                value={timeline}
+                onChange={(e) => setTimeline(e.target.value)}
+                rows={3}
+                placeholder={"Phase 1: ...\nPhase 2: ..."}
+              />
+            </div>
+            <div>
+              <Label>Pricing</Label>
+              <Textarea
+                value={pricing}
+                onChange={(e) => setPricing(e.target.value)}
+                rows={2}
+                placeholder="Pricing breakdown..."
+              />
+            </div>
+            <div>
+              <Label>Payment Terms</Label>
+              <Input
+                value={paymentTerms}
+                onChange={(e) => setPaymentTerms(e.target.value)}
+                placeholder="Payment schedule..."
+              />
+            </div>
+            <div>
+              <Label>Terms & Conditions</Label>
+              <Textarea
+                value={termsAndConditions}
+                onChange={(e) => setTermsAndConditions(e.target.value)}
+                rows={2}
+                placeholder="Any terms or conditions..."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <Button className="h-11" onClick={print}>
+            <Printer className="h-4 w-4 mr-2" /> Print / PDF
+          </Button>
+          <Button variant="outline" className="h-11" onClick={() => copyToClipboard(output)}>
+            <Copy className="h-4 w-4 mr-2" /> Copy
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11"
+            onClick={() => downloadBlob("proposal.txt", new Blob([output], { type: "text/plain;charset=utf-8" }))}
+          >
+            <Download className="h-4 w-4 mr-2" /> Download
+          </Button>
+          <Button variant="outline" className="h-11" onClick={reset}>
+            <RotateCcw className="h-4 w-4 mr-2" /> Reset
+          </Button>
+        </div>
+      </div>
+
+      {/* Preview */}
+      <div className="print-preview bg-white text-slate-900 rounded-xl border border-border p-6 sm:p-8">
+        <pre className="tool-preview whitespace-pre-wrap break-words text-sm leading-relaxed">{output}</pre>
       </div>
     </div>
   );
@@ -1200,6 +1860,7 @@ export default function BusinessDocs() {
 
   return (
     <ToolLayout title="Business Docs" description="Invoices, receipts, and contracts — all in one tool.">
+      <PrintStyleTag />
       <Card>
         <CardContent className="p-4 sm:p-6">
           <Tabs defaultValue="invoice" className="w-full">
