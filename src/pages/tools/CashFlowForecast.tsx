@@ -12,39 +12,123 @@ import {
   AlertTriangle,
   CheckCircle,
   Save,
-  FolderOpen,
   Pin,
   Trash2,
+  FolderOpen,
   ArrowLeftRight,
+  BookmarkPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
 const currencies = [
+  // Major
   { code: "EUR", symbol: "€" },
   { code: "USD", symbol: "$" },
   { code: "GBP", symbol: "£" },
   { code: "CHF", symbol: "CHF" },
+  { code: "JPY", symbol: "¥" },
+  { code: "CNY", symbol: "¥" },
+  { code: "HKD", symbol: "HK$" },
+  { code: "SGD", symbol: "S$" },
+  { code: "AUD", symbol: "A$" },
+  { code: "NZD", symbol: "NZ$" },
+  { code: "CAD", symbol: "C$" },
+
+  // Europe
+  { code: "SEK", symbol: "kr" },
+  { code: "NOK", symbol: "kr" },
+  { code: "DKK", symbol: "kr" },
+  { code: "PLN", symbol: "zł" },
+  { code: "CZK", symbol: "Kč" },
+  { code: "HUF", symbol: "Ft" },
+  { code: "RON", symbol: "lei" },
+  { code: "BGN", symbol: "лв" },
+
+  // Middle East
+  { code: "AED", symbol: "د.إ" },
+  { code: "SAR", symbol: "﷼" },
+  { code: "QAR", symbol: "ر.ق" },
+  { code: "ILS", symbol: "₪" },
+  { code: "TRY", symbol: "₺" },
+
+  // Americas
+  { code: "MXN", symbol: "$" },
+  { code: "BRL", symbol: "R$" },
+  { code: "ARS", symbol: "$" },
+  { code: "CLP", symbol: "$" },
+  { code: "COP", symbol: "$" },
+
+  // Africa
+  { code: "ZAR", symbol: "R" },
+  { code: "EGP", symbol: "E£" },
+  { code: "MAD", symbol: "د.م." },
+
+  // Asia / South Asia
+  { code: "INR", symbol: "₹" },
+  { code: "KRW", symbol: "₩" },
+  { code: "IDR", symbol: "Rp" },
+  { code: "MYR", symbol: "RM" },
+  { code: "THB", symbol: "฿" },
+  { code: "VND", symbol: "₫" },
+  { code: "PHP", symbol: "₱" },
+  { code: "PKR", symbol: "₨" },
+  { code: "BDT", symbol: "৳" },
+
+  // Crypto (optional — remove if you don’t want it)
+  { code: "BTC", symbol: "₿" },
+  { code: "ETH", symbol: "Ξ" },
 ];
+
+type ScenarioData = {
+  openingBalance: string;
+  monthlyIncome: string;
+  fixedCosts: string;
+  variableCosts: string;
+  currency: string;
+  targetRunwayMonths: string;
+  cashFloor: string;
+};
 
 type Scenario = {
   id: string;
   name: string;
   pinned?: boolean;
   updatedAt: number;
-  data: {
-    openingBalance: string;
-    monthlyIncome: string;
-    fixedCosts: string;
-    variableCosts: string;
-    currency: string;
-    targetRunwayMonths: string; // new
-    cashFloor: string; // new
-  };
+  data: ScenarioData;
 };
 
-const STORAGE_KEY = "tool.cashflow.scenarios.v1";
-const ACTIVE_KEY = "tool.cashflow.activeScenarioId.v1";
-const COMPARE_KEY = "tool.cashflow.compareScenarioId.v1";
+type Preset = {
+  id: string;
+  name: string;
+  description?: string;
+  kind: "built-in" | "custom";
+  data: Partial<ScenarioData>; // allows presets to only set certain fields
+};
+
+const STORAGE_KEY = "tool.cashflow.scenarios.v2";
+const ACTIVE_KEY = "tool.cashflow.activeScenarioId.v2";
+const COMPARE_KEY = "tool.cashflow.compareScenarioId.v2";
+const PRESETS_KEY = "tool.cashflow.presets.v1";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + "-" + Date.now().toString(36);
@@ -59,6 +143,68 @@ function safeParse<T>(raw: string | null, fallback: T): T {
   }
 }
 
+const BUILT_IN_PRESETS: Preset[] = [
+  {
+    id: "p_base",
+    name: "Base case",
+    description: "Balanced revenue and costs, default runway and floor.",
+    kind: "built-in",
+    data: {
+      openingBalance: "50000",
+      monthlyIncome: "25000",
+      fixedCosts: "15000",
+      variableCosts: "8000",
+      currency: "EUR",
+      targetRunwayMonths: "6",
+      cashFloor: "10000",
+    },
+  },
+  {
+    id: "p_bootstrap",
+    name: "Bootstrap mode",
+    description: "Lower costs, tighter cash floor, slower growth assumptions.",
+    kind: "built-in",
+    data: {
+      fixedCosts: "12000",
+      variableCosts: "5000",
+      targetRunwayMonths: "12",
+      cashFloor: "15000",
+    },
+  },
+  {
+    id: "p_growth",
+    name: "Growth push",
+    description: "Higher variable spend (marketing/COGS) to accelerate growth.",
+    kind: "built-in",
+    data: {
+      variableCosts: "14000",
+      targetRunwayMonths: "6",
+      cashFloor: "8000",
+    },
+  },
+  {
+    id: "p_hiring",
+    name: "Hiring (2 people)",
+    description: "Adds fixed cost headcount pressure (approx).",
+    kind: "built-in",
+    data: {
+      fixedCosts: "21000",
+      targetRunwayMonths: "6",
+      cashFloor: "12000",
+    },
+  },
+  {
+    id: "p_downturn",
+    name: "Downturn (revenue -20%)",
+    description: "Stress test: revenue drops, keep costs constant.",
+    kind: "built-in",
+    data: {
+      // income applied as a % needs logic; we approximate via common input baseline
+      // This preset applies an override relative to current income in code below.
+    },
+  },
+];
+
 export default function CashFlowForecast() {
   // ---- Core inputs (current working state)
   const [openingBalance, setOpeningBalance] = useState<string>("50000");
@@ -67,7 +213,7 @@ export default function CashFlowForecast() {
   const [variableCosts, setVariableCosts] = useState<string>("8000");
   const [currency, setCurrency] = useState("EUR");
 
-  // ---- New: targets
+  // ---- Targets
   const [targetRunwayMonths, setTargetRunwayMonths] = useState<string>("6");
   const [cashFloor, setCashFloor] = useState<string>("10000");
 
@@ -78,13 +224,33 @@ export default function CashFlowForecast() {
   const [activeScenarioId, setActiveScenarioId] = useState<string>("");
   const [compareScenarioId, setCompareScenarioId] = useState<string>("");
 
+  // ---- Presets (moat)
+  const [customPresets, setCustomPresets] = useState<Preset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string>("");
+
+  // ---- Premium dialogs (no browser prompt/confirm)
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [savePresetDialogOpen, setSavePresetDialogOpen] = useState(false);
+  const [deletePresetDialogOpen, setDeletePresetDialogOpen] = useState(false);
+
+  const [draftScenarioName, setDraftScenarioName] = useState("");
+  const [draftPresetName, setDraftPresetName] = useState("");
+  const [presetToDeleteId, setPresetToDeleteId] = useState<string>("");
+
+  const allPresets = useMemo(() => {
+    return [...BUILT_IN_PRESETS, ...customPresets];
+  }, [customPresets]);
+
   // Load from storage once
   useEffect(() => {
     const stored = safeParse<Scenario[]>(localStorage.getItem(STORAGE_KEY), []);
     const storedActive = localStorage.getItem(ACTIVE_KEY) || "";
     const storedCompare = localStorage.getItem(COMPARE_KEY) || "";
+    const storedPresets = safeParse<Preset[]>(localStorage.getItem(PRESETS_KEY), []);
 
-    setScenarios(stored);
+    setCustomPresets(storedPresets);
 
     // If no scenarios exist, create a default
     if (stored.length === 0) {
@@ -111,6 +277,8 @@ export default function CashFlowForecast() {
       return;
     }
 
+    setScenarios(stored);
+
     // Set active scenario
     const defaultActive = storedActive && stored.some((s) => s.id === storedActive) ? storedActive : stored[0].id;
     setActiveScenarioId(defaultActive);
@@ -122,7 +290,7 @@ export default function CashFlowForecast() {
     }
   }, []);
 
-  // Persist scenarios when they change
+  // Persist scenarios & presets
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(scenarios));
   }, [scenarios]);
@@ -135,6 +303,12 @@ export default function CashFlowForecast() {
     if (compareScenarioId) localStorage.setItem(COMPARE_KEY, compareScenarioId);
     else localStorage.removeItem(COMPARE_KEY);
   }, [compareScenarioId]);
+
+  useEffect(() => {
+    localStorage.setItem(PRESETS_KEY, JSON.stringify(customPresets));
+  }, [customPresets]);
+
+  const activeScenario = scenarios.find((s) => s.id === activeScenarioId);
 
   // Apply active scenario to inputs when active changes
   useEffect(() => {
@@ -149,7 +323,7 @@ export default function CashFlowForecast() {
     setCashFloor(s.data.cashFloor);
   }, [activeScenarioId, scenarios]);
 
-  // Auto-save edits back to active scenario (sticky)
+  // Auto-save edits back to active scenario
   useEffect(() => {
     const s = scenarios.find((x) => x.id === activeScenarioId);
     if (!s) return;
@@ -207,22 +381,18 @@ export default function CashFlowForecast() {
     const isWarning = netCashFlow < 0 && runway > 3;
     const isCritical = netCashFlow < 0 && runway <= 3;
 
-    // New: cash floor & target runway checks
     const floor = parseFloat(cashFloor) || 0;
-    const floorBreach = projection.find((p) => p.month > 0 && p.balance < floor);
-    const target = parseInt(targetRunwayMonths || "0", 10) || 0;
-    const meetsTargetRunway = runway === Infinity ? true : runway >= target;
+    const floorBreach = floor > 0 ? projection.find((p) => p.month > 0 && p.balance < floor) : undefined;
 
-    // New: quick levers to hit target (very useful)
-    // If burning: how much extra income or cost reduction needed to meet target runway months
+    const target = parseInt(targetRunwayMonths || "0", 10) || 0;
+    const meetsTargetRunway = target > 0 ? (runway === Infinity ? true : runway >= target) : true;
+
     let neededIncomeDelta = 0;
     let neededCostReduction = 0;
     if (target > 0 && netCashFlow < 0) {
-      // need opening / abs(net) >= target  => abs(net) <= opening/target
-      const maxBurn = opening / target; // allowed burn per month
+      const maxBurn = opening / target;
       const currentBurn = Math.abs(netCashFlow);
       const burnReductionNeeded = Math.max(0, currentBurn - maxBurn);
-      // Burn reduction can come from +income or -expenses
       neededIncomeDelta = burnReductionNeeded;
       neededCostReduction = burnReductionNeeded;
     }
@@ -245,13 +415,10 @@ export default function CashFlowForecast() {
     };
   }, [openingBalance, monthlyIncome, fixedCosts, variableCosts, cashFloor, targetRunwayMonths]);
 
-  const formatCurrency = (amount: number) => {
-    return `${currencySymbol}${amount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-  };
+  const formatCurrency = (amount: number) =>
+    `${currencySymbol}${amount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-  const activeScenario = scenarios.find((s) => s.id === activeScenarioId);
-
-  // Compare scenario calc (same logic, isolated)
+  // Compare scenario calc
   const compareCalculations = useMemo(() => {
     if (!compareScenarioId) return null;
     const s = scenarios.find((x) => x.id === compareScenarioId);
@@ -276,21 +443,202 @@ export default function CashFlowForecast() {
     return {
       id: s.id,
       name: s.name,
-      currency: s.data.currency,
       netCashFlow,
       runway,
       endBalance12: runningBalance,
     };
   }, [compareScenarioId, scenarios]);
 
+  const orderedScenarios = useMemo(() => {
+    return [...scenarios].sort((a, b) => {
+      const ap = a.pinned ? 1 : 0;
+      const bp = b.pinned ? 1 : 0;
+      if (bp !== ap) return bp - ap;
+      return b.updatedAt - a.updatedAt;
+    });
+  }, [scenarios]);
+
+  const maxBalance = Math.max(...calculations.projection.map((p) => Math.abs(p.balance)));
+  const minBalance = Math.min(...calculations.projection.map((p) => p.balance));
+
+  // --------------------
+  // Premium dialog actions
+  // --------------------
+  const openSaveAsDialog = () => {
+    const base = activeScenario?.name ? `${activeScenario.name} (copy)` : "New scenario";
+    setDraftScenarioName(base);
+    setSaveDialogOpen(true);
+  };
+
+  const confirmSaveAsNew = () => {
+    const name = draftScenarioName.trim();
+    if (!name) {
+      toast.error("Please enter a scenario name");
+      return;
+    }
+
+    const next: Scenario = {
+      id: uid(),
+      name,
+      pinned: false,
+      updatedAt: Date.now(),
+      data: {
+        openingBalance,
+        monthlyIncome,
+        fixedCosts,
+        variableCosts,
+        currency,
+        targetRunwayMonths,
+        cashFloor,
+      },
+    };
+
+    setScenarios((prev) => [next, ...prev]);
+    setActiveScenarioId(next.id);
+    setSaveDialogOpen(false);
+    toast.success("Scenario saved");
+  };
+
+  const openRenameDialog = () => {
+    if (!activeScenario) return;
+    setDraftScenarioName(activeScenario.name);
+    setRenameDialogOpen(true);
+  };
+
+  const confirmRename = () => {
+    if (!activeScenario) return;
+    const name = draftScenarioName.trim();
+    if (!name) {
+      toast.error("Please enter a scenario name");
+      return;
+    }
+    setScenarios((prev) => prev.map((s) => (s.id === activeScenario.id ? { ...s, name, updatedAt: Date.now() } : s)));
+    setRenameDialogOpen(false);
+    toast.success("Scenario renamed");
+  };
+
+  const togglePin = () => {
+    if (!activeScenario) return;
+    setScenarios((prev) =>
+      prev.map((s) => (s.id === activeScenario.id ? { ...s, pinned: !s.pinned, updatedAt: Date.now() } : s)),
+    );
+  };
+
+  const openDeleteDialog = () => {
+    if (!activeScenario) return;
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (!activeScenario) return;
+
+    if (scenarios.length <= 1) {
+      toast.error("You need at least 1 scenario");
+      setDeleteDialogOpen(false);
+      return;
+    }
+
+    const remaining = scenarios.filter((s) => s.id !== activeScenario.id);
+    setScenarios(remaining);
+    setActiveScenarioId(remaining[0].id);
+    if (compareScenarioId === activeScenario.id) setCompareScenarioId("");
+    setDeleteDialogOpen(false);
+    toast.success("Scenario deleted");
+  };
+
+  // --------------------
+  // Presets actions
+  // --------------------
+  const applyPreset = (presetId: string) => {
+    const preset = allPresets.find((p) => p.id === presetId);
+    if (!preset) return;
+
+    // Special built-in: downturn (income -20% from current)
+    if (presetId === "p_downturn") {
+      const currentIncome = parseFloat(monthlyIncome) || 0;
+      const nextIncome = Math.max(0, Math.round(currentIncome * 0.8));
+      setMonthlyIncome(String(nextIncome));
+      toast.success("Preset applied: Downturn (revenue -20%)");
+      return;
+    }
+
+    const d = preset.data;
+
+    if (d.openingBalance !== undefined) setOpeningBalance(String(d.openingBalance));
+    if (d.monthlyIncome !== undefined) setMonthlyIncome(String(d.monthlyIncome));
+    if (d.fixedCosts !== undefined) setFixedCosts(String(d.fixedCosts));
+    if (d.variableCosts !== undefined) setVariableCosts(String(d.variableCosts));
+    if (d.currency !== undefined) setCurrency(String(d.currency));
+    if (d.targetRunwayMonths !== undefined) setTargetRunwayMonths(String(d.targetRunwayMonths));
+    if (d.cashFloor !== undefined) setCashFloor(String(d.cashFloor));
+
+    toast.success(`Preset applied: ${preset.name}`);
+  };
+
+  const openSavePresetDialog = () => {
+    setDraftPresetName(activeScenario?.name ? `${activeScenario.name} preset` : "My preset");
+    setSavePresetDialogOpen(true);
+  };
+
+  const confirmSavePreset = () => {
+    const name = draftPresetName.trim();
+    if (!name) {
+      toast.error("Please enter a preset name");
+      return;
+    }
+
+    const next: Preset = {
+      id: uid(),
+      name,
+      description: "Saved from your current inputs.",
+      kind: "custom",
+      data: {
+        openingBalance,
+        monthlyIncome,
+        fixedCosts,
+        variableCosts,
+        currency,
+        targetRunwayMonths,
+        cashFloor,
+      },
+    };
+
+    setCustomPresets((prev) => [next, ...prev]);
+    setSavePresetDialogOpen(false);
+    setSelectedPresetId(next.id);
+    toast.success("Preset saved");
+  };
+
+  const requestDeletePreset = (presetId: string) => {
+    const p = allPresets.find((x) => x.id === presetId);
+    if (!p || p.kind !== "custom") return;
+    setPresetToDeleteId(presetId);
+    setDeletePresetDialogOpen(true);
+  };
+
+  const confirmDeletePreset = () => {
+    const id = presetToDeleteId;
+    if (!id) return;
+    setCustomPresets((prev) => prev.filter((p) => p.id !== id));
+    if (selectedPresetId === id) setSelectedPresetId("");
+    setPresetToDeleteId("");
+    setDeletePresetDialogOpen(false);
+    toast.success("Preset deleted");
+  };
+
+  // --------------------
+  // Copy / Reset
+  // --------------------
   const handleCopy = () => {
     const scenarioName = activeScenario?.name || "Scenario";
+    const runwayText = calculations.runway === Infinity ? "Unlimited (growing cash)" : `${calculations.runway} months`;
+
     const floorText =
       calculations.floor > 0
-        ? `Cash Floor: ${formatCurrency(calculations.floor)}${calculations.floorBreach ? ` (breach at Month ${calculations.floorBreach.month})` : " (not breached)"}`
+        ? `Cash Floor: ${formatCurrency(calculations.floor)}${
+            calculations.floorBreach ? ` (breach at Month ${calculations.floorBreach.month})` : " (not breached)"
+          }`
         : "Cash Floor: —";
-
-    const runwayText = calculations.runway === Infinity ? "Unlimited (growing cash)" : `${calculations.runway} months`;
 
     const targetText =
       calculations.target > 0
@@ -303,11 +651,9 @@ export default function CashFlowForecast() {
         : "";
 
     const compareText = compareCalculations
-      ? `\n\nCompare vs "${compareCalculations.name}":\n• Net Cash Flow: ${formatCurrency(calculations.netCashFlow - compareCalculations.netCashFlow)} delta\n• End Balance (12m): ${formatCurrency(calculations.endBalance12 - compareCalculations.endBalance12)} delta\n• Runway: ${
-          calculations.runway === Infinity || compareCalculations.runway === Infinity
-            ? "—"
-            : `${calculations.runway - compareCalculations.runway} months delta`
-        }`
+      ? `\n\nCompare vs "${compareCalculations.name}":\n• Net Cash Flow delta: ${formatCurrency(
+          calculations.netCashFlow - compareCalculations.netCashFlow,
+        )}\n• End Balance (12m) delta: ${formatCurrency(calculations.endBalance12 - compareCalculations.endBalance12)}`
       : "";
 
     const text = `${scenarioName} — Cash Flow Forecast
@@ -344,74 +690,15 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
     toast.success("Calculator reset");
   };
 
-  // Scenario actions
-  const handleSaveAsNew = () => {
-    const name = prompt("Scenario name?", activeScenario?.name ? `${activeScenario.name} (copy)` : "New scenario");
-    if (!name) return;
-
-    const next: Scenario = {
-      id: uid(),
-      name,
-      pinned: false,
-      updatedAt: Date.now(),
-      data: { openingBalance, monthlyIncome, fixedCosts, variableCosts, currency, targetRunwayMonths, cashFloor },
-    };
-
-    setScenarios((prev) => [next, ...prev]);
-    setActiveScenarioId(next.id);
-    toast.success("Scenario saved");
-  };
-
-  const handleRename = () => {
-    if (!activeScenario) return;
-    const name = prompt("Rename scenario", activeScenario.name);
-    if (!name) return;
-
-    setScenarios((prev) => prev.map((s) => (s.id === activeScenario.id ? { ...s, name, updatedAt: Date.now() } : s)));
-    toast.success("Scenario renamed");
-  };
-
-  const handleTogglePin = () => {
-    if (!activeScenario) return;
-    setScenarios((prev) =>
-      prev.map((s) => (s.id === activeScenario.id ? { ...s, pinned: !s.pinned, updatedAt: Date.now() } : s)),
-    );
-  };
-
-  const handleDelete = () => {
-    if (!activeScenario) return;
-    if (scenarios.length <= 1) {
-      toast.error("You need at least 1 scenario");
-      return;
-    }
-    const ok = confirm(`Delete "${activeScenario.name}"?`);
-    if (!ok) return;
-
-    const remaining = scenarios.filter((s) => s.id !== activeScenario.id);
-    setScenarios(remaining);
-    setActiveScenarioId(remaining[0].id);
-    if (compareScenarioId === activeScenario.id) setCompareScenarioId("");
-    toast.success("Scenario deleted");
-  };
-
-  const orderedScenarios = useMemo(() => {
-    return [...scenarios].sort((a, b) => {
-      const ap = a.pinned ? 1 : 0;
-      const bp = b.pinned ? 1 : 0;
-      if (bp !== ap) return bp - ap;
-      return b.updatedAt - a.updatedAt;
-    });
-  }, [scenarios]);
-
-  const maxBalance = Math.max(...calculations.projection.map((p) => Math.abs(p.balance)));
-  const minBalance = Math.min(...calculations.projection.map((p) => p.balance));
-
   return (
-    <ToolLayout title="Cash Flow Forecast" description="Project your business cash flow, runway, and scenario options">
-      {/* Scenario Bar (mobile-first, moat) */}
+    <ToolLayout
+      title="Cash Flow Forecast"
+      description="Project your business cash flow, runway, scenarios, and presets"
+    >
+      {/* Scenario Bar (mobile-first) */}
       <div className="mb-6 bg-surface-elevated rounded-xl p-4 border border-border">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:items-end">
             <div className="min-w-[220px]">
               <Label>Scenario</Label>
               <Select value={activeScenarioId} onValueChange={setActiveScenarioId}>
@@ -433,12 +720,12 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
               <Label className="flex items-center gap-2">
                 Compare <ArrowLeftRight className="h-4 w-4" />
               </Label>
-              <Select value={compareScenarioId || "none"} onValueChange={(v) => setCompareScenarioId(v === "none" ? "" : v)}>
+              <Select value={compareScenarioId} onValueChange={setCompareScenarioId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Optional" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="">None</SelectItem>
                   {orderedScenarios
                     .filter((s) => s.id !== activeScenarioId)
                     .map((s) => (
@@ -450,19 +737,72 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="min-w-[220px]">
+              <Label>Presets</Label>
+              <Select
+                value={selectedPresetId}
+                onValueChange={(val) => {
+                  setSelectedPresetId(val);
+                  if (val) applyPreset(val);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Apply a preset" />
+                </SelectTrigger>
+                <SelectContent>
+                  {/* Built-in */}
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">Built-in</div>
+                  {BUILT_IN_PRESETS.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+
+                  {/* Custom */}
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground mt-1">Your presets</div>
+                  {customPresets.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">No saved presets yet</div>
+                  ) : (
+                    customPresets.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+
+              <div className="mt-2 flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={openSavePresetDialog}>
+                  <BookmarkPlus className="h-4 w-4 mr-2" /> Save preset
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => requestDeletePreset(selectedPresetId)}
+                  disabled={!selectedPresetId || !customPresets.some((p) => p.id === selectedPresetId)}
+                  title="Delete selected custom preset"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Presets let you apply common scenarios fast (growth, hiring, downturn, etc.).
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={handleRename} disabled={!activeScenario}>
+            <Button variant="outline" onClick={openRenameDialog} disabled={!activeScenario}>
               <FolderOpen className="h-4 w-4 mr-2" /> Rename
             </Button>
-            <Button variant="outline" onClick={handleTogglePin} disabled={!activeScenario}>
+            <Button variant="outline" onClick={togglePin} disabled={!activeScenario}>
               <Pin className="h-4 w-4 mr-2" /> Pin
             </Button>
-            <Button onClick={handleSaveAsNew}>
+            <Button onClick={openSaveAsDialog}>
               <Save className="h-4 w-4 mr-2" /> Save as new
             </Button>
-            <Button variant="outline" onClick={handleDelete} disabled={!activeScenario}>
+            <Button variant="outline" onClick={openDeleteDialog} disabled={!activeScenario}>
               <Trash2 className="h-4 w-4 mr-2" /> Delete
             </Button>
           </div>
@@ -471,7 +811,7 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
         {compareCalculations && (
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <div className="rounded-lg p-3 bg-muted/40 border border-border">
-              <p className="text-xs text-muted-foreground">Δ Net Cash Flow vs {compareCalculations.name}</p>
+              <p className="text-xs text-muted-foreground">Δ Net Cash Flow</p>
               <p className="font-semibold">
                 {formatCurrency(calculations.netCashFlow - compareCalculations.netCashFlow)}
               </p>
@@ -524,6 +864,7 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
                   step="1000"
                   value={openingBalance}
                   onChange={(e) => setOpeningBalance(e.target.value)}
+                  placeholder="50000"
                 />
                 <p className="text-xs text-muted-foreground mt-1">Current cash in bank</p>
               </div>
@@ -537,6 +878,7 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
                   step="1000"
                   value={monthlyIncome}
                   onChange={(e) => setMonthlyIncome(e.target.value)}
+                  placeholder="25000"
                 />
                 <p className="text-xs text-muted-foreground mt-1">Expected monthly revenue</p>
               </div>
@@ -550,6 +892,7 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
                   step="100"
                   value={fixedCosts}
                   onChange={(e) => setFixedCosts(e.target.value)}
+                  placeholder="15000"
                 />
                 <p className="text-xs text-muted-foreground mt-1">Rent, salaries, subscriptions</p>
               </div>
@@ -563,11 +906,11 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
                   step="100"
                   value={variableCosts}
                   onChange={(e) => setVariableCosts(e.target.value)}
+                  placeholder="8000"
                 />
                 <p className="text-xs text-muted-foreground mt-1">COGS, marketing, supplies</p>
               </div>
 
-              {/* New: Targets */}
               <div className="grid sm:grid-cols-2 gap-4 pt-2">
                 <div>
                   <Label htmlFor="targetRunway">Target runway (months)</Label>
@@ -659,7 +1002,7 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
             </div>
           </div>
 
-          {/* New: Target + Floor Insights */}
+          {/* Insights */}
           <div className="bg-surface-elevated rounded-xl p-6 border border-border">
             <h3 className="font-semibold text-foreground mb-3">Insights</h3>
 
@@ -801,6 +1144,137 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
           </div>
         </div>
       </div>
+
+      {/* ---------------- Premium Dialogs ---------------- */}
+
+      {/* Save As New */}
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save forecast as a new scenario</DialogTitle>
+            <DialogDescription>
+              Create a copy you can compare later. Your current scenario keeps auto-saving.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="scenarioNameSave">Scenario name</Label>
+            <Input
+              id="scenarioNameSave"
+              value={draftScenarioName}
+              onChange={(e) => setDraftScenarioName(e.target.value)}
+              placeholder="e.g. Growth push (Q2)"
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              Tip: use names like “Hiring 2”, “Downturn”, “Price increase”.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={confirmSaveAsNew}>
+              <Save className="h-4 w-4 mr-2" /> Save scenario
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename scenario</DialogTitle>
+            <DialogDescription>Give this scenario a clearer name for future comparisons.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="scenarioNameRename">Scenario name</Label>
+            <Input
+              id="scenarioNameRename"
+              value={draftScenarioName}
+              onChange={(e) => setDraftScenarioName(e.target.value)}
+              placeholder="Scenario name"
+              autoFocus
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={confirmRename}>
+              <FolderOpen className="h-4 w-4 mr-2" /> Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete scenario */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this scenario?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove{" "}
+              <span className="font-medium">{activeScenario?.name ?? "this scenario"}</span>. This can’t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Save preset */}
+      <Dialog open={savePresetDialogOpen} onOpenChange={setSavePresetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save a preset</DialogTitle>
+            <DialogDescription>Presets let you apply your favorite configurations instantly.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="presetName">Preset name</Label>
+            <Input
+              id="presetName"
+              value={draftPresetName}
+              onChange={(e) => setDraftPresetName(e.target.value)}
+              placeholder="e.g. My default forecast"
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">Saved presets are stored locally in your browser.</p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSavePresetDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={confirmSavePreset}>
+              <BookmarkPlus className="h-4 w-4 mr-2" /> Save preset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete preset */}
+      <AlertDialog open={deletePresetDialogOpen} onOpenChange={setDeletePresetDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this preset?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the selected custom preset from your browser.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeletePreset}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </ToolLayout>
   );
 }
