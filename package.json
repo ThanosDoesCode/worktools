@@ -13,8 +13,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "qrcode": "^1.5.4",
-    "jsbarcode": "^3.11.6",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -60,7 +58,9 @@
     "heic2any": "^0.0.4",
     "html-minifier-terser": "^7.2.0",
     "html2canvas": "^1.4.1",
+    "idb": "^8.0.0",
     "input-otp": "^1.4.2",
+    "jsbarcode": "^3.11.6",
     "jspdf": "^4.0.0",
     "jspdf-autotable": "^5.0.7",
     "jszip": "^3.10.1",
@@ -71,6 +71,7 @@
     "pdf-lib-with-encrypt": "^1.2.1",
     "pdfjs-dist": "^4.0.0",
     "pptxgenjs": "^3.12.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",

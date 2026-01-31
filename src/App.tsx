@@ -47,6 +47,10 @@ import PDFUnlock from "@/pages/tools/PDFUnlock";
 import GeneratorTools from "./pages/tools/GeneratorTools";
 import BusinessDocs from "./pages/tools/BusinessDocs";
 import CareerKit from "./pages/tools/CareerKit";
+import VaultPage from "./pages/VaultPage";
+import WorkflowsPage from "./pages/WorkflowsPage";
+import PreferencesPage from "./pages/PreferencesPage";
+import TrustCenterPage from "./pages/TrustCenterPage";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +62,10 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/vault" element={<VaultPage />} />
+          <Route path="/workflows" element={<WorkflowsPage />} />
+          <Route path="/preferences" element={<PreferencesPage />} />
+          <Route path="/trust" element={<TrustCenterPage />} />
           <Route path="/tools/margin-vs-markup-calculator" element={<MarginMarkupCalculator />} />
           <Route path="/tools/meeting-cost-calculator" element={<MeetingCostCalculator />} />
           <Route path="/tools/vat-calculator" element={<VATCalculator />} />

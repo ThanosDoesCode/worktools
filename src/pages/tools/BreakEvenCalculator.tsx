@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,6 +6,46 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Copy, RotateCcw, TrendingUp, DollarSign, Package } from "lucide-react";
 import { toast } from "sonner";
+import { PresetsPanel, CopyLinkButton, LocalStatusIndicator } from "@/components/moat";
+import { useMoat } from "@/hooks/useMoat";
+
+const TOOL_SLUG = "break-even-calculator";
+
+interface Settings {
+  fixedCosts: string;
+  variableCost: string;
+  sellingPrice: string;
+  currency: string;
+  [key: string]: unknown;
+}
+
+const DEFAULT_SETTINGS: Settings = {
+  fixedCosts: "5000",
+  variableCost: "25",
+  sellingPrice: "50",
+  currency: "EUR",
+};
+
+const RECOMMENDED_PRESETS = [
+  {
+    id: "saas-startup",
+    name: "SaaS Startup",
+    description: "Typical software-as-a-service model",
+    settings: { fixedCosts: "10000", variableCost: "5", sellingPrice: "49", currency: "USD" },
+  },
+  {
+    id: "ecommerce",
+    name: "E-commerce Product",
+    description: "Physical product with shipping",
+    settings: { fixedCosts: "3000", variableCost: "35", sellingPrice: "79", currency: "EUR" },
+  },
+  {
+    id: "consulting",
+    name: "Consulting Service",
+    description: "Professional services model",
+    settings: { fixedCosts: "8000", variableCost: "50", sellingPrice: "200", currency: "USD" },
+  },
+];
 
 const currencies = [
   { code: "EUR", symbol: "€" },
@@ -15,12 +55,25 @@ const currencies = [
 ];
 
 export default function BreakEvenCalculator() {
-  const [fixedCosts, setFixedCosts] = useState<string>("5000");
-  const [variableCost, setVariableCost] = useState<string>("25");
-  const [sellingPrice, setSellingPrice] = useState<string>("50");
-  const [currency, setCurrency] = useState("EUR");
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
 
+  // Wrapper for moat compatibility
+  const setSettingsForMoat = useCallback((newSettings: Record<string, unknown>) => {
+    setSettings(newSettings as Settings);
+  }, []);
+
+  const moat = useMoat(settings, setSettingsForMoat, {
+    toolSlug: TOOL_SLUG,
+    defaultSettings: DEFAULT_SETTINGS,
+    recommendedPresets: RECOMMENDED_PRESETS,
+  });
+
+  const { fixedCosts, variableCost, sellingPrice, currency } = settings;
   const currencySymbol = currencies.find((c) => c.code === currency)?.symbol || "€";
+
+  const updateSetting = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  }, []);
 
   const calculations = useMemo(() => {
     const fixed = parseFloat(fixedCosts) || 0;
@@ -59,12 +112,13 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
 
     navigator.clipboard.writeText(text);
     toast.success("Results copied to clipboard");
+    
+    // Record to vault
+    moat.recordJob();
   };
 
   const handleReset = () => {
-    setFixedCosts("5000");
-    setVariableCost("25");
-    setSellingPrice("50");
+    moat.resetToDefaults();
     toast.success("Calculator reset");
   };
 
@@ -94,14 +148,35 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
 
   return (
     <ToolLayout title="Break-Even Calculator" description="Find your break-even point in units and revenue">
-      <div className="grid lg:grid-cols-2 gap-8">
+      {/* Trust badges */}
+      <div className="mb-6">
+        <LocalStatusIndicator />
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-8">
+        {/* Presets Panel */}
+        <div className="lg:col-span-1 order-2 lg:order-1">
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={handleReset}
+          />
+        </div>
+
         {/* Input Panel */}
-        <div className="space-y-6">
+        <div className="lg:col-span-1 order-1 lg:order-2 space-y-6">
           <div className="bg-surface-elevated rounded-xl p-6 border border-border">
             <div className="space-y-4">
               <div>
                 <Label htmlFor="currency">Currency</Label>
-                <Select value={currency} onValueChange={setCurrency}>
+                <Select value={currency} onValueChange={(v) => updateSetting("currency", v)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -123,7 +198,7 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
                   min="0"
                   step="100"
                   value={fixedCosts}
-                  onChange={(e) => setFixedCosts(e.target.value)}
+                  onChange={(e) => updateSetting("fixedCosts", e.target.value)}
                   placeholder="5000"
                 />
                 <p className="text-xs text-muted-foreground mt-1">Rent, salaries, insurance, etc.</p>
@@ -137,7 +212,7 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
                   min="0"
                   step="0.01"
                   value={variableCost}
-                  onChange={(e) => setVariableCost(e.target.value)}
+                  onChange={(e) => updateSetting("variableCost", e.target.value)}
                   placeholder="25"
                 />
                 <p className="text-xs text-muted-foreground mt-1">Materials, labor per unit, shipping</p>
@@ -151,7 +226,7 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
                   min="0"
                   step="0.01"
                   value={sellingPrice}
-                  onChange={(e) => setSellingPrice(e.target.value)}
+                  onChange={(e) => updateSetting("sellingPrice", e.target.value)}
                   placeholder="50"
                 />
               </div>
@@ -159,10 +234,11 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Button onClick={handleCopy} className="flex-1">
               <Copy className="h-4 w-4 mr-2" /> Copy Results
             </Button>
+            <CopyLinkButton toolSlug={TOOL_SLUG} currentSettings={settings} />
             <Button variant="outline" onClick={handleReset}>
               <RotateCcw className="h-4 w-4 mr-2" /> Reset
             </Button>
@@ -170,7 +246,7 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
         </div>
 
         {/* Results Panel */}
-        <div className="space-y-6">
+        <div className="lg:col-span-1 order-3 space-y-6">
           {!calculations.isValid ? (
             <div className="bg-destructive/10 rounded-xl p-6 border border-destructive/20">
               <p className="text-destructive font-medium">
@@ -180,7 +256,7 @@ Contribution Margin Ratio: ${calculations.contributionMarginRatio.toFixed(1)}%`;
           ) : (
             <>
               {/* Key Metrics */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div className="bg-primary/10 rounded-xl p-6 border border-primary/20">
                   <div className="flex items-center gap-2 text-primary mb-2">
                     <Package className="h-5 w-5" />
