@@ -94,7 +94,7 @@ const currencies = [
   { code: "PKR", symbol: "₨" },
   { code: "BDT", symbol: "৳" },
 
-  // Crypto (optional — remove if you don’t want it)
+  // Crypto (optional)
   { code: "BTC", symbol: "₿" },
   { code: "ETH", symbol: "Ξ" },
 ];
@@ -122,7 +122,7 @@ type Preset = {
   name: string;
   description?: string;
   kind: "built-in" | "custom";
-  data: Partial<ScenarioData>; // allows presets to only set certain fields
+  data: Partial<ScenarioData>;
 };
 
 const STORAGE_KEY = "tool.cashflow.scenarios.v2";
@@ -196,17 +196,14 @@ const BUILT_IN_PRESETS: Preset[] = [
   {
     id: "p_downturn",
     name: "Downturn (revenue -20%)",
-    description: "Stress test: revenue drops, keep costs constant.",
+    description: "Stress test: revenue drops from your current value.",
     kind: "built-in",
-    data: {
-      // income applied as a % needs logic; we approximate via common input baseline
-      // This preset applies an override relative to current income in code below.
-    },
+    data: {},
   },
 ];
 
 export default function CashFlowForecast() {
-  // ---- Core inputs (current working state)
+  // ---- Core inputs
   const [openingBalance, setOpeningBalance] = useState<string>("50000");
   const [monthlyIncome, setMonthlyIncome] = useState<string>("25000");
   const [fixedCosts, setFixedCosts] = useState<string>("15000");
@@ -219,16 +216,16 @@ export default function CashFlowForecast() {
 
   const currencySymbol = currencies.find((c) => c.code === currency)?.symbol || "€";
 
-  // ---- Scenarios (moat)
+  // ---- Scenarios
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [activeScenarioId, setActiveScenarioId] = useState<string>("");
   const [compareScenarioId, setCompareScenarioId] = useState<string>("");
 
-  // ---- Presets (moat)
+  // ---- Presets
   const [customPresets, setCustomPresets] = useState<Preset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string>("");
 
-  // ---- Premium dialogs (no browser prompt/confirm)
+  // ---- Dialogs
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -239,11 +236,9 @@ export default function CashFlowForecast() {
   const [draftPresetName, setDraftPresetName] = useState("");
   const [presetToDeleteId, setPresetToDeleteId] = useState<string>("");
 
-  const allPresets = useMemo(() => {
-    return [...BUILT_IN_PRESETS, ...customPresets];
-  }, [customPresets]);
+  const allPresets = useMemo(() => [...BUILT_IN_PRESETS, ...customPresets], [customPresets]);
 
-  // Load from storage once
+  // Load from storage
   useEffect(() => {
     const stored = safeParse<Scenario[]>(localStorage.getItem(STORAGE_KEY), []);
     const storedActive = localStorage.getItem(ACTIVE_KEY) || "";
@@ -252,7 +247,6 @@ export default function CashFlowForecast() {
 
     setCustomPresets(storedPresets);
 
-    // If no scenarios exist, create a default
     if (stored.length === 0) {
       const id = uid();
       const base: Scenario = {
@@ -279,18 +273,16 @@ export default function CashFlowForecast() {
 
     setScenarios(stored);
 
-    // Set active scenario
     const defaultActive = storedActive && stored.some((s) => s.id === storedActive) ? storedActive : stored[0].id;
     setActiveScenarioId(defaultActive);
     localStorage.setItem(ACTIVE_KEY, defaultActive);
 
-    // Set compare scenario (optional)
     if (storedCompare && stored.some((s) => s.id === storedCompare)) {
       setCompareScenarioId(storedCompare);
     }
   }, []);
 
-  // Persist scenarios & presets
+  // Persist storage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(scenarios));
   }, [scenarios]);
@@ -323,7 +315,7 @@ export default function CashFlowForecast() {
     setCashFloor(s.data.cashFloor);
   }, [activeScenarioId, scenarios]);
 
-  // Auto-save edits back to active scenario
+  // Auto-save edits to active scenario
   useEffect(() => {
     const s = scenarios.find((x) => x.id === activeScenarioId);
     if (!s) return;
@@ -331,15 +323,7 @@ export default function CashFlowForecast() {
     const next: Scenario = {
       ...s,
       updatedAt: Date.now(),
-      data: {
-        openingBalance,
-        monthlyIncome,
-        fixedCosts,
-        variableCosts,
-        currency,
-        targetRunwayMonths,
-        cashFloor,
-      },
+      data: { openingBalance, monthlyIncome, fixedCosts, variableCosts, currency, targetRunwayMonths, cashFloor },
     };
 
     setScenarios((prev) => prev.map((p) => (p.id === activeScenarioId ? next : p)));
@@ -356,13 +340,9 @@ export default function CashFlowForecast() {
     const netCashFlow = income - totalExpenses;
 
     let runway = 0;
-    if (netCashFlow < 0) {
-      runway = Math.floor(opening / Math.abs(netCashFlow));
-    } else if (netCashFlow === 0) {
-      runway = opening > 0 ? Infinity : 0;
-    } else {
-      runway = Infinity;
-    }
+    if (netCashFlow < 0) runway = Math.floor(opening / Math.abs(netCashFlow));
+    else if (netCashFlow === 0) runway = opening > 0 ? Infinity : 0;
+    else runway = Infinity;
 
     const projection: { month: number; balance: number; income: number; expenses: number; netFlow: number }[] = [];
     let runningBalance = opening;
@@ -440,13 +420,7 @@ export default function CashFlowForecast() {
     let runningBalance = opening;
     for (let month = 1; month <= 12; month++) runningBalance += netCashFlow;
 
-    return {
-      id: s.id,
-      name: s.name,
-      netCashFlow,
-      runway,
-      endBalance12: runningBalance,
-    };
+    return { id: s.id, name: s.name, netCashFlow, runway, endBalance12: runningBalance };
   }, [compareScenarioId, scenarios]);
 
   const orderedScenarios = useMemo(() => {
@@ -461,9 +435,7 @@ export default function CashFlowForecast() {
   const maxBalance = Math.max(...calculations.projection.map((p) => Math.abs(p.balance)));
   const minBalance = Math.min(...calculations.projection.map((p) => p.balance));
 
-  // --------------------
-  // Premium dialog actions
-  // --------------------
+  // ---- Dialog handlers (premium)
   const openSaveAsDialog = () => {
     const base = activeScenario?.name ? `${activeScenario.name} (copy)` : "New scenario";
     setDraftScenarioName(base);
@@ -472,25 +444,14 @@ export default function CashFlowForecast() {
 
   const confirmSaveAsNew = () => {
     const name = draftScenarioName.trim();
-    if (!name) {
-      toast.error("Please enter a scenario name");
-      return;
-    }
+    if (!name) return toast.error("Please enter a scenario name");
 
     const next: Scenario = {
       id: uid(),
       name,
       pinned: false,
       updatedAt: Date.now(),
-      data: {
-        openingBalance,
-        monthlyIncome,
-        fixedCosts,
-        variableCosts,
-        currency,
-        targetRunwayMonths,
-        cashFloor,
-      },
+      data: { openingBalance, monthlyIncome, fixedCosts, variableCosts, currency, targetRunwayMonths, cashFloor },
     };
 
     setScenarios((prev) => [next, ...prev]);
@@ -508,10 +469,8 @@ export default function CashFlowForecast() {
   const confirmRename = () => {
     if (!activeScenario) return;
     const name = draftScenarioName.trim();
-    if (!name) {
-      toast.error("Please enter a scenario name");
-      return;
-    }
+    if (!name) return toast.error("Please enter a scenario name");
+
     setScenarios((prev) => prev.map((s) => (s.id === activeScenario.id ? { ...s, name, updatedAt: Date.now() } : s)));
     setRenameDialogOpen(false);
     toast.success("Scenario renamed");
@@ -546,14 +505,11 @@ export default function CashFlowForecast() {
     toast.success("Scenario deleted");
   };
 
-  // --------------------
-  // Presets actions
-  // --------------------
+  // ---- Presets
   const applyPreset = (presetId: string) => {
     const preset = allPresets.find((p) => p.id === presetId);
     if (!preset) return;
 
-    // Special built-in: downturn (income -20% from current)
     if (presetId === "p_downturn") {
       const currentIncome = parseFloat(monthlyIncome) || 0;
       const nextIncome = Math.max(0, Math.round(currentIncome * 0.8));
@@ -563,7 +519,6 @@ export default function CashFlowForecast() {
     }
 
     const d = preset.data;
-
     if (d.openingBalance !== undefined) setOpeningBalance(String(d.openingBalance));
     if (d.monthlyIncome !== undefined) setMonthlyIncome(String(d.monthlyIncome));
     if (d.fixedCosts !== undefined) setFixedCosts(String(d.fixedCosts));
@@ -582,25 +537,14 @@ export default function CashFlowForecast() {
 
   const confirmSavePreset = () => {
     const name = draftPresetName.trim();
-    if (!name) {
-      toast.error("Please enter a preset name");
-      return;
-    }
+    if (!name) return toast.error("Please enter a preset name");
 
     const next: Preset = {
       id: uid(),
       name,
       description: "Saved from your current inputs.",
       kind: "custom",
-      data: {
-        openingBalance,
-        monthlyIncome,
-        fixedCosts,
-        variableCosts,
-        currency,
-        targetRunwayMonths,
-        cashFloor,
-      },
+      data: { openingBalance, monthlyIncome, fixedCosts, variableCosts, currency, targetRunwayMonths, cashFloor },
     };
 
     setCustomPresets((prev) => [next, ...prev]);
@@ -626,18 +570,14 @@ export default function CashFlowForecast() {
     toast.success("Preset deleted");
   };
 
-  // --------------------
-  // Copy / Reset
-  // --------------------
+  // ---- Copy / Reset
   const handleCopy = () => {
     const scenarioName = activeScenario?.name || "Scenario";
     const runwayText = calculations.runway === Infinity ? "Unlimited (growing cash)" : `${calculations.runway} months`;
 
     const floorText =
       calculations.floor > 0
-        ? `Cash Floor: ${formatCurrency(calculations.floor)}${
-            calculations.floorBreach ? ` (breach at Month ${calculations.floorBreach.month})` : " (not breached)"
-          }`
+        ? `Cash Floor: ${formatCurrency(calculations.floor)}${calculations.floorBreach ? ` (breach at Month ${calculations.floorBreach.month})` : " (not breached)"}`
         : "Cash Floor: —";
 
     const targetText =
@@ -651,9 +591,7 @@ export default function CashFlowForecast() {
         : "";
 
     const compareText = compareCalculations
-      ? `\n\nCompare vs "${compareCalculations.name}":\n• Net Cash Flow delta: ${formatCurrency(
-          calculations.netCashFlow - compareCalculations.netCashFlow,
-        )}\n• End Balance (12m) delta: ${formatCurrency(calculations.endBalance12 - compareCalculations.endBalance12)}`
+      ? `\n\nCompare vs "${compareCalculations.name}":\n• Net Cash Flow delta: ${formatCurrency(calculations.netCashFlow - compareCalculations.netCashFlow)}\n• End Balance (12m) delta: ${formatCurrency(calculations.endBalance12 - compareCalculations.endBalance12)}`
       : "";
 
     const text = `${scenarioName} — Cash Flow Forecast
@@ -695,6 +633,161 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
       title="Cash Flow Forecast"
       description="Project your business cash flow, runway, scenarios, and presets"
     >
+      {/* Scenario Bar (responsive) */}
+      <div className="mb-6 bg-surface-elevated rounded-xl p-4 border border-border">
+        <div className="grid gap-4">
+          {/* Row 1: Selectors */}
+          <div className="grid gap-3 lg:grid-cols-3">
+            {/* Scenario */}
+            <div className="min-w-0">
+              <Label>Scenario</Label>
+              <Select value={activeScenarioId} onValueChange={setActiveScenarioId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pick a scenario" />
+                </SelectTrigger>
+                <SelectContent>
+                  {orderedScenarios.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.pinned ? "📌 " : ""}
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Compare */}
+            <div className="min-w-0">
+              <Label className="flex items-center gap-2">
+                Compare <ArrowLeftRight className="h-4 w-4" />
+              </Label>
+              <Select value={compareScenarioId} onValueChange={setCompareScenarioId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Optional" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {orderedScenarios
+                    .filter((s) => s.id !== activeScenarioId)
+                    .map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.pinned ? "📌 " : ""}
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Presets */}
+            <div className="min-w-0">
+              <Label>Presets</Label>
+              <Select
+                value={selectedPresetId}
+                onValueChange={(val) => {
+                  setSelectedPresetId(val);
+                  if (val) applyPreset(val);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Apply a preset" />
+                </SelectTrigger>
+                <SelectContent>
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">Built-in</div>
+                  {BUILT_IN_PRESETS.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground mt-1">Your presets</div>
+                  {customPresets.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">No saved presets yet</div>
+                  ) : (
+                    customPresets.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+
+              <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                <Button variant="outline" className="flex-1" onClick={openSavePresetDialog}>
+                  <BookmarkPlus className="h-4 w-4 mr-2" /> Save preset
+                </Button>
+                <Button
+                  variant="outline"
+                  className="sm:w-10"
+                  onClick={() => requestDeletePreset(selectedPresetId)}
+                  disabled={!selectedPresetId || !customPresets.some((p) => p.id === selectedPresetId)}
+                  title="Delete selected custom preset"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground mt-2">
+                Presets let you apply common scenarios fast (growth, hiring, downturn, etc.).
+              </p>
+            </div>
+          </div>
+
+          {/* Row 2: Actions */}
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={openRenameDialog}
+              disabled={!activeScenario}
+              className="sm:w-auto w-full"
+            >
+              <FolderOpen className="h-4 w-4 mr-2" /> Rename
+            </Button>
+            <Button variant="outline" onClick={togglePin} disabled={!activeScenario} className="sm:w-auto w-full">
+              <Pin className="h-4 w-4 mr-2" /> Pin
+            </Button>
+            <Button onClick={openSaveAsDialog} className="sm:w-auto w-full">
+              <Save className="h-4 w-4 mr-2" /> Save as new
+            </Button>
+            <Button
+              variant="outline"
+              onClick={openDeleteDialog}
+              disabled={!activeScenario}
+              className="sm:w-auto w-full"
+            >
+              <Trash2 className="h-4 w-4 mr-2" /> Delete
+            </Button>
+          </div>
+
+          {/* Compare summary */}
+          {compareCalculations && (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg p-3 bg-muted/40 border border-border">
+                <p className="text-xs text-muted-foreground">Δ Net Cash Flow</p>
+                <p className="font-semibold">
+                  {formatCurrency(calculations.netCashFlow - compareCalculations.netCashFlow)}
+                </p>
+              </div>
+              <div className="rounded-lg p-3 bg-muted/40 border border-border">
+                <p className="text-xs text-muted-foreground">Δ End Balance (12m)</p>
+                <p className="font-semibold">
+                  {formatCurrency(calculations.endBalance12 - compareCalculations.endBalance12)}
+                </p>
+              </div>
+              <div className="rounded-lg p-3 bg-muted/40 border border-border">
+                <p className="text-xs text-muted-foreground">Δ Runway</p>
+                <p className="font-semibold">
+                  {calculations.runway === Infinity || compareCalculations.runway === Infinity
+                    ? "—"
+                    : `${calculations.runway - compareCalculations.runway} months`}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Input Panel */}
         <div className="space-y-6">
@@ -725,7 +818,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
                   step="1000"
                   value={openingBalance}
                   onChange={(e) => setOpeningBalance(e.target.value)}
-                  placeholder="50000"
                 />
                 <p className="text-xs text-muted-foreground mt-1">Current cash in bank</p>
               </div>
@@ -739,7 +831,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
                   step="1000"
                   value={monthlyIncome}
                   onChange={(e) => setMonthlyIncome(e.target.value)}
-                  placeholder="25000"
                 />
                 <p className="text-xs text-muted-foreground mt-1">Expected monthly revenue</p>
               </div>
@@ -753,7 +844,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
                   step="100"
                   value={fixedCosts}
                   onChange={(e) => setFixedCosts(e.target.value)}
-                  placeholder="15000"
                 />
                 <p className="text-xs text-muted-foreground mt-1">Rent, salaries, subscriptions</p>
               </div>
@@ -767,7 +857,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
                   step="100"
                   value={variableCosts}
                   onChange={(e) => setVariableCosts(e.target.value)}
-                  placeholder="8000"
                 />
                 <p className="text-xs text-muted-foreground mt-1">COGS, marketing, supplies</p>
               </div>
@@ -814,14 +903,9 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
 
         {/* Results Panel */}
         <div className="space-y-6">
-          {/* Key Metrics */}
           <div className="grid grid-cols-2 gap-4">
             <div
-              className={`rounded-xl p-6 border ${
-                calculations.isHealthy
-                  ? "bg-green-500/10 border-green-500/20"
-                  : "bg-destructive/10 border-destructive/20"
-              }`}
+              className={`rounded-xl p-6 border ${calculations.isHealthy ? "bg-green-500/10 border-green-500/20" : "bg-destructive/10 border-destructive/20"}`}
             >
               <div
                 className={`flex items-center gap-2 mb-2 ${calculations.isHealthy ? "text-green-600" : "text-destructive"}`}
@@ -834,22 +918,10 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
             </div>
 
             <div
-              className={`rounded-xl p-6 border ${
-                calculations.isCritical
-                  ? "bg-destructive/10 border-destructive/20"
-                  : calculations.isWarning
-                    ? "bg-yellow-500/10 border-yellow-500/20"
-                    : "bg-green-500/10 border-green-500/20"
-              }`}
+              className={`rounded-xl p-6 border ${calculations.isCritical ? "bg-destructive/10 border-destructive/20" : calculations.isWarning ? "bg-yellow-500/10 border-yellow-500/20" : "bg-green-500/10 border-green-500/20"}`}
             >
               <div
-                className={`flex items-center gap-2 mb-2 ${
-                  calculations.isCritical
-                    ? "text-destructive"
-                    : calculations.isWarning
-                      ? "text-yellow-600"
-                      : "text-green-600"
-                }`}
+                className={`flex items-center gap-2 mb-2 ${calculations.isCritical ? "text-destructive" : calculations.isWarning ? "text-yellow-600" : "text-green-600"}`}
               >
                 {calculations.isCritical ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle className="h-5 w-5" />}
                 <span className="text-sm font-medium">Business Runway</span>
@@ -863,10 +935,8 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
             </div>
           </div>
 
-          {/* Insights */}
           <div className="bg-surface-elevated rounded-xl p-6 border border-border">
             <h3 className="font-semibold text-foreground mb-3">Insights</h3>
-
             <div className="space-y-2 text-sm">
               {calculations.target > 0 && (
                 <p className={calculations.meetsTargetRunway ? "text-green-600" : "text-destructive"}>
@@ -874,14 +944,12 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
                   {calculations.meetsTargetRunway ? "met" : "not met"}
                 </p>
               )}
-
               {calculations.floor > 0 && (
                 <p className={calculations.floorBreach ? "text-destructive" : "text-green-600"}>
                   {calculations.floorBreach ? "⚠️" : "✅"} Cash floor: {formatCurrency(calculations.floor)}{" "}
                   {calculations.floorBreach ? `breached at Month ${calculations.floorBreach.month}` : "not breached"}
                 </p>
               )}
-
               {!calculations.meetsTargetRunway && calculations.netCashFlow < 0 && calculations.target > 0 && (
                 <div className="mt-3 rounded-lg p-3 bg-yellow-500/10 border border-yellow-500/20">
                   <p className="font-medium">To hit your target runway</p>
@@ -897,7 +965,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
             </div>
           </div>
 
-          {/* Status Warning */}
           {calculations.isCritical && (
             <div className="bg-destructive/10 rounded-xl p-4 border border-destructive/20 flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
@@ -911,7 +978,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
             </div>
           )}
 
-          {/* Monthly Breakdown */}
           <div className="bg-surface-elevated rounded-xl p-6 border border-border">
             <h3 className="font-semibold text-foreground mb-4">Monthly Summary</h3>
             <div className="space-y-3">
@@ -940,24 +1006,19 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
             </div>
           </div>
 
-          {/* 12 Month Chart */}
           <div className="bg-surface-elevated rounded-xl p-6 border border-border">
             <h3 className="font-semibold text-foreground mb-4">12-Month Projection</h3>
             <div className="relative h-48">
               {minBalance < 0 && (
                 <div
                   className="absolute left-8 right-0 border-t border-destructive/50 border-dashed"
-                  style={{
-                    bottom: `${(Math.abs(minBalance) / (maxBalance - minBalance)) * 100}%`,
-                  }}
+                  style={{ bottom: `${(Math.abs(minBalance) / (maxBalance - minBalance)) * 100}%` }}
                 />
               )}
-
               <div className="absolute inset-0 flex items-end justify-between gap-1 pl-8">
                 {calculations.projection.map((point, index) => {
                   const height = maxBalance > 0 ? (Math.abs(point.balance) / maxBalance) * 100 : 0;
                   const isNegative = point.balance < 0;
-
                   return (
                     <div
                       key={index}
@@ -973,14 +1034,12 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
                   );
                 })}
               </div>
-
               <div className="absolute left-0 top-0 bottom-0 w-8 flex flex-col justify-between text-xs text-muted-foreground">
                 <span>{formatCurrency(maxBalance)}</span>
                 <span>{formatCurrency(maxBalance / 2)}</span>
                 <span>{currencySymbol}0</span>
               </div>
             </div>
-
             <div className="flex justify-between mt-2 pl-8 text-xs text-muted-foreground">
               <span>Now</span>
               <span>6m</span>
@@ -988,7 +1047,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
             </div>
           </div>
 
-          {/* Projection Table */}
           <div className="bg-surface-elevated rounded-xl p-6 border border-border">
             <h3 className="font-semibold text-foreground mb-4">Monthly Balances</h3>
             <div className="grid grid-cols-4 gap-2 text-sm">
@@ -1006,9 +1064,7 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
         </div>
       </div>
 
-      {/* ---------------- Premium Dialogs ---------------- */}
-
-      {/* Save As New */}
+      {/* Dialogs */}
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1017,7 +1073,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
               Create a copy you can compare later. Your current scenario keeps auto-saving.
             </DialogDescription>
           </DialogHeader>
-
           <div className="space-y-2">
             <Label htmlFor="scenarioNameSave">Scenario name</Label>
             <Input
@@ -1031,7 +1086,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
               Tip: use names like “Hiring 2”, “Downturn”, “Price increase”.
             </p>
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
               Cancel
@@ -1043,14 +1097,12 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
         </DialogContent>
       </Dialog>
 
-      {/* Rename */}
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Rename scenario</DialogTitle>
             <DialogDescription>Give this scenario a clearer name for future comparisons.</DialogDescription>
           </DialogHeader>
-
           <div className="space-y-2">
             <Label htmlFor="scenarioNameRename">Scenario name</Label>
             <Input
@@ -1061,7 +1113,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
               autoFocus
             />
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
               Cancel
@@ -1073,7 +1124,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
         </DialogContent>
       </Dialog>
 
-      {/* Delete scenario */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1090,14 +1140,12 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Save preset */}
       <Dialog open={savePresetDialogOpen} onOpenChange={setSavePresetDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Save a preset</DialogTitle>
             <DialogDescription>Presets let you apply your favorite configurations instantly.</DialogDescription>
           </DialogHeader>
-
           <div className="space-y-2">
             <Label htmlFor="presetName">Preset name</Label>
             <Input
@@ -1109,7 +1157,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
             />
             <p className="text-xs text-muted-foreground">Saved presets are stored locally in your browser.</p>
           </div>
-
           <DialogFooter>
             <Button variant="outline" onClick={() => setSavePresetDialogOpen(false)}>
               Cancel
@@ -1121,7 +1168,6 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
         </DialogContent>
       </Dialog>
 
-      {/* Delete preset */}
       <AlertDialog open={deletePresetDialogOpen} onOpenChange={setDeletePresetDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
