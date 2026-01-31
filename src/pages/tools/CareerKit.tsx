@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,6 +12,9 @@ import { PenTool, FileUser, Mail, Download, Copy, Trash2, Plus, X, Undo2, ArrowL
 import { toast } from "sonner";
 import { Header } from "@/components/layout/Header";
 
+/* -----------------------------
+   Helpers
+------------------------------*/
 function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -27,102 +30,188 @@ function copyToClipboard(text: string) {
 }
 
 /* -----------------------------
-   Presets
-------------------------------*/
-type BgPreset = { label: string; value: string };
-type InkPreset = { label: string; penWidth: number; penColor: string };
-type TypedPreset = { label: string; typedStyle: string; typedSize: number; typedColor: string };
-
-const BG_PRESETS: BgPreset[] = [
-  { label: "White", value: "#ffffff" },
-  { label: "Soft Gray", value: "#f8fafc" },
-  { label: "Warm Paper", value: "#fef3c7" },
-  { label: "Cool Blue", value: "#dbeafe" },
-  { label: "Mint", value: "#dcfce7" },
-  { label: "Rose", value: "#ffe4e6" },
-];
-
-const INK_PRESETS: InkPreset[] = [
-  { label: "Classic Black", penWidth: 3, penColor: "#0f172a" },
-  { label: "Slate", penWidth: 3, penColor: "#334155" },
-  { label: "Bold Black", penWidth: 5, penColor: "#0b1220" },
-  { label: "Green", penWidth: 3, penColor: "#16a34a" },
-  { label: "Red", penWidth: 3, penColor: "#dc2626" },
-  { label: "Purple", penWidth: 3, penColor: "#7c3aed" },
-  { label: "Thin Pen", penWidth: 2, penColor: "#0f172a" },
-  { label: "Marker", penWidth: 8, penColor: "#0f172a" },
-];
-
-const TYPED_PRESETS: TypedPreset[] = [
-  { label: "Cursive Signature", typedStyle: "cursive", typedSize: 56, typedColor: "#0f172a" },
-  { label: "Elegant Serif", typedStyle: "elegant", typedSize: 64, typedColor: "#0f172a" },
-  { label: "Modern Sans", typedStyle: "modern", typedSize: 56, typedColor: "#0f172a" },
-  { label: "Classic Serif", typedStyle: "serif", typedSize: 60, typedColor: "#0f172a" },
-  { label: "Minimal Sans", typedStyle: "sans", typedSize: 56, typedColor: "#334155" },
-  { label: "Bold Dark", typedStyle: "modern", typedSize: 72, typedColor: "#0b1220" },
-];
-
-/* -----------------------------
    Signature Generator
 ------------------------------*/
-type TransparencyMode = "none" | "draw" | "type";
+type InkPreset = {
+  label: string;
+  penWidth: number;
+  penColor: string;
+};
+
+type BgPreset = {
+  label: string;
+  bg?: string;
+  transparent?: boolean;
+};
+
+type TypedPreset = {
+  label: string;
+  typedStyle: "cursive" | "elegant" | "serif" | "modern" | "sans";
+  typedSize: number;
+  typedColor: string;
+  bg?: string;
+  transparent?: boolean;
+};
 
 function SignatureGeneratorEmbedded() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const [mode, setMode] = useState<"draw" | "type">("draw");
-  const [transparentMode, setTransparentMode] = useState<TransparencyMode>("none");
-
   const [penWidth, setPenWidth] = useState(3);
   const [penColor, setPenColor] = useState("#0f172a");
   const [bgColor, setBgColor] = useState("#ffffff");
-  const [strokes, setStrokes] = useState<
-    Array<{ points: Array<{ x: number; y: number }>; width: number; color: string }>
-  >([]);
+  const [strokes, setStrokes] = useState<{ points: { x: number; y: number }[]; width: number; color: string }[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
 
   const [typedName, setTypedName] = useState("Your Name");
   const [typedSize, setTypedSize] = useState(56);
-  const [typedStyle, setTypedStyle] = useState("cursive");
+  const [typedStyle, setTypedStyle] = useState<TypedPreset["typedStyle"]>("cursive");
   const [typedColor, setTypedColor] = useState("#0f172a");
 
-  // Dropdown selections
-  const [bgPreset, setBgPreset] = useState(BG_PRESETS[0].label);
+  // Exclusive transparency mode:
+  // - "draw": exported PNG is transparent ONLY for drawing
+  // - "type": exported PNG is transparent ONLY for typing
+  // - "none": solid background export
+  type TransparentMode = "none" | "draw" | "type";
+  const [transparentMode, setTransparentMode] = useState<TransparentMode>("none");
+  const [bgTransparent, setBgTransparent] = useState(false);
+
+  const setTransparency = (m: TransparentMode) => {
+    setTransparentMode(m);
+    setBgTransparent(m !== "none");
+  };
+
+  /* -----------------------------
+     Presets
+  ------------------------------*/
+  const INK_PRESETS: InkPreset[] = [
+    { label: "Classic Black (3px)", penWidth: 3, penColor: "#0f172a" },
+    { label: "Bold Black (6px)", penWidth: 6, penColor: "#0f172a" },
+    { label: "Marker Black (9px)", penWidth: 9, penColor: "#0f172a" },
+
+    { label: "Ballpoint Blue (3px)", penWidth: 3, penColor: "#1d4ed8" },
+    { label: "Navy Ink (4px)", penWidth: 4, penColor: "#0b1f4a" },
+
+    { label: "Slate Ink (3px)", penWidth: 3, penColor: "#334155" },
+    { label: "Charcoal Ink (4px)", penWidth: 4, penColor: "#111827" },
+
+    { label: "Green Ink (3px)", penWidth: 3, penColor: "#16a34a" },
+    { label: "Emerald Ink (4px)", penWidth: 4, penColor: "#059669" },
+    { label: "Red Ink (3px)", penWidth: 3, penColor: "#dc2626" },
+    { label: "Burgundy Ink (4px)", penWidth: 4, penColor: "#7f1d1d" },
+    { label: "Purple Ink (3px)", penWidth: 3, penColor: "#7c3aed" },
+    { label: "Indigo Ink (4px)", penWidth: 4, penColor: "#4f46e5" },
+  ];
+
+  const BG_PRESETS: BgPreset[] = [
+    { label: "White", bg: "#ffffff" },
+    { label: "Paper (Cool)", bg: "#f8fafc" },
+    { label: "Paper (Warm)", bg: "#fef3c7" },
+    { label: "Soft Blue", bg: "#dbeafe" },
+    { label: "Soft Green", bg: "#dcfce7" },
+    { label: "Soft Pink", bg: "#fce7f3" },
+    { label: "Light Gray", bg: "#f3f4f6" },
+
+    // Transparent for DRAW exports (exclusive with typed transparent)
+    { label: "Transparent Background (Draw PNG)", transparent: true },
+  ];
+
+  const TYPED_PRESETS: TypedPreset[] = [
+    { label: "Cursive — Elegant Black", typedStyle: "cursive", typedSize: 60, typedColor: "#0f172a", bg: "#ffffff" },
+    { label: "Cursive — Slate", typedStyle: "cursive", typedSize: 60, typedColor: "#334155", bg: "#ffffff" },
+    { label: "Cursive — Navy", typedStyle: "cursive", typedSize: 60, typedColor: "#0b1f4a", bg: "#ffffff" },
+    { label: "Cursive — Emerald", typedStyle: "cursive", typedSize: 60, typedColor: "#059669", bg: "#ffffff" },
+    { label: "Cursive — Burgundy", typedStyle: "cursive", typedSize: 60, typedColor: "#7f1d1d", bg: "#ffffff" },
+    { label: "Cursive — Purple", typedStyle: "cursive", typedSize: 60, typedColor: "#7c3aed", bg: "#ffffff" },
+
+    {
+      label: "Elegant Serif — Luxury Black",
+      typedStyle: "elegant",
+      typedSize: 64,
+      typedColor: "#0f172a",
+      bg: "#ffffff",
+    },
+    { label: "Classic Serif — Black", typedStyle: "serif", typedSize: 58, typedColor: "#0f172a", bg: "#ffffff" },
+    { label: "Classic Serif — Slate", typedStyle: "serif", typedSize: 58, typedColor: "#334155", bg: "#ffffff" },
+
+    { label: "Modern Sans — Black", typedStyle: "modern", typedSize: 56, typedColor: "#0f172a", bg: "#ffffff" },
+    { label: "Modern Sans — Blue", typedStyle: "modern", typedSize: 56, typedColor: "#1d4ed8", bg: "#ffffff" },
+    { label: "Simple Sans — Charcoal", typedStyle: "sans", typedSize: 54, typedColor: "#111827", bg: "#ffffff" },
+
+    { label: "Cursive on Warm Paper", typedStyle: "cursive", typedSize: 60, typedColor: "#0f172a", bg: "#fef3c7" },
+    { label: "Modern on Cool Paper", typedStyle: "modern", typedSize: 56, typedColor: "#0f172a", bg: "#f8fafc" },
+
+    // Transparent for TYPE exports (exclusive with draw transparent)
+    { label: "Transparent (Type PNG)", typedStyle: "cursive", typedSize: 60, typedColor: "#0f172a", transparent: true },
+  ];
+
   const [inkPreset, setInkPreset] = useState(INK_PRESETS[0].label);
+  const [bgPreset, setBgPreset] = useState(BG_PRESETS[0].label);
   const [typedPreset, setTypedPreset] = useState(TYPED_PRESETS[0].label);
 
-  const palette = ["#0f172a", "#334155", "#16a34a", "#dc2626", "#7c3aed"];
+  /* -----------------------------
+     IMPORTANT: Light checkerboard ALWAYS
+     (Even in dark mode so black ink is visible)
+  ------------------------------*/
+  const lightCheckerboardStyle: React.CSSProperties = {
+    backgroundColor: "#ffffff",
+    backgroundImage: `
+      linear-gradient(45deg, rgba(0,0,0,.06) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(0,0,0,.06) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(0,0,0,.06) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(0,0,0,.06) 75%)
+    `,
+    backgroundSize: "16px 16px",
+    backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+  };
 
-  // Checkerboard that looks good in dark mode too (always light tiles)
-  const checkerStyle = useMemo<React.CSSProperties>(
-    () => ({
-      backgroundColor: "#ffffff",
-      backgroundImage:
-        "linear-gradient(45deg, rgba(15,23,42,0.10) 25%, transparent 25%)," +
-        "linear-gradient(-45deg, rgba(15,23,42,0.10) 25%, transparent 25%)," +
-        "linear-gradient(45deg, transparent 75%, rgba(15,23,42,0.10) 75%)," +
-        "linear-gradient(-45deg, transparent 75%, rgba(15,23,42,0.10) 75%)",
-      backgroundSize: "24px 24px",
-      backgroundPosition: "0 0, 0 12px, 12px -12px, -12px 0px",
-    }),
-    [],
-  );
+  const previewStyle: React.CSSProperties =
+    transparentMode !== "none" ? lightCheckerboardStyle : { backgroundColor: bgColor };
 
-  const previewSurfaceStyle = useMemo<React.CSSProperties>(() => {
-    const isTransparentForThisMode =
-      (mode === "draw" && transparentMode === "draw") || (mode === "type" && transparentMode === "type");
+  /* -----------------------------
+     Mode switching with mutual reset
+     - When switching to DRAW: deactivate typed transparency preset (if active)
+     - When switching to TYPE: deactivate draw transparency preset (if active)
+  ------------------------------*/
+  const switchToDraw = () => {
+    setMode("draw");
 
-    if (isTransparentForThisMode) {
-      // Force LIGHT checkerboard regardless of theme
-      return checkerStyle;
+    // If type transparency was active, turn it off and reset typed preset
+    if (transparentMode === "type") {
+      setTransparency("none");
+      setBgPreset(BG_PRESETS[0].label);
+      setBgColor(BG_PRESETS[0].bg || "#ffffff");
     }
-    return { backgroundColor: bgColor };
-  }, [bgColor, checkerStyle, mode, transparentMode]);
 
-  const isTransparentForThisMode =
-    (mode === "draw" && transparentMode === "draw") || (mode === "type" && transparentMode === "type");
+    // Reset typed preset selection (deactivate typed option)
+    const tp = TYPED_PRESETS[0];
+    setTypedPreset(tp.label);
+    setTypedStyle(tp.typedStyle);
+    setTypedSize(tp.typedSize);
+    setTypedColor(tp.typedColor);
+  };
 
+  const switchToType = () => {
+    setMode("type");
+
+    // If draw transparency was active, turn it off and reset bg preset
+    if (transparentMode === "draw") {
+      setTransparency("none");
+      setBgPreset(BG_PRESETS[0].label);
+      setBgColor(BG_PRESETS[0].bg || "#ffffff");
+    }
+
+    // Reset ink preset selection (deactivate draw option)
+    const ip = INK_PRESETS[0];
+    setInkPreset(ip.label);
+    setPenWidth(ip.penWidth);
+    setPenColor(ip.penColor);
+  };
+
+  /* -----------------------------
+     Canvas drawing
+  ------------------------------*/
   const drawAll = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -132,19 +221,16 @@ function SignatureGeneratorEmbedded() {
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
 
-    // Clear the canvas in CSS pixels (ctx is scaled to dpr already)
     ctx.clearRect(0, 0, w, h);
 
-    // For preview: if transparent draw enabled, DO NOT paint bg (so we see checker behind)
-    // Otherwise paint the bgColor
-    const shouldPaintBg = !(mode === "draw" && transparentMode === "draw");
-    if (shouldPaintBg) {
+    // Fill background only when not transparent
+    if (!bgTransparent) {
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, w, h);
     }
 
+    // helper line
     if (mode === "draw") {
-      // Baseline guide (nice touch)
       ctx.strokeStyle = "rgba(15, 23, 42, 0.06)";
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -162,9 +248,7 @@ function SignatureGeneratorEmbedded() {
       ctx.lineWidth = s.width;
       ctx.beginPath();
       ctx.moveTo(s.points[0].x, s.points[0].y);
-      for (let i = 1; i < s.points.length; i++) {
-        ctx.lineTo(s.points[i].x, s.points[i].y);
-      }
+      for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
       ctx.stroke();
     }
   };
@@ -202,7 +286,7 @@ function SignatureGeneratorEmbedded() {
   useEffect(() => {
     if (mode === "draw") drawAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [strokes, penWidth, mode, bgColor, transparentMode]);
+  }, [strokes, penWidth, penColor, bgColor, bgTransparent, mode]);
 
   const getPos = (e: PointerEvent) => {
     const canvas = canvasRef.current;
@@ -234,37 +318,20 @@ function SignatureGeneratorEmbedded() {
     });
   };
 
-  const setTransparency = (next: TransparencyMode) => {
-    setTransparentMode(next);
-  };
+  /* -----------------------------
+     Apply Presets
+  ------------------------------*/
+  const applyInkPreset = (label: string) => {
+    const p = INK_PRESETS.find((x) => x.label === label);
+    if (!p) return;
 
-  // Switching modes resets the other mode’s preset/settings
-  // (but does NOT touch background preset/color)
-  const switchToDraw = () => {
-    setMode("draw");
+    // activate draw and reset type
+    switchToDraw();
 
-    // if transparent type was enabled, turn it off (mutual exclusive)
-    if (transparentMode === "type") setTransparency("none");
-
-    // reset typed settings to default preset
-    const tp = TYPED_PRESETS[0];
-    setTypedPreset(tp.label);
-    setTypedStyle(tp.typedStyle);
-    setTypedSize(tp.typedSize);
-    setTypedColor(tp.typedColor);
-  };
-
-  const switchToType = () => {
-    setMode("type");
-
-    // if transparent draw was enabled, turn it off (mutual exclusive)
-    if (transparentMode === "draw") setTransparency("none");
-
-    // reset ink settings to default preset
-    const ip = INK_PRESETS[0];
-    setInkPreset(ip.label);
-    setPenWidth(ip.penWidth);
-    setPenColor(ip.penColor);
+    setInkPreset(label);
+    setPenWidth(p.penWidth);
+    setPenColor(p.penColor);
+    toast.success(`Ink preset: ${p.label}`);
   };
 
   const applyBgPreset = (label: string) => {
@@ -272,32 +339,28 @@ function SignatureGeneratorEmbedded() {
     if (!p) return;
 
     setBgPreset(label);
-    setBgColor(p.value);
 
-    // Choosing an actual background color means "not transparent"
-    setTransparency("none");
-    toast.success(`Background: ${p.label}`);
-  };
+    if (p.transparent) {
+      // transparent background for DRAW only
+      switchToDraw();
+      setTransparency("draw");
+      toast.success("Background: Transparent (Draw exports as transparent PNG)");
+      return;
+    }
 
-  const applyInkPreset = (label: string) => {
-    const p = INK_PRESETS.find((x) => x.label === label);
-    if (!p) return;
-
-    // Activate draw and reset type (without touching background)
-    switchToDraw();
-
-    setInkPreset(label);
-    setPenWidth(p.penWidth);
-    setPenColor(p.penColor);
-
-    toast.success(`Ink preset: ${p.label}`);
+    if (p.bg) {
+      // solid bg disables transparency
+      setTransparency("none");
+      setBgColor(p.bg);
+      toast.success(`Background: ${p.label}`);
+    }
   };
 
   const applyTypedPreset = (label: string) => {
     const p = TYPED_PRESETS.find((x) => x.label === label);
     if (!p) return;
 
-    // Activate type and reset draw (without touching background)
+    // activate type and reset draw
     switchToType();
 
     setTypedPreset(label);
@@ -305,32 +368,44 @@ function SignatureGeneratorEmbedded() {
     setTypedSize(p.typedSize);
     setTypedColor(p.typedColor);
 
-    toast.success(`Typed preset: ${p.label}`);
+    if (p.transparent) {
+      setTransparency("type");
+      toast.success("Typed: Transparent (Type exports as transparent PNG)");
+      return;
+    }
+
+    if (p.bg) {
+      setTransparency("none");
+      setBgColor(p.bg);
+      toast.success(`Typed preset: ${p.label}`);
+    }
   };
 
+  /* -----------------------------
+     Export
+  ------------------------------*/
   const downloadPNG = () => {
-    // Typed mode: export by rendering to a new canvas (better quality)
     if (mode === "type") {
-      const canvas = document.createElement("canvas");
-      const w = 1400;
-      const h = 500;
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
+      const exportCanvas = document.createElement("canvas");
+      const w = 1200;
+      const h = 420;
+      exportCanvas.width = w;
+      exportCanvas.height = h;
+
+      const ctx = exportCanvas.getContext("2d");
       if (!ctx) return;
 
-      const transparent = transparentMode === "type";
-
-      if (!transparent) {
+      // Background: fill only when NOT type-transparent
+      if (transparentMode !== "type") {
         ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, w, h);
-      } // else keep alpha
+      }
 
       ctx.fillStyle = typedColor;
       ctx.textBaseline = "middle";
       ctx.textAlign = "center";
 
-      const fontMap: Record<string, string> = {
+      const fontMap: Record<TypedPreset["typedStyle"], string> = {
         cursive: "cursive",
         serif: "Georgia, serif",
         sans: "Arial, sans-serif",
@@ -338,60 +413,14 @@ function SignatureGeneratorEmbedded() {
         modern: "'Helvetica Neue', sans-serif",
       };
 
-      ctx.font = `${typedSize * 4}px ${fontMap[typedStyle] ?? "cursive"}`;
+      ctx.font = `${typedSize * 4}px ${fontMap[typedStyle]}`;
       ctx.fillText(typedName || "Your Name", w / 2, h / 2);
 
-      canvas.toBlob((b) => b && downloadBlob("signature.png", b));
+      exportCanvas.toBlob((b) => b && downloadBlob("signature.png", b));
       return;
     }
 
-    // Draw mode: if transparent draw enabled, export WITHOUT background
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const w = Math.floor(canvas.clientWidth * dpr);
-    const h = Math.floor(canvas.clientHeight * dpr);
-
-    // Render into an export canvas so we can control alpha/background
-    const exportCanvas = document.createElement("canvas");
-    exportCanvas.width = w;
-    exportCanvas.height = h;
-    const ctx = exportCanvas.getContext("2d");
-    if (!ctx) return;
-
-    // Draw in device pixels, then scale down coordinate system
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    const transparent = transparentMode === "draw";
-
-    if (!transparent) {
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(
-        0,
-        0,
-        exportCanvas.clientWidth || canvas.clientWidth,
-        exportCanvas.clientHeight || canvas.clientHeight,
-      );
-    }
-
-    // no baseline on export
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    for (const s of strokes) {
-      if (s.points.length < 2) continue;
-      ctx.strokeStyle = s.color;
-      ctx.lineWidth = s.width;
-      ctx.beginPath();
-      ctx.moveTo(s.points[0].x, s.points[0].y);
-      for (let i = 1; i < s.points.length; i++) {
-        ctx.lineTo(s.points[i].x, s.points[i].y);
-      }
-      ctx.stroke();
-    }
-
-    exportCanvas.toBlob((b) => b && downloadBlob("signature.png", b));
+    canvasRef.current?.toBlob((b) => b && downloadBlob("signature.png", b));
   };
 
   const isEmpty = strokes.length === 0;
@@ -407,9 +436,10 @@ function SignatureGeneratorEmbedded() {
             ? "Georgia, serif"
             : "Arial, sans-serif";
 
+  const palette = ["#0f172a", "#334155", "#16a34a", "#dc2626", "#7c3aed", "#1d4ed8", "#111827"];
+
   return (
     <div className="space-y-4 w-full max-w-full">
-      {/* Mode switch */}
       <div className="flex gap-2 w-full">
         <Button
           size="sm"
@@ -430,107 +460,21 @@ function SignatureGeneratorEmbedded() {
         </Button>
       </div>
 
-      {/* Presets row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="space-y-2">
-          <Label className="text-sm">Background preset</Label>
-          <Select value={bgPreset} onValueChange={applyBgPreset}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Background preset" />
-            </SelectTrigger>
-            <SelectContent>
-              {BG_PRESETS.map((p) => (
-                <SelectItem key={p.label} value={p.label}>
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label className="text-sm">Ink preset</Label>
-          <Select value={inkPreset} onValueChange={applyInkPreset}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Ink preset" />
-            </SelectTrigger>
-            <SelectContent>
-              {INK_PRESETS.map((p) => (
-                <SelectItem key={p.label} value={p.label}>
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label className="text-sm">Typed preset</Label>
-          <Select value={typedPreset} onValueChange={applyTypedPreset}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Typed preset" />
-            </SelectTrigger>
-            <SelectContent>
-              {TYPED_PRESETS.map((p) => (
-                <SelectItem key={p.label} value={p.label}>
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Transparency (mutually exclusive) */}
-      <div className="rounded-lg border bg-background p-3 sm:p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <div className="text-sm font-medium">Transparency</div>
-            <p className="text-xs text-muted-foreground">
-              Choose one. Transparent export keeps PNG background truly transparent.
-            </p>
-          </div>
-
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              type="button"
-              size="sm"
-              variant={transparentMode === "draw" ? "default" : "outline"}
-              onClick={() => setTransparency(transparentMode === "draw" ? "none" : "draw")}
-            >
-              Transparent (Draw)
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={transparentMode === "type" ? "default" : "outline"}
-              onClick={() => setTransparency(transparentMode === "type" ? "none" : "type")}
-            >
-              Transparent (Type)
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-3 text-xs text-muted-foreground">
-          Active:{" "}
-          <span className="font-medium text-foreground">
-            {transparentMode === "none" ? "None" : transparentMode === "draw" ? "Draw" : "Type"}
-          </span>
-          {isTransparentForThisMode ? (
-            <span className="ml-2">(preview uses checkerboard)</span>
-          ) : (
-            <span className="ml-2">(preview uses background color)</span>
-          )}
-        </div>
-      </div>
-
-      {/* Preview */}
       <div className="rounded-lg border bg-background p-3 sm:p-4 w-full max-w-full">
-        <div className="text-sm font-medium mb-3">Preview</div>
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <div className="text-sm font-medium">Preview</div>
+          <div className="text-xs text-muted-foreground">
+            {transparentMode === "none"
+              ? "Solid background export"
+              : transparentMode === "draw"
+                ? "Transparent export: Draw"
+                : "Transparent export: Type"}
+          </div>
+        </div>
 
         <div
           className="rounded-lg border border-dashed p-3 sm:p-6 flex items-center justify-center min-h-[200px] sm:min-h-[260px] w-full max-w-full"
-          style={previewSurfaceStyle}
+          style={previewStyle}
         >
           {mode === "draw" ? (
             <div ref={wrapRef} className="w-full max-w-full">
@@ -560,8 +504,76 @@ function SignatureGeneratorEmbedded() {
         </div>
       </div>
 
-      {/* Controls */}
+      {/* Presets (Dropdowns) */}
       <div className="rounded-lg border bg-background p-3 sm:p-4 space-y-4 w-full max-w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
+          <div className="space-y-2">
+            <Label className="text-sm">Ink Preset</Label>
+            <Select value={inkPreset} onValueChange={applyInkPreset}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Choose ink preset" />
+              </SelectTrigger>
+              <SelectContent>
+                {INK_PRESETS.map((p) => (
+                  <SelectItem key={p.label} value={p.label}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm">Background Preset</Label>
+            <Select value={bgPreset} onValueChange={applyBgPreset}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Choose background" />
+              </SelectTrigger>
+              <SelectContent>
+                {BG_PRESETS.map((p) => {
+                  const isTransparentOption = !!p.transparent;
+                  const disabled = isTransparentOption && transparentMode === "type";
+                  return (
+                    <SelectItem key={p.label} value={p.label} disabled={disabled}>
+                      {p.label}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+            {transparentMode === "type" && (
+              <p className="text-xs text-muted-foreground">
+                “Transparent Background (Draw PNG)” is disabled while “Transparent (Type PNG)” is active.
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm">Typed Preset</Label>
+            <Select value={typedPreset} onValueChange={applyTypedPreset}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Choose typed preset" />
+              </SelectTrigger>
+              <SelectContent>
+                {TYPED_PRESETS.map((p) => {
+                  const isTransparentOption = !!p.transparent;
+                  const disabled = isTransparentOption && transparentMode === "draw";
+                  return (
+                    <SelectItem key={p.label} value={p.label} disabled={disabled}>
+                      {p.label}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+            {transparentMode === "draw" && (
+              <p className="text-xs text-muted-foreground">
+                “Transparent (Type PNG)” is disabled while “Transparent Background (Draw PNG)” is active.
+              </p>
+            )}
+          </div>
+        </div>
+
         {mode === "draw" ? (
           <>
             <div className="space-y-2 w-full">
@@ -598,6 +610,41 @@ function SignatureGeneratorEmbedded() {
                   ))}
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-2 w-full max-w-full">
+              <Label className="text-sm">Background Color</Label>
+              <div className="flex items-start gap-2 w-full max-w-full">
+                <Input
+                  type="color"
+                  value={bgColor}
+                  onChange={(e) => {
+                    setBgColor(e.target.value);
+                    if (transparentMode !== "none") setTransparency("none");
+                  }}
+                  className="w-12 h-10 p-1 shrink-0"
+                />
+                <div className="flex gap-2 flex-wrap flex-1 min-w-0">
+                  {["#ffffff", "#f8fafc", "#fef3c7", "#dbeafe", "#dcfce7", "#fce7f3", "#f3f4f6"].map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        setBgColor(c);
+                        if (transparentMode !== "none") setTransparency("none");
+                      }}
+                      className={`h-9 w-9 shrink-0 rounded-md border ${bgColor === c ? "ring-2 ring-ring" : ""}`}
+                      style={{ backgroundColor: c }}
+                      aria-label={`Set background ${c}`}
+                    />
+                  ))}
+                </div>
+              </div>
+              {transparentMode !== "none" && (
+                <p className="text-xs text-muted-foreground">
+                  Picking a solid background color turns off transparency.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2 w-full">
@@ -642,7 +689,7 @@ function SignatureGeneratorEmbedded() {
 
             <div className="space-y-2 w-full">
               <Label className="text-sm">Font Style</Label>
-              <Select value={typedStyle} onValueChange={(v) => setTypedStyle(v)}>
+              <Select value={typedStyle} onValueChange={(v) => setTypedStyle(v as any)}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -679,6 +726,41 @@ function SignatureGeneratorEmbedded() {
                 </div>
               </div>
             </div>
+
+            <div className="space-y-2 w-full max-w-full">
+              <Label className="text-sm">Background Color</Label>
+              <div className="flex items-start gap-2 w-full max-w-full">
+                <Input
+                  type="color"
+                  value={bgColor}
+                  onChange={(e) => {
+                    setBgColor(e.target.value);
+                    if (transparentMode !== "none") setTransparency("none");
+                  }}
+                  className="w-12 h-10 p-1 shrink-0"
+                />
+                <div className="flex gap-2 flex-wrap flex-1 min-w-0">
+                  {["#ffffff", "#f8fafc", "#fef3c7", "#dbeafe", "#dcfce7", "#fce7f3", "#f3f4f6"].map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        setBgColor(c);
+                        if (transparentMode !== "none") setTransparency("none");
+                      }}
+                      className={`h-9 w-9 shrink-0 rounded-md border ${bgColor === c ? "ring-2 ring-ring" : ""}`}
+                      style={{ backgroundColor: c }}
+                      aria-label={`Set background ${c}`}
+                    />
+                  ))}
+                </div>
+              </div>
+              {transparentMode !== "none" && (
+                <p className="text-xs text-muted-foreground">
+                  Picking a solid background color turns off transparency.
+                </p>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -704,9 +786,10 @@ function ResumeGeneratorEmbedded() {
   const [summary, setSummary] = useState("");
 
   const [experiences, setExperiences] = useState([{ id: "1", role: "", company: "", start: "", end: "", bullets: "" }]);
+
   const [education, setEducation] = useState([{ id: "1", school: "", degree: "", start: "", end: "", details: "" }]);
 
-  const [skills, setSkills] = useState<Array<{ id: string; name: string }>>([]);
+  const [skills, setSkills] = useState<{ id: string; name: string }[]>([]);
   const [newSkill, setNewSkill] = useState("");
 
   const output = useMemo(() => {
@@ -835,7 +918,6 @@ function ResumeGeneratorEmbedded() {
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
-
                 {skills.length > 0 && (
                   <div className="flex flex-wrap gap-2 pt-2 w-full">
                     {skills.map((skill) => (
@@ -1108,9 +1190,9 @@ ${company}
 
 ${greetings[tone]}
 
-I am writing to express my ${tone === "Enthusiastic" ? "strong " : ""}interest in the ${role || "open position"}${
-      company ? ` at ${company}` : ""
-    }. ${content}
+I am writing to express my ${tone === "Enthusiastic" ? "strong " : ""}interest in the ${
+      role || "open position"
+    }${company ? ` at ${company}` : ""}. ${content}
 
 ${closings[tone]}
 ${fullName}`.trim();
