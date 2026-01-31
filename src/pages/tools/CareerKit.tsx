@@ -135,16 +135,30 @@ function SignatureGeneratorEmbedded() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
-  const DEFAULT = {
+  type SignatureSettings = {
+    mode: string;
+    penWidth: number;
+    penColor: string;
+    bgColor: string;
+    strokes: { points: { x: number; y: number }[]; width: number; color: string }[];
+    typedName: string;
+    typedSize: number;
+    typedStyle: string;
+    typedColor: string;
+    isDrawing?: boolean;
+  };
+
+  const DEFAULT: SignatureSettings = {
     mode: "draw",
     penWidth: 3,
     penColor: "#0f172a",
     bgColor: "#ffffff",
-    strokes: [] as { points: { x: number; y: number }[]; width: number; color: string }[],
+    strokes: [],
     typedName: "Your Name",
     typedSize: 56,
     typedStyle: "cursive",
     typedColor: "#0f172a",
+    isDrawing: false,
   };
 
   const RECOMMENDED = [
@@ -166,13 +180,16 @@ function SignatureGeneratorEmbedded() {
     },
   ];
 
-  const [settings, setSettings] = useState(DEFAULT);
+  const [settings, setSettings] = useState<SignatureSettings>(DEFAULT);
+
+  // Wrapper for moat integration
+  const setSettingsForMoat = (s: Record<string, unknown>) => setSettings(s as SignatureSettings);
 
   // Moat: persist + hydrate
-  useMoat(settings, setSettings, {
+  useMoat(settings as Record<string, unknown>, setSettingsForMoat, {
     toolSlug,
-    defaultSettings: DEFAULT,
-    recommendedPresets: RECOMMENDED,
+    defaultSettings: DEFAULT as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED.map((p) => ({ id: p.name, ...p, settings: p.settings as Record<string, unknown> })),
   });
 
   // Also allow share URL hydration even if Moat share layer isn’t wired yet
@@ -637,10 +654,13 @@ function ResumeGeneratorEmbedded() {
 
   const [settings, setSettings] = useState(DEFAULT);
 
-  useMoat(settings, setSettings, {
+  // Wrapper for moat integration
+  const setSettingsForMoat = (s: Record<string, unknown>) => setSettings(s as typeof DEFAULT);
+
+  useMoat(settings as Record<string, unknown>, setSettingsForMoat, {
     toolSlug,
-    defaultSettings: DEFAULT,
-    recommendedPresets: RECOMMENDED,
+    defaultSettings: DEFAULT as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED.map((p) => ({ id: p.name, ...p, settings: p.settings as Record<string, unknown> })),
   });
 
   useEffect(() => {
@@ -1093,10 +1113,13 @@ function CoverLetterGeneratorEmbedded() {
 
   const [settings, setSettings] = useState(DEFAULT);
 
-  useMoat(settings, setSettings, {
+  // Wrapper for moat integration
+  const setSettingsForMoat = (s: Record<string, unknown>) => setSettings(s as typeof DEFAULT);
+
+  useMoat(settings as Record<string, unknown>, setSettingsForMoat, {
     toolSlug,
-    defaultSettings: DEFAULT,
-    recommendedPresets: RECOMMENDED,
+    defaultSettings: DEFAULT as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED.map((p) => ({ id: p.name, ...p, settings: p.settings as Record<string, unknown> })),
   });
 
   useEffect(() => {
