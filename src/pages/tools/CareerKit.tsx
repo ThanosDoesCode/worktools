@@ -8,11 +8,25 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { PenTool, FileUser, Mail, Download, Copy, Trash2, Plus, X, Undo2, ArrowLeft } from "lucide-react";
+import {
+  PenTool,
+  FileUser,
+  Mail,
+  Download,
+  Copy,
+  Trash2,
+  Plus,
+  X,
+  Undo2,
+  ArrowLeft,
+  Link as LinkIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/Header";
 
-function downloadBlob(filename, blob) {
+import { useMoat } from "@/hooks/useMoat";
+
+function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -21,26 +35,159 @@ function downloadBlob(filename, blob) {
   URL.revokeObjectURL(url);
 }
 
-function copyToClipboard(text) {
-  navigator.clipboard.writeText(text);
+async function copyToClipboard(text: string) {
+  await navigator.clipboard.writeText(text);
   toast.success("Copied to clipboard");
 }
 
+/** Creates a share URL with encoded settings (works even if Moat doesn’t provide share URL helper) */
+function buildShareUrl(toolSlug: string, settings: any) {
+  const base = window.location.origin + window.location.pathname;
+  const payload = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(settings)))));
+  return `${base}?tool=${encodeURIComponent(toolSlug)}&s=${payload}`;
+}
+
+/** Reads ?tool=...&s=... and returns decoded settings if matches current toolSlug */
+function readShareUrl(toolSlug: string) {
+  const params = new URLSearchParams(window.location.search);
+  const t = params.get("tool");
+  const s = params.get("s");
+  if (!t || !s) return null;
+  if (t !== toolSlug) return null;
+
+  try {
+    const json = decodeURIComponent(escape(atob(decodeURIComponent(s))));
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function MoatPanel({
+  toolSlug,
+  settings,
+  setSettings,
+  defaultSettings,
+  recommendedPresets,
+}: {
+  toolSlug: string;
+  settings: any;
+  setSettings: (fn: any) => void;
+  defaultSettings: any;
+  recommendedPresets: { name: string; settings: any }[];
+}) {
+  const copyShare = async () => {
+    const url = buildShareUrl(toolSlug, settings);
+    await copyToClipboard(url);
+    toast.success("Share link copied");
+  };
+
+  return (
+    <div className="rounded-lg border bg-background p-3 sm:p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-medium">Presets</div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={copyShare}>
+            <LinkIcon className="w-4 h-4 mr-2" /> Copy Link
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setSettings(() => ({ ...defaultSettings }));
+              toast.success("Reset");
+            }}
+          >
+            Reset
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {recommendedPresets.map((p) => (
+          <Button
+            key={p.name}
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setSettings(() => ({ ...p.settings }));
+              toast.success(`Applied: ${p.name}`);
+            }}
+          >
+            {p.name}
+          </Button>
+        ))}
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Tip: presets + link make this tool “shareable”. You can save favorite defaults later via Moat.
+      </p>
+    </div>
+  );
+}
+
+/* =============================
+   SIGNATURE (MOAT ENABLED)
+============================= */
 function SignatureGeneratorEmbedded() {
-  const canvasRef = useRef(null);
-  const wrapRef = useRef(null);
+  const toolSlug = "career-kit-signature";
 
-  const [mode, setMode] = useState("draw");
-  const [penWidth, setPenWidth] = useState(3);
-  const [penColor, setPenColor] = useState("#0f172a");
-  const [bgColor, setBgColor] = useState("#ffffff");
-  const [strokes, setStrokes] = useState([]);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
 
-  const [typedName, setTypedName] = useState("Your Name");
-  const [typedSize, setTypedSize] = useState(56);
-  const [typedStyle, setTypedStyle] = useState("cursive");
-  const [typedColor, setTypedColor] = useState("#0f172a");
+  const DEFAULT = {
+    mode: "draw",
+    penWidth: 3,
+    penColor: "#0f172a",
+    bgColor: "#ffffff",
+    strokes: [] as { points: { x: number; y: number }[]; width: number; color: string }[],
+    typedName: "Your Name",
+    typedSize: 56,
+    typedStyle: "cursive",
+    typedColor: "#0f172a",
+  };
+
+  const RECOMMENDED = [
+    {
+      name: "Classic (Black)",
+      settings: { ...DEFAULT, penColor: "#0f172a", typedColor: "#0f172a", bgColor: "#ffffff" },
+    },
+    {
+      name: "Blue Ink",
+      settings: { ...DEFAULT, penColor: "#1d4ed8", typedColor: "#1d4ed8", bgColor: "#ffffff" },
+    },
+    {
+      name: "Green Ink",
+      settings: { ...DEFAULT, penColor: "#16a34a", typedColor: "#16a34a", bgColor: "#ffffff" },
+    },
+    {
+      name: "Warm Paper",
+      settings: { ...DEFAULT, bgColor: "#fef3c7" },
+    },
+  ];
+
+  const [settings, setSettings] = useState(DEFAULT);
+
+  // Moat: persist + hydrate
+  useMoat(settings, setSettings, {
+    toolSlug,
+    defaultSettings: DEFAULT,
+    recommendedPresets: RECOMMENDED,
+  });
+
+  // Also allow share URL hydration even if Moat share layer isn’t wired yet
+  useEffect(() => {
+    const shared = readShareUrl(toolSlug);
+    if (shared) {
+      setSettings((prev: any) => ({ ...prev, ...shared }));
+      toast.success("Loaded from shared link");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const { mode, penWidth, penColor, bgColor, strokes, typedName, typedSize, typedStyle, typedColor } = settings;
+
+  const set = (patch: any) => setSettings((p: any) => ({ ...p, ...patch }));
 
   const drawAll = () => {
     const canvas = canvasRef.current;
@@ -107,41 +254,44 @@ function SignatureGeneratorEmbedded() {
     const ro = new ResizeObserver(() => resizeCanvas());
     if (wrapRef.current) ro.observe(wrapRef.current);
     return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   useEffect(() => {
     if (mode === "draw") drawAll();
-  }, [strokes, penWidth, mode, bgColor]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strokes, penWidth, mode, bgColor, penColor]);
 
-  const getPos = (e) => {
+  const getPos = (e: any) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
 
-  const onPointerDown = (e) => {
+  const onPointerDown = (e: any) => {
     if (mode !== "draw") return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     canvas.setPointerCapture(e.pointerId);
-    setIsDrawing(true);
-
     const pos = getPos(e.nativeEvent);
-    setStrokes((prev) => [...prev, { points: [pos], width: penWidth, color: penColor }]);
+    set({ strokes: [...strokes, { points: [pos], width: penWidth, color: penColor }], isDrawing: true });
   };
 
-  const onPointerMove = (e) => {
-    if (mode !== "draw" || !isDrawing) return;
+  const onPointerMove = (e: any) => {
+    if (mode !== "draw" || !settings.isDrawing) return;
     const pos = getPos(e.nativeEvent);
-    setStrokes((prev) => {
-      const last = prev[prev.length - 1];
+
+    setSettings((prev: any) => {
+      const last = prev.strokes[prev.strokes.length - 1];
       if (!last) return prev;
       const updated = { ...last, points: [...last.points, pos] };
-      return [...prev.slice(0, -1), updated];
+      return { ...prev, strokes: [...prev.strokes.slice(0, -1), updated] };
     });
   };
+
+  const stopDrawing = () => set({ isDrawing: false });
 
   const downloadPNG = () => {
     if (mode === "type") {
@@ -160,13 +310,14 @@ function SignatureGeneratorEmbedded() {
       ctx.textBaseline = "middle";
       ctx.textAlign = "center";
 
-      const fontMap = {
+      const fontMap: any = {
         cursive: "cursive",
         serif: "Georgia, serif",
         sans: "Arial, sans-serif",
         elegant: "'Times New Roman', serif",
         modern: "'Helvetica Neue', sans-serif",
       };
+
       ctx.font = `${typedSize * 4}px ${fontMap[typedStyle]}`;
       ctx.fillText(typedName || "Your Name", w / 2, h / 2);
 
@@ -194,11 +345,19 @@ function SignatureGeneratorEmbedded() {
 
   return (
     <div className="space-y-4 w-full max-w-full">
+      <MoatPanel
+        toolSlug={toolSlug}
+        settings={settings}
+        setSettings={setSettings}
+        defaultSettings={DEFAULT}
+        recommendedPresets={RECOMMENDED}
+      />
+
       <div className="flex gap-2 w-full">
         <Button
           size="sm"
           variant={mode === "draw" ? "default" : "outline"}
-          onClick={() => setMode("draw")}
+          onClick={() => set({ mode: "draw" })}
           className="flex-1 sm:flex-none min-w-0"
         >
           <PenTool className="w-4 h-4 mr-2 shrink-0" />
@@ -207,7 +366,7 @@ function SignatureGeneratorEmbedded() {
         <Button
           size="sm"
           variant={mode === "type" ? "default" : "outline"}
-          onClick={() => setMode("type")}
+          onClick={() => set({ mode: "type" })}
           className="flex-1 sm:flex-none min-w-0"
         >
           <span className="truncate">Type</span>
@@ -227,8 +386,8 @@ function SignatureGeneratorEmbedded() {
                 className="w-full max-w-full rounded-md border bg-transparent touch-none cursor-crosshair"
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
-                onPointerUp={() => setIsDrawing(false)}
-                onPointerCancel={() => setIsDrawing(false)}
+                onPointerUp={stopDrawing}
+                onPointerCancel={stopDrawing}
               />
             </div>
           ) : (
@@ -255,7 +414,7 @@ function SignatureGeneratorEmbedded() {
               <Label className="text-sm">Pen Width: {penWidth}px</Label>
               <Slider
                 value={[penWidth]}
-                onValueChange={(v) => setPenWidth(v[0])}
+                onValueChange={(v) => set({ penWidth: v[0] })}
                 min={1}
                 max={12}
                 step={1}
@@ -269,7 +428,7 @@ function SignatureGeneratorEmbedded() {
                 <Input
                   type="color"
                   value={penColor}
-                  onChange={(e) => setPenColor(e.target.value)}
+                  onChange={(e) => set({ penColor: e.target.value })}
                   className="w-12 h-10 p-1 shrink-0"
                 />
                 <div className="flex gap-2 flex-wrap flex-1 min-w-0">
@@ -277,7 +436,7 @@ function SignatureGeneratorEmbedded() {
                     <button
                       key={c}
                       type="button"
-                      onClick={() => setPenColor(c)}
+                      onClick={() => set({ penColor: c })}
                       className={`h-9 w-9 shrink-0 rounded-md border ${penColor === c ? "ring-2 ring-ring" : ""}`}
                       style={{ backgroundColor: c }}
                       aria-label={`Set pen color ${c}`}
@@ -293,7 +452,7 @@ function SignatureGeneratorEmbedded() {
                 <Input
                   type="color"
                   value={bgColor}
-                  onChange={(e) => setBgColor(e.target.value)}
+                  onChange={(e) => set({ bgColor: e.target.value })}
                   className="w-12 h-10 p-1 shrink-0"
                 />
                 <div className="flex gap-2 flex-wrap flex-1 min-w-0">
@@ -301,7 +460,7 @@ function SignatureGeneratorEmbedded() {
                     <button
                       key={c}
                       type="button"
-                      onClick={() => setBgColor(c)}
+                      onClick={() => set({ bgColor: c })}
                       className={`h-9 w-9 shrink-0 rounded-md border ${bgColor === c ? "ring-2 ring-ring" : ""}`}
                       style={{ backgroundColor: c }}
                       aria-label={`Set background ${c}`}
@@ -315,7 +474,7 @@ function SignatureGeneratorEmbedded() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setStrokes((prev) => prev.slice(0, -1))}
+                onClick={() => set({ strokes: strokes.slice(0, -1) })}
                 disabled={isEmpty}
                 className="w-full min-w-0"
               >
@@ -324,7 +483,7 @@ function SignatureGeneratorEmbedded() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setStrokes([])}
+                onClick={() => set({ strokes: [] })}
                 disabled={isEmpty}
                 className="hover:text-destructive w-full min-w-0"
               >
@@ -336,14 +495,14 @@ function SignatureGeneratorEmbedded() {
           <>
             <div className="space-y-2 w-full">
               <Label className="text-sm">Name</Label>
-              <Input value={typedName} onChange={(e) => setTypedName(e.target.value)} className="w-full" />
+              <Input value={typedName} onChange={(e) => set({ typedName: e.target.value })} className="w-full" />
             </div>
 
             <div className="space-y-2 w-full">
               <Label className="text-sm">Font Size: {typedSize}px</Label>
               <Slider
                 value={[typedSize]}
-                onValueChange={(v) => setTypedSize(v[0])}
+                onValueChange={(v) => set({ typedSize: v[0] })}
                 min={28}
                 max={120}
                 step={4}
@@ -353,7 +512,7 @@ function SignatureGeneratorEmbedded() {
 
             <div className="space-y-2 w-full">
               <Label className="text-sm">Font Style</Label>
-              <Select value={typedStyle} onValueChange={(v) => setTypedStyle(v)}>
+              <Select value={typedStyle} onValueChange={(v) => set({ typedStyle: v })}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -373,7 +532,7 @@ function SignatureGeneratorEmbedded() {
                 <Input
                   type="color"
                   value={typedColor}
-                  onChange={(e) => setTypedColor(e.target.value)}
+                  onChange={(e) => set({ typedColor: e.target.value })}
                   className="w-12 h-10 p-1 shrink-0"
                 />
                 <div className="flex gap-2 flex-wrap flex-1 min-w-0">
@@ -381,7 +540,7 @@ function SignatureGeneratorEmbedded() {
                     <button
                       key={c}
                       type="button"
-                      onClick={() => setTypedColor(c)}
+                      onClick={() => set({ typedColor: c })}
                       className={`h-9 w-9 shrink-0 rounded-md border ${typedColor === c ? "ring-2 ring-ring" : ""}`}
                       style={{ backgroundColor: c }}
                       aria-label={`Set text color ${c}`}
@@ -397,7 +556,7 @@ function SignatureGeneratorEmbedded() {
                 <Input
                   type="color"
                   value={bgColor}
-                  onChange={(e) => setBgColor(e.target.value)}
+                  onChange={(e) => set({ bgColor: e.target.value })}
                   className="w-12 h-10 p-1 shrink-0"
                 />
                 <div className="flex gap-2 flex-wrap flex-1 min-w-0">
@@ -405,7 +564,7 @@ function SignatureGeneratorEmbedded() {
                     <button
                       key={c}
                       type="button"
-                      onClick={() => setBgColor(c)}
+                      onClick={() => set({ bgColor: c })}
                       className={`h-9 w-9 shrink-0 rounded-md border ${bgColor === c ? "ring-2 ring-ring" : ""}`}
                       style={{ backgroundColor: c }}
                       aria-label={`Set background ${c}`}
@@ -425,30 +584,86 @@ function SignatureGeneratorEmbedded() {
   );
 }
 
+/* =============================
+   RESUME (MOAT ENABLED)
+============================= */
 function ResumeGeneratorEmbedded() {
-  const [fullName, setFullName] = useState("");
-  const [title, setTitle] = useState("");
-  const [location, setLocation] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [website, setWebsite] = useState("");
-  const [linkedin, setLinkedin] = useState("");
-  const [summary, setSummary] = useState("");
+  const toolSlug = "career-kit-resume";
 
-  const [experiences, setExperiences] = useState([{ id: "1", role: "", company: "", start: "", end: "", bullets: "" }]);
+  const DEFAULT = {
+    fullName: "",
+    title: "",
+    location: "",
+    email: "",
+    phone: "",
+    website: "",
+    linkedin: "",
+    summary: "",
+    experiences: [{ id: "1", role: "", company: "", start: "", end: "", bullets: "" }],
+    education: [{ id: "1", school: "", degree: "", start: "", end: "", details: "" }],
+    skills: [] as { id: string; name: string }[],
+    newSkill: "",
+  };
 
-  const [education, setEducation] = useState([{ id: "1", school: "", degree: "", start: "", end: "", details: "" }]);
+  const RECOMMENDED = [
+    { name: "Simple Starter", settings: { ...DEFAULT, summary: "Results-driven professional with experience in..." } },
+    {
+      name: "Sales Profile",
+      settings: {
+        ...DEFAULT,
+        title: "Sales / Business Development",
+        summary: "Commercial leader with proven growth, pipeline, and negotiation experience.",
+        skills: [
+          { id: "1", name: "Prospecting" },
+          { id: "2", name: "Negotiation" },
+          { id: "3", name: "CRM" },
+        ],
+      },
+    },
+    {
+      name: "Tech Profile",
+      settings: {
+        ...DEFAULT,
+        title: "Software / Web Developer",
+        summary: "Builder mindset. I ship fast, clean products with strong UX.",
+        skills: [
+          { id: "1", name: "React" },
+          { id: "2", name: "TypeScript" },
+          { id: "3", name: "Supabase" },
+        ],
+      },
+    },
+  ];
 
-  const [skills, setSkills] = useState([]);
-  const [newSkill, setNewSkill] = useState("");
+  const [settings, setSettings] = useState(DEFAULT);
+
+  useMoat(settings, setSettings, {
+    toolSlug,
+    defaultSettings: DEFAULT,
+    recommendedPresets: RECOMMENDED,
+  });
+
+  useEffect(() => {
+    const shared = readShareUrl(toolSlug);
+    if (shared) {
+      setSettings((prev: any) => ({ ...prev, ...shared }));
+      toast.success("Loaded from shared link");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const set = (patch: any) => setSettings((p: any) => ({ ...p, ...patch }));
 
   const output = useMemo(() => {
+    const { fullName, title, location, email, phone, website, linkedin, summary, experiences, education, skills } =
+      settings;
+
     const contacts = [location, email, phone, website, linkedin].filter(Boolean);
     const headerLine = contacts.length > 0 ? contacts.join(" • ") : "";
 
     const expBlock = experiences
-      .filter((e) => e.role || e.company)
-      .map((e) => {
+      .filter((e: any) => e.role || e.company)
+      .map((e: any) => {
         const dates = [e.start, e.end].filter(Boolean).join(" – ");
         const top = [e.role, e.company].filter(Boolean).join(" @ ");
         return `${top}${dates ? ` (${dates})` : ""}\n${e.bullets || ""}`.trim();
@@ -456,15 +671,15 @@ function ResumeGeneratorEmbedded() {
       .join("\n\n");
 
     const eduBlock = education
-      .filter((ed) => ed.school || ed.degree)
-      .map((ed) => {
+      .filter((ed: any) => ed.school || ed.degree)
+      .map((ed: any) => {
         const dates = [ed.start, ed.end].filter(Boolean).join(" – ");
         const top = [ed.degree, ed.school].filter(Boolean).join(", ");
         return `${top}${dates ? ` (${dates})` : ""}${ed.details ? `\n${ed.details}` : ""}`.trim();
       })
       .join("\n\n");
 
-    const skillsBlock = skills.length > 0 ? skills.map((s) => s.name).join(" • ") : "";
+    const skillsBlock = skills.length > 0 ? skills.map((s: any) => s.name).join(" • ") : "";
 
     let result = `${(fullName || "YOUR NAME").toUpperCase()}\n${title || ""}`;
     if (headerLine) result += `\n${headerLine}`;
@@ -474,16 +689,26 @@ function ResumeGeneratorEmbedded() {
     if (eduBlock) result += `\n\nEDUCATION\n${eduBlock}`;
 
     return result.trim();
-  }, [fullName, title, location, email, phone, website, linkedin, summary, experiences, education, skills]);
+  }, [settings]);
 
   const addSkill = () => {
-    if (!newSkill.trim()) return;
-    setSkills((prev) => [...prev, { id: Date.now().toString(), name: newSkill.trim() }]);
-    setNewSkill("");
+    if (!settings.newSkill.trim()) return;
+    set({
+      skills: [...settings.skills, { id: Date.now().toString(), name: settings.newSkill.trim() }],
+      newSkill: "",
+    });
   };
 
   return (
     <div className="space-y-4 w-full max-w-full">
+      <MoatPanel
+        toolSlug={toolSlug}
+        settings={settings}
+        setSettings={setSettings}
+        defaultSettings={DEFAULT}
+        recommendedPresets={RECOMMENDED}
+      />
+
       <Card className="shadow-none lg:hidden w-full max-w-full">
         <CardContent className="pt-4 sm:pt-6 w-full">
           <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
@@ -516,39 +741,55 @@ function ResumeGeneratorEmbedded() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
                 <div className="space-y-2 w-full">
                   <Label className="text-sm">Full Name</Label>
-                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full" />
+                  <Input
+                    value={settings.fullName}
+                    onChange={(e) => set({ fullName: e.target.value })}
+                    className="w-full"
+                  />
                 </div>
                 <div className="space-y-2 w-full">
                   <Label className="text-sm">Job Title</Label>
-                  <Input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full" />
+                  <Input value={settings.title} onChange={(e) => set({ title: e.target.value })} className="w-full" />
                 </div>
                 <div className="space-y-2 w-full">
                   <Label className="text-sm">Location</Label>
-                  <Input value={location} onChange={(e) => setLocation(e.target.value)} className="w-full" />
+                  <Input
+                    value={settings.location}
+                    onChange={(e) => set({ location: e.target.value })}
+                    className="w-full"
+                  />
                 </div>
                 <div className="space-y-2 w-full">
                   <Label className="text-sm">Email</Label>
-                  <Input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full" />
+                  <Input value={settings.email} onChange={(e) => set({ email: e.target.value })} className="w-full" />
                 </div>
                 <div className="space-y-2 w-full">
                   <Label className="text-sm">Phone</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full" />
+                  <Input value={settings.phone} onChange={(e) => set({ phone: e.target.value })} className="w-full" />
                 </div>
                 <div className="space-y-2 w-full">
                   <Label className="text-sm">Website</Label>
-                  <Input value={website} onChange={(e) => setWebsite(e.target.value)} className="w-full" />
+                  <Input
+                    value={settings.website}
+                    onChange={(e) => set({ website: e.target.value })}
+                    className="w-full"
+                  />
                 </div>
                 <div className="space-y-2 sm:col-span-2 w-full">
                   <Label className="text-sm">LinkedIn</Label>
-                  <Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} className="w-full" />
+                  <Input
+                    value={settings.linkedin}
+                    onChange={(e) => set({ linkedin: e.target.value })}
+                    className="w-full"
+                  />
                 </div>
               </div>
 
               <div className="space-y-2 w-full">
                 <Label className="text-sm">Professional Summary</Label>
                 <Textarea
-                  value={summary}
-                  onChange={(e) => setSummary(e.target.value)}
+                  value={settings.summary}
+                  onChange={(e) => set({ summary: e.target.value })}
                   rows={4}
                   className="resize-none w-full"
                 />
@@ -559,8 +800,8 @@ function ResumeGeneratorEmbedded() {
                 <div className="flex gap-2 w-full">
                   <Input
                     placeholder="Add a skill"
-                    value={newSkill}
-                    onChange={(e) => setNewSkill(e.target.value)}
+                    value={settings.newSkill}
+                    onChange={(e) => set({ newSkill: e.target.value })}
                     onKeyDown={(e) => e.key === "Enter" && addSkill()}
                     className="flex-1 min-w-0"
                   />
@@ -568,16 +809,16 @@ function ResumeGeneratorEmbedded() {
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
-                {skills.length > 0 && (
+                {settings.skills.length > 0 && (
                   <div className="flex flex-wrap gap-2 pt-2 w-full">
-                    {skills.map((skill) => (
+                    {settings.skills.map((skill: any) => (
                       <div
                         key={skill.id}
                         className="bg-muted px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border flex items-center gap-2"
                       >
                         <span className="text-xs sm:text-sm">{skill.name}</span>
                         <button
-                          onClick={() => setSkills((prev) => prev.filter((s) => s.id !== skill.id))}
+                          onClick={() => set({ skills: settings.skills.filter((s: any) => s.id !== skill.id) })}
                           className="text-muted-foreground hover:text-destructive shrink-0"
                           aria-label="Remove skill"
                         >
@@ -597,26 +838,30 @@ function ResumeGeneratorEmbedded() {
               size="sm"
               variant="outline"
               onClick={() =>
-                setExperiences((prev) => [
-                  ...prev,
-                  { id: Date.now().toString(), role: "", company: "", start: "", end: "", bullets: "" },
-                ])
+                set({
+                  experiences: [
+                    ...settings.experiences,
+                    { id: Date.now().toString(), role: "", company: "", start: "", end: "", bullets: "" },
+                  ],
+                })
               }
             >
               <Plus className="w-4 h-4 mr-2" /> Add
             </Button>
           </div>
 
-          {experiences.map((exp, i) => (
+          {settings.experiences.map((exp: any, i: number) => (
             <Card key={exp.id} className="shadow-none w-full max-w-full">
               <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
                 <div className="flex items-center justify-between w-full">
                   <div className="text-xs text-muted-foreground">Experience {i + 1}</div>
-                  {experiences.length > 1 && (
+                  {settings.experiences.length > 1 && (
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => setExperiences((prev) => prev.filter((_, idx) => idx !== i))}
+                      onClick={() =>
+                        set({ experiences: settings.experiences.filter((_: any, idx: number) => idx !== i) })
+                      }
                     >
                       <X className="w-4 h-4" />
                     </Button>
@@ -628,9 +873,9 @@ function ResumeGeneratorEmbedded() {
                     placeholder="Role"
                     value={exp.role}
                     onChange={(e) => {
-                      const next = [...experiences];
-                      next[i].role = e.target.value;
-                      setExperiences(next);
+                      const next = [...settings.experiences];
+                      next[i] = { ...next[i], role: e.target.value };
+                      set({ experiences: next });
                     }}
                     className="w-full"
                   />
@@ -638,9 +883,9 @@ function ResumeGeneratorEmbedded() {
                     placeholder="Company"
                     value={exp.company}
                     onChange={(e) => {
-                      const next = [...experiences];
-                      next[i].company = e.target.value;
-                      setExperiences(next);
+                      const next = [...settings.experiences];
+                      next[i] = { ...next[i], company: e.target.value };
+                      set({ experiences: next });
                     }}
                     className="w-full"
                   />
@@ -648,9 +893,9 @@ function ResumeGeneratorEmbedded() {
                     placeholder="Start"
                     value={exp.start}
                     onChange={(e) => {
-                      const next = [...experiences];
-                      next[i].start = e.target.value;
-                      setExperiences(next);
+                      const next = [...settings.experiences];
+                      next[i] = { ...next[i], start: e.target.value };
+                      set({ experiences: next });
                     }}
                     className="w-full"
                   />
@@ -658,9 +903,9 @@ function ResumeGeneratorEmbedded() {
                     placeholder="End"
                     value={exp.end}
                     onChange={(e) => {
-                      const next = [...experiences];
-                      next[i].end = e.target.value;
-                      setExperiences(next);
+                      const next = [...settings.experiences];
+                      next[i] = { ...next[i], end: e.target.value };
+                      set({ experiences: next });
                     }}
                     className="w-full"
                   />
@@ -670,9 +915,9 @@ function ResumeGeneratorEmbedded() {
                   placeholder="Bullets"
                   value={exp.bullets}
                   onChange={(e) => {
-                    const next = [...experiences];
-                    next[i].bullets = e.target.value;
-                    setExperiences(next);
+                    const next = [...settings.experiences];
+                    next[i] = { ...next[i], bullets: e.target.value };
+                    set({ experiences: next });
                   }}
                   rows={3}
                   className="resize-none w-full"
@@ -687,26 +932,28 @@ function ResumeGeneratorEmbedded() {
               size="sm"
               variant="outline"
               onClick={() =>
-                setEducation((prev) => [
-                  ...prev,
-                  { id: Date.now().toString(), school: "", degree: "", start: "", end: "", details: "" },
-                ])
+                set({
+                  education: [
+                    ...settings.education,
+                    { id: Date.now().toString(), school: "", degree: "", start: "", end: "", details: "" },
+                  ],
+                })
               }
             >
               <Plus className="w-4 h-4 mr-2" /> Add
             </Button>
           </div>
 
-          {education.map((ed, i) => (
+          {settings.education.map((ed: any, i: number) => (
             <Card key={ed.id} className="shadow-none w-full max-w-full">
               <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
                 <div className="flex items-center justify-between w-full">
                   <div className="text-xs text-muted-foreground">Education {i + 1}</div>
-                  {education.length > 1 && (
+                  {settings.education.length > 1 && (
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() => setEducation((prev) => prev.filter((_, idx) => idx !== i))}
+                      onClick={() => set({ education: settings.education.filter((_: any, idx: number) => idx !== i) })}
                     >
                       <X className="w-4 h-4" />
                     </Button>
@@ -718,9 +965,9 @@ function ResumeGeneratorEmbedded() {
                     placeholder="School"
                     value={ed.school}
                     onChange={(e) => {
-                      const next = [...education];
-                      next[i].school = e.target.value;
-                      setEducation(next);
+                      const next = [...settings.education];
+                      next[i] = { ...next[i], school: e.target.value };
+                      set({ education: next });
                     }}
                     className="w-full"
                   />
@@ -728,9 +975,9 @@ function ResumeGeneratorEmbedded() {
                     placeholder="Degree"
                     value={ed.degree}
                     onChange={(e) => {
-                      const next = [...education];
-                      next[i].degree = e.target.value;
-                      setEducation(next);
+                      const next = [...settings.education];
+                      next[i] = { ...next[i], degree: e.target.value };
+                      set({ education: next });
                     }}
                     className="w-full"
                   />
@@ -738,9 +985,9 @@ function ResumeGeneratorEmbedded() {
                     placeholder="Start"
                     value={ed.start}
                     onChange={(e) => {
-                      const next = [...education];
-                      next[i].start = e.target.value;
-                      setEducation(next);
+                      const next = [...settings.education];
+                      next[i] = { ...next[i], start: e.target.value };
+                      set({ education: next });
                     }}
                     className="w-full"
                   />
@@ -748,9 +995,9 @@ function ResumeGeneratorEmbedded() {
                     placeholder="End"
                     value={ed.end}
                     onChange={(e) => {
-                      const next = [...education];
-                      next[i].end = e.target.value;
-                      setEducation(next);
+                      const next = [...settings.education];
+                      next[i] = { ...next[i], end: e.target.value };
+                      set({ education: next });
                     }}
                     className="w-full"
                   />
@@ -760,9 +1007,9 @@ function ResumeGeneratorEmbedded() {
                   placeholder="Details"
                   value={ed.details}
                   onChange={(e) => {
-                    const next = [...education];
-                    next[i].details = e.target.value;
-                    setEducation(next);
+                    const next = [...settings.education];
+                    next[i] = { ...next[i], details: e.target.value };
+                    set({ education: next });
                   }}
                   rows={2}
                   className="resize-none w-full"
@@ -799,19 +1046,74 @@ function ResumeGeneratorEmbedded() {
   );
 }
 
+/* =============================
+   COVER LETTER (MOAT ENABLED)
+============================= */
 function CoverLetterGeneratorEmbedded() {
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
-  const [company, setCompany] = useState("");
-  const [role, setRole] = useState("");
-  const [hiringManager, setHiringManager] = useState("");
-  const [tone, setTone] = useState("Professional");
-  const [content, setContent] = useState("");
+  const toolSlug = "career-kit-cover-letter";
+
+  const DEFAULT = {
+    fullName: "",
+    email: "",
+    phone: "",
+    address: "",
+    company: "",
+    role: "",
+    hiringManager: "",
+    tone: "Professional",
+    content: "",
+  };
+
+  const RECOMMENDED = [
+    {
+      name: "Professional",
+      settings: {
+        ...DEFAULT,
+        tone: "Professional",
+        content: "I bring strong execution and clear communication. I’d love to contribute to your team’s goals.",
+      },
+    },
+    {
+      name: "Bold",
+      settings: {
+        ...DEFAULT,
+        tone: "Bold",
+        content: "I move fast, learn faster, and I ship results. If you need someone who owns outcomes—let’s talk.",
+      },
+    },
+    {
+      name: "Concise",
+      settings: {
+        ...DEFAULT,
+        tone: "Concise",
+        content: "I’m interested in this role and believe my background fits. I’d welcome the opportunity to discuss.",
+      },
+    },
+  ];
+
+  const [settings, setSettings] = useState(DEFAULT);
+
+  useMoat(settings, setSettings, {
+    toolSlug,
+    defaultSettings: DEFAULT,
+    recommendedPresets: RECOMMENDED,
+  });
+
+  useEffect(() => {
+    const shared = readShareUrl(toolSlug);
+    if (shared) {
+      setSettings((prev: any) => ({ ...prev, ...shared }));
+      toast.success("Loaded from shared link");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const set = (patch: any) => setSettings((p: any) => ({ ...p, ...patch }));
 
   const letter = useMemo(() => {
-    const greetings = {
+    const { fullName, email, phone, address, company, role, hiringManager, tone, content } = settings;
+
+    const greetings: any = {
       Professional: hiringManager ? `Dear ${hiringManager},` : "Dear Hiring Manager,",
       Bold: `To the Team at ${company || "the Company"},`,
       Friendly: hiringManager ? `Hi ${hiringManager.split(" ")[0]},` : "Hi there!",
@@ -819,7 +1121,7 @@ function CoverLetterGeneratorEmbedded() {
       Enthusiastic: hiringManager ? `Dear ${hiringManager},` : "Dear Hiring Team!",
     };
 
-    const closings = {
+    const closings: any = {
       Professional: "Sincerely,",
       Bold: "Looking forward to hearing from you,",
       Friendly: "Best regards,",
@@ -841,10 +1143,18 @@ I am writing to express my ${tone === "Enthusiastic" ? "strong" : ""} interest i
 
 ${closings[tone]}
 ${fullName}`.trim();
-  }, [fullName, email, phone, address, company, role, hiringManager, tone, content]);
+  }, [settings]);
 
   return (
     <div className="space-y-4 w-full max-w-full">
+      <MoatPanel
+        toolSlug={toolSlug}
+        settings={settings}
+        setSettings={setSettings}
+        defaultSettings={DEFAULT}
+        recommendedPresets={RECOMMENDED}
+      />
+
       <Card className="shadow-none lg:hidden w-full max-w-full">
         <CardContent className="pt-4 sm:pt-6 w-full">
           <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
@@ -880,19 +1190,27 @@ ${fullName}`.trim();
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
                 <div className="space-y-2 w-full">
                   <Label className="text-sm">Full Name</Label>
-                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full" />
+                  <Input
+                    value={settings.fullName}
+                    onChange={(e) => set({ fullName: e.target.value })}
+                    className="w-full"
+                  />
                 </div>
                 <div className="space-y-2 w-full">
                   <Label className="text-sm">Email</Label>
-                  <Input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full" />
+                  <Input value={settings.email} onChange={(e) => set({ email: e.target.value })} className="w-full" />
                 </div>
                 <div className="space-y-2 w-full">
                   <Label className="text-sm">Phone</Label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full" />
+                  <Input value={settings.phone} onChange={(e) => set({ phone: e.target.value })} className="w-full" />
                 </div>
                 <div className="space-y-2 w-full">
                   <Label className="text-sm">Address</Label>
-                  <Input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full" />
+                  <Input
+                    value={settings.address}
+                    onChange={(e) => set({ address: e.target.value })}
+                    className="w-full"
+                  />
                 </div>
               </div>
             </CardContent>
@@ -903,21 +1221,29 @@ ${fullName}`.trim();
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
                 <div className="space-y-2 w-full">
                   <Label className="text-sm">Company</Label>
-                  <Input value={company} onChange={(e) => setCompany(e.target.value)} className="w-full" />
+                  <Input
+                    value={settings.company}
+                    onChange={(e) => set({ company: e.target.value })}
+                    className="w-full"
+                  />
                 </div>
                 <div className="space-y-2 w-full">
                   <Label className="text-sm">Role</Label>
-                  <Input value={role} onChange={(e) => setRole(e.target.value)} className="w-full" />
+                  <Input value={settings.role} onChange={(e) => set({ role: e.target.value })} className="w-full" />
                 </div>
                 <div className="space-y-2 sm:col-span-2 w-full">
                   <Label className="text-sm">Hiring Manager</Label>
-                  <Input value={hiringManager} onChange={(e) => setHiringManager(e.target.value)} className="w-full" />
+                  <Input
+                    value={settings.hiringManager}
+                    onChange={(e) => set({ hiringManager: e.target.value })}
+                    className="w-full"
+                  />
                 </div>
               </div>
 
               <div className="space-y-2 w-full">
                 <Label className="text-sm">Tone</Label>
-                <Select value={tone} onValueChange={(v) => setTone(v)}>
+                <Select value={settings.tone} onValueChange={(v) => set({ tone: v })}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
@@ -935,8 +1261,8 @@ ${fullName}`.trim();
                 <Label className="text-sm">Body</Label>
                 <Textarea
                   rows={8}
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
+                  value={settings.content}
+                  onChange={(e) => set({ content: e.target.value })}
                   className="resize-none w-full"
                 />
               </div>
@@ -974,19 +1300,22 @@ ${fullName}`.trim();
   );
 }
 
+/* =============================
+   PAGE
+============================= */
 export default function CareerToolkit() {
   return (
     <div className="min-h-screen bg-background w-full overflow-x-hidden">
       <Header />
       <div className="w-full max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-8 lg:py-10 space-y-4 sm:space-y-6">
-        <Link 
-          to="/" 
+        <Link
+          to="/"
           className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           All Tools
         </Link>
-        
+
         <header className="space-y-1 w-full">
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold tracking-tight">Career Toolkit</h1>
           <p className="text-xs sm:text-sm lg:text-base text-muted-foreground">
