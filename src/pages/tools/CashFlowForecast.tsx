@@ -433,12 +433,12 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
               <Label className="flex items-center gap-2">
                 Compare <ArrowLeftRight className="h-4 w-4" />
               </Label>
-              <Select value={compareScenarioId} onValueChange={setCompareScenarioId}>
+              <Select value={compareScenarioId || "none"} onValueChange={(v) => setCompareScenarioId(v === "none" ? "" : v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Optional" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {orderedScenarios
                     .filter((s) => s.id !== activeScenarioId)
                     .map((s) => (
