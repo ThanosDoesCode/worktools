@@ -758,38 +758,144 @@ ${calculations.projection.map((p) => `Month ${p.month}: ${formatCurrency(p.balan
               onClick={openDeleteDialog}
               disabled={!activeScenario}
               className="sm:w-auto w-full"
-            >
-              <Trash2 className="h-4 w-4 mr-2" /> Delete
-            </Button>
-          </div>
+            >{/* Scenario Bar (fixed + responsive) */}
+<div className="mb-6 bg-surface-elevated rounded-xl p-4 border border-border">
+  {/* Row 1: selectors */}
+  <div className="grid gap-3 lg:grid-cols-3 items-start">
+    {/* Scenario */}
+    <div className="min-w-0 self-start">
+      <Label>Scenario</Label>
+      <Select value={activeScenarioId} onValueChange={setActiveScenarioId}>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Pick a scenario" />
+        </SelectTrigger>
+        <SelectContent>
+          {orderedScenarios.map((s) => (
+            <SelectItem key={s.id} value={s.id}>
+              {s.pinned ? "📌 " : ""}
+              {s.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
 
-          {/* Compare summary */}
-          {compareCalculations && (
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg p-3 bg-muted/40 border border-border">
-                <p className="text-xs text-muted-foreground">Δ Net Cash Flow</p>
-                <p className="font-semibold">
-                  {formatCurrency(calculations.netCashFlow - compareCalculations.netCashFlow)}
-                </p>
-              </div>
-              <div className="rounded-lg p-3 bg-muted/40 border border-border">
-                <p className="text-xs text-muted-foreground">Δ End Balance (12m)</p>
-                <p className="font-semibold">
-                  {formatCurrency(calculations.endBalance12 - compareCalculations.endBalance12)}
-                </p>
-              </div>
-              <div className="rounded-lg p-3 bg-muted/40 border border-border">
-                <p className="text-xs text-muted-foreground">Δ Runway</p>
-                <p className="font-semibold">
-                  {calculations.runway === Infinity || compareCalculations.runway === Infinity
-                    ? "—"
-                    : `${calculations.runway - compareCalculations.runway} months`}
-                </p>
-              </div>
-            </div>
+    {/* Compare */}
+    <div className="min-w-0 self-start">
+      <Label className="flex items-center gap-2">
+        Compare <ArrowLeftRight className="h-4 w-4" />
+      </Label>
+      <Select value={compareScenarioId} onValueChange={setCompareScenarioId}>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Optional" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="">None</SelectItem>
+          {orderedScenarios
+            .filter((s) => s.id !== activeScenarioId)
+            .map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.pinned ? "📌 " : ""}
+                {s.name}
+              </SelectItem>
+            ))}
+        </SelectContent>
+      </Select>
+    </div>
+
+    {/* Presets */}
+    <div className="min-w-0 self-start">
+      <Label>Presets</Label>
+      <Select
+        value={selectedPresetId}
+        onValueChange={(val) => {
+          setSelectedPresetId(val);
+          if (val) applyPreset(val);
+        }}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Apply a preset" />
+        </SelectTrigger>
+        <SelectContent>
+          <div className="px-2 py-1.5 text-xs text-muted-foreground">Built-in</div>
+          {BUILT_IN_PRESETS.map((p) => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.name}
+            </SelectItem>
+          ))}
+
+          <div className="px-2 py-1.5 text-xs text-muted-foreground mt-1">Your presets</div>
+          {customPresets.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-muted-foreground">No saved presets yet</div>
+          ) : (
+            customPresets.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))
           )}
-        </div>
+        </SelectContent>
+      </Select>
+
+      <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+        <Button variant="outline" onClick={openSavePresetDialog} className="w-full">
+          <BookmarkPlus className="h-4 w-4 mr-2" /> Save preset
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => requestDeletePreset(selectedPresetId)}
+          disabled={!selectedPresetId || !customPresets.some((p) => p.id === selectedPresetId)}
+          title="Delete selected custom preset"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
+
+      <p className="text-xs text-muted-foreground mt-2">
+        Presets let you apply common scenarios fast (growth, hiring, downturn, etc.).
+      </p>
+    </div>
+  </div>
+
+  {/* Row 2: actions — stays tight, no dead space */}
+  <div className="mt-4 flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:justify-end">
+    <Button variant="outline" onClick={openRenameDialog} disabled={!activeScenario} className="sm:w-auto w-full">
+      <FolderOpen className="h-4 w-4 mr-2" /> Rename
+    </Button>
+    <Button variant="outline" onClick={togglePin} disabled={!activeScenario} className="sm:w-auto w-full">
+      <Pin className="h-4 w-4 mr-2" /> Pin
+    </Button>
+    <Button onClick={openSaveAsDialog} className="sm:w-auto w-full">
+      <Save className="h-4 w-4 mr-2" /> Save as new
+    </Button>
+    <Button variant="outline" onClick={openDeleteDialog} disabled={!activeScenario} className="sm:w-auto w-full">
+      <Trash2 className="h-4 w-4 mr-2" /> Delete
+    </Button>
+  </div>
+
+  {/* Compare summary */}
+  {compareCalculations && (
+    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="rounded-lg p-3 bg-muted/40 border border-border">
+        <p className="text-xs text-muted-foreground">Δ Net Cash Flow</p>
+        <p className="font-semibold">{formatCurrency(calculations.netCashFlow - compareCalculations.netCashFlow)}</p>
+      </div>
+      <div className="rounded-lg p-3 bg-muted/40 border border-border">
+        <p className="text-xs text-muted-foreground">Δ End Balance (12m)</p>
+        <p className="font-semibold">{formatCurrency(calculations.endBalance12 - compareCalculations.endBalance12)}</p>
+      </div>
+      <div className="rounded-lg p-3 bg-muted/40 border border-border">
+        <p className="text-xs text-muted-foreground">Δ Runway</p>
+        <p className="font-semibold">
+          {calculations.runway === Infinity || compareCalculations.runway === Infinity
+            ? "—"
+            : `${calculations.runway - compareCalculations.runway} months`}
+        </p>
+      </div>
+    </div>
+  )}
+</div>
+
 
       <div className="grid lg:grid-cols-2 gap-8">
         {/* Input Panel */}
