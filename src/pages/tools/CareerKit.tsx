@@ -27,7 +27,7 @@ function copyToClipboard(text: string) {
 }
 
 /* ---------------------------------
-  Signature Generator (with presets)
+  Signature Generator (dropdown presets + transparent export)
 ----------------------------------*/
 function SignatureGeneratorEmbedded() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -37,9 +37,9 @@ function SignatureGeneratorEmbedded() {
   const [penWidth, setPenWidth] = useState(3);
   const [penColor, setPenColor] = useState("#0f172a");
 
-  // Background can be solid color OR transparent
-  const [bgColor, setBgColor] = useState("#ffffff");
+  // Export behavior: true => PNG alpha background
   const [bgTransparent, setBgTransparent] = useState(false);
+  const [bgColor, setBgColor] = useState("#ffffff");
 
   const [strokes, setStrokes] = useState<{ points: { x: number; y: number }[]; width: number; color: string }[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -62,15 +62,15 @@ function SignatureGeneratorEmbedded() {
             ? "Georgia, serif"
             : "Arial, sans-serif";
 
-  // Checkerboard for transparent preview
-  const transparentBgStyle: React.CSSProperties = bgTransparent
-    ? {
-        backgroundImage:
-          "linear-gradient(45deg, rgba(0,0,0,.06) 25%, transparent 25%), linear-gradient(-45deg, rgba(0,0,0,.06) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(0,0,0,.06) 75%), linear-gradient(-45deg, transparent 75%, rgba(0,0,0,.06) 75%)",
-        backgroundSize: "16px 16px",
-        backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
-      }
-    : { backgroundColor: bgColor };
+  // Checkerboard background is UI-only (preview), not exported unless bgTransparent=false (we fill solid bgColor).
+  const checkerboardStyle: React.CSSProperties = {
+    backgroundImage:
+      "linear-gradient(45deg, rgba(0,0,0,.06) 25%, transparent 25%), linear-gradient(-45deg, rgba(0,0,0,.06) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(0,0,0,.06) 75%), linear-gradient(-45deg, transparent 75%, rgba(0,0,0,.06) 75%)",
+    backgroundSize: "16px 16px",
+    backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+  };
+
+  const previewStyle: React.CSSProperties = bgTransparent ? checkerboardStyle : { backgroundColor: bgColor };
 
   const drawAll = () => {
     const canvas = canvasRef.current;
@@ -83,11 +83,13 @@ function SignatureGeneratorEmbedded() {
 
     ctx.clearRect(0, 0, w, h);
 
+    // IMPORTANT: if bgTransparent === true => do NOT fill background (keeps alpha)
     if (!bgTransparent) {
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, w, h);
     }
 
+    // guide line in draw mode
     if (mode === "draw") {
       ctx.strokeStyle = "rgba(15, 23, 42, 0.06)";
       ctx.lineWidth = 1;
@@ -106,9 +108,7 @@ function SignatureGeneratorEmbedded() {
       ctx.lineWidth = s.width;
       ctx.beginPath();
       ctx.moveTo(s.points[0].x, s.points[0].y);
-      for (let i = 1; i < s.points.length; i++) {
-        ctx.lineTo(s.points[i].x, s.points[i].y);
-      }
+      for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
       ctx.stroke();
     }
   };
@@ -146,7 +146,7 @@ function SignatureGeneratorEmbedded() {
   useEffect(() => {
     if (mode === "draw") drawAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [strokes, penWidth, mode, bgColor, bgTransparent, penColor]);
+  }, [strokes, penWidth, penColor, bgColor, bgTransparent, mode]);
 
   const getPos = (ev: PointerEvent) => {
     const canvas = canvasRef.current;
@@ -194,8 +194,9 @@ function SignatureGeneratorEmbedded() {
     const ctx = out.getContext("2d");
     if (!ctx) return;
 
-    // Background
     ctx.clearRect(0, 0, W, H);
+
+    // Solid background only when NOT transparent
     if (!bgTransparent) {
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, W, H);
@@ -205,7 +206,6 @@ function SignatureGeneratorEmbedded() {
     const sy = H / ch;
     const s = Math.min(sx, sy);
 
-    // Center scale (keep proportions)
     const scaledW = cw * s;
     const scaledH = ch * s;
     const ox = (W - scaledW) / 2;
@@ -216,10 +216,8 @@ function SignatureGeneratorEmbedded() {
 
     for (const stroke of strokes) {
       if (stroke.points.length < 2) continue;
-
       ctx.strokeStyle = stroke.color;
       ctx.lineWidth = stroke.width * s;
-
       ctx.beginPath();
       ctx.moveTo(ox + stroke.points[0].x * s, oy + stroke.points[0].y * s);
       for (let i = 1; i < stroke.points.length; i++) {
@@ -242,6 +240,8 @@ function SignatureGeneratorEmbedded() {
     if (!ctx) return;
 
     ctx.clearRect(0, 0, W, H);
+
+    // Solid background only when NOT transparent
     if (!bgTransparent) {
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, W, H);
@@ -271,61 +271,19 @@ function SignatureGeneratorEmbedded() {
 
   const isEmpty = strokes.length === 0;
 
-  const applyInkPreset = (preset: {
-    label: string;
-    penWidth: number;
-    penColor: string;
-    bg?: string;
-    transparent?: boolean;
-  }) => {
-    setMode("draw");
-    setPenWidth(preset.penWidth);
-    setPenColor(preset.penColor);
-    if (preset.transparent) {
-      setBgTransparent(true);
-    } else if (preset.bg) {
-      setBgTransparent(false);
-      setBgColor(preset.bg);
-    }
-    toast.success(`Preset: ${preset.label}`);
-  };
-
-  const applyBgPreset = (preset: { label: string; bg?: string; transparent?: boolean }) => {
-    if (preset.transparent) {
-      setBgTransparent(true);
-      toast.success("Background: Transparent");
-      return;
-    }
-    if (preset.bg) {
-      setBgTransparent(false);
-      setBgColor(preset.bg);
-      toast.success(`Background: ${preset.label}`);
-    }
-  };
-
-  const applyTypedPreset = (preset: {
+  // ----- Preset sets (for dropdowns) -----
+  type InkPreset = { label: string; penWidth: number; penColor: string; bg?: string; transparent?: boolean };
+  type BgPreset = { label: string; bg?: string; transparent?: boolean };
+  type TypedPreset = {
     label: string;
     typedStyle: any;
     typedSize: number;
     typedColor: string;
     bg?: string;
     transparent?: boolean;
-  }) => {
-    setMode("type");
-    setTypedStyle(preset.typedStyle);
-    setTypedSize(preset.typedSize);
-    setTypedColor(preset.typedColor);
-    if (preset.transparent) {
-      setBgTransparent(true);
-    } else if (preset.bg) {
-      setBgTransparent(false);
-      setBgColor(preset.bg);
-    }
-    toast.success(`Preset: ${preset.label}`);
   };
 
-  // Presets (as requested)
-  const INK_PRESETS = [
+  const INK_PRESETS: InkPreset[] = [
     { label: "Black Ballpoint", penWidth: 3, penColor: "#0f172a", bg: "#ffffff" },
     { label: "Blue Ballpoint", penWidth: 3, penColor: "#1d4ed8", bg: "#ffffff" },
     { label: "Fountain Pen", penWidth: 6, penColor: "#0b1220", bg: "#ffffff" },
@@ -335,15 +293,15 @@ function SignatureGeneratorEmbedded() {
     { label: "Transparent Ink", penWidth: 3, penColor: "#0f172a", transparent: true },
   ];
 
-  const BG_PRESETS = [
+  const BG_PRESETS: BgPreset[] = [
     { label: "White", bg: "#ffffff" },
     { label: "Light Gray", bg: "#f8fafc" },
     { label: "Warm Paper", bg: "#fef3c7" },
     { label: "Cool Paper", bg: "#dbeafe" },
-    { label: "Transparent", transparent: true },
+    { label: "Transparent (PNG)", transparent: true },
   ];
 
-  const TYPED_PRESETS = [
+  const TYPED_PRESETS: TypedPreset[] = [
     { label: "Typed Cursive Large", typedStyle: "cursive", typedSize: 64, typedColor: "#0f172a", bg: "#ffffff" },
     { label: "Typed Modern Minimal", typedStyle: "modern", typedSize: 48, typedColor: "#0f172a", bg: "#ffffff" },
     { label: "Typed Executive Serif", typedStyle: "elegant", typedSize: 56, typedColor: "#0f172a", bg: "#ffffff" },
@@ -351,70 +309,136 @@ function SignatureGeneratorEmbedded() {
     { label: "Typed Transparent", typedStyle: "cursive", typedSize: 64, typedColor: "#0f172a", transparent: true },
   ];
 
+  const [inkPreset, setInkPreset] = useState<string>("");
+  const [bgPreset, setBgPreset] = useState<string>("");
+  const [typedPreset, setTypedPreset] = useState<string>("");
+
+  const applyInkPreset = (label: string) => {
+    const p = INK_PRESETS.find((x) => x.label === label);
+    if (!p) return;
+    setInkPreset(label);
+
+    setMode("draw");
+    setPenWidth(p.penWidth);
+    setPenColor(p.penColor);
+
+    if (p.transparent) {
+      setBgTransparent(true);
+    } else if (p.bg) {
+      setBgTransparent(false);
+      setBgColor(p.bg);
+    }
+
+    toast.success(`Preset: ${p.label}`);
+  };
+
+  const applyBgPreset = (label: string) => {
+    const p = BG_PRESETS.find((x) => x.label === label);
+    if (!p) return;
+    setBgPreset(label);
+
+    if (p.transparent) {
+      setBgTransparent(true);
+      toast.success("Background: Transparent (exports transparent PNG)");
+      return;
+    }
+    if (p.bg) {
+      setBgTransparent(false);
+      setBgColor(p.bg);
+      toast.success(`Background: ${p.label}`);
+    }
+  };
+
+  const applyTypedPreset = (label: string) => {
+    const p = TYPED_PRESETS.find((x) => x.label === label);
+    if (!p) return;
+    setTypedPreset(label);
+
+    setMode("type");
+    setTypedStyle(p.typedStyle);
+    setTypedSize(p.typedSize);
+    setTypedColor(p.typedColor);
+
+    if (p.transparent) {
+      setBgTransparent(true);
+    } else if (p.bg) {
+      setBgTransparent(false);
+      setBgColor(p.bg);
+    }
+
+    toast.success(`Preset: ${p.label}`);
+  };
+
   return (
     <div className="space-y-4 w-full max-w-full">
-      {/* Presets */}
-      <div className="space-y-3">
-        <div className="space-y-2">
-          <div className="text-sm font-medium">Presets</div>
-
-          <div className="space-y-2">
-            <div className="text-xs text-muted-foreground">Ink</div>
-            <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {INK_PRESETS.map((p) => (
-                <Button
-                  key={p.label}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => applyInkPreset(p as any)}
-                  className="shrink-0"
-                >
-                  {p.label}
-                </Button>
-              ))}
+      {/* Presets - dropdowns (better UX on mobile + desktop) */}
+      <Card className="shadow-none w-full max-w-full">
+        <CardContent className="pt-4 sm:pt-6 space-y-4 w-full">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-medium">Presets</div>
+            <div className="text-xs text-muted-foreground">
+              {bgTransparent ? "Transparent export ON" : "Solid background export"}
             </div>
           </div>
 
-          <div className="space-y-2">
-            <div className="text-xs text-muted-foreground">Background</div>
-            <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {BG_PRESETS.map((p) => (
-                <Button
-                  key={p.label}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => applyBgPreset(p as any)}
-                  className="shrink-0"
-                >
-                  {p.label}
-                </Button>
-              ))}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <Label className="text-sm">Ink</Label>
+              <Select value={inkPreset} onValueChange={(v) => applyInkPreset(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose ink preset" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INK_PRESETS.map((p) => (
+                    <SelectItem key={p.label} value={p.label}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <div className="text-xs text-muted-foreground">Typed</div>
-            <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {TYPED_PRESETS.map((p) => (
-                <Button
-                  key={p.label}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => applyTypedPreset(p as any)}
-                  className="shrink-0"
-                >
-                  {p.label}
-                </Button>
-              ))}
+            <div className="space-y-2">
+              <Label className="text-sm">Background</Label>
+              <Select value={bgPreset} onValueChange={(v) => applyBgPreset(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose background" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BG_PRESETS.map((p) => (
+                    <SelectItem key={p.label} value={p.label}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="text-xs text-muted-foreground">
+                Transparent shows a checkerboard in preview, but downloads as transparent PNG.
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm">Typed</Label>
+              <Select value={typedPreset} onValueChange={(v) => applyTypedPreset(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose typed preset" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TYPED_PRESETS.map((p) => (
+                    <SelectItem key={p.label} value={p.label}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
           <div className="rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground">
-            Tip: choose <span className="font-medium text-foreground">Transparent</span> background to export a PNG with
-            no background.
+            Transparent mode uses a checkerboard preview for visibility, but exports a real transparent PNG (alpha).
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Mode */}
       <div className="flex gap-2 w-full">
@@ -442,7 +466,7 @@ function SignatureGeneratorEmbedded() {
         <div className="text-sm font-medium mb-3">Preview</div>
         <div
           className="rounded-lg border border-dashed p-3 sm:p-6 flex items-center justify-center min-h-[200px] sm:min-h-[260px] w-full max-w-full"
-          style={transparentBgStyle}
+          style={previewStyle}
         >
           {mode === "draw" ? (
             <div ref={wrapRef} className="w-full max-w-full">
@@ -509,45 +533,6 @@ function SignatureGeneratorEmbedded() {
                     />
                   ))}
                 </div>
-              </div>
-            </div>
-
-            <div className="space-y-2 w-full max-w-full">
-              <Label className="text-sm">Background</Label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={bgTransparent ? "default" : "outline"}
-                  onClick={() => setBgTransparent(true)}
-                  className="justify-start"
-                >
-                  Transparent
-                </Button>
-                {["#ffffff", "#f8fafc", "#fef3c7", "#dbeafe"].map((c) => (
-                  <Button
-                    key={c}
-                    type="button"
-                    size="sm"
-                    variant={!bgTransparent && bgColor === c ? "default" : "outline"}
-                    onClick={() => {
-                      setBgTransparent(false);
-                      setBgColor(c);
-                    }}
-                    className="justify-start"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-3 w-3 rounded-sm border" style={{ backgroundColor: c }} />
-                      {c === "#ffffff"
-                        ? "White"
-                        : c === "#f8fafc"
-                          ? "Light Gray"
-                          : c === "#fef3c7"
-                            ? "Warm Paper"
-                            : "Cool Paper"}
-                    </span>
-                  </Button>
-                ))}
               </div>
             </div>
 
@@ -630,45 +615,6 @@ function SignatureGeneratorEmbedded() {
                 </div>
               </div>
             </div>
-
-            <div className="space-y-2 w-full max-w-full">
-              <Label className="text-sm">Background</Label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={bgTransparent ? "default" : "outline"}
-                  onClick={() => setBgTransparent(true)}
-                  className="justify-start"
-                >
-                  Transparent
-                </Button>
-                {["#ffffff", "#f8fafc", "#fef3c7", "#dbeafe"].map((c) => (
-                  <Button
-                    key={c}
-                    type="button"
-                    size="sm"
-                    variant={!bgTransparent && bgColor === c ? "default" : "outline"}
-                    onClick={() => {
-                      setBgTransparent(false);
-                      setBgColor(c);
-                    }}
-                    className="justify-start"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-3 w-3 rounded-sm border" style={{ backgroundColor: c }} />
-                      {c === "#ffffff"
-                        ? "White"
-                        : c === "#f8fafc"
-                          ? "Light Gray"
-                          : c === "#fef3c7"
-                            ? "Warm Paper"
-                            : "Cool Paper"}
-                    </span>
-                  </Button>
-                ))}
-              </div>
-            </div>
           </>
         )}
       </div>
@@ -681,7 +627,7 @@ function SignatureGeneratorEmbedded() {
 }
 
 /* ---------------------------------
-  Resume Generator (with presets)
+  Resume Generator (dropdown presets)
 ----------------------------------*/
 function ResumeGeneratorEmbedded() {
   const [fullName, setFullName] = useState("");
@@ -737,38 +683,6 @@ function ResumeGeneratorEmbedded() {
     if (!newSkill.trim()) return;
     setSkills((prev) => [...prev, { id: Date.now().toString(), name: newSkill.trim() }]);
     setNewSkill("");
-  };
-
-  const applyResumeProfilePreset = (p: {
-    label: string;
-    title: string;
-    summary: string;
-    skills: string[];
-    exp?: { role: string; company: string; start: string; end: string; bullets: string }[];
-    edu?: { school: string; degree: string; start: string; end: string; details: string }[];
-  }) => {
-    setTitle(p.title);
-    setSummary(p.summary);
-    setSkills(p.skills.map((s) => ({ id: `${Date.now()}-${s}`, name: s })));
-    if (p.exp?.length) {
-      setExperiences(p.exp.map((e, idx) => ({ id: `${Date.now()}-exp-${idx}`, ...e })));
-    }
-    if (p.edu?.length) {
-      setEducation(p.edu.map((e, idx) => ({ id: `${Date.now()}-edu-${idx}`, ...e })));
-    }
-    toast.success(`Resume preset: ${p.label}`);
-  };
-
-  const applyResumeStylePreset = (p: { label: string; summaryAdd?: string; bulletsTemplate?: string }) => {
-    if (p.summaryAdd) setSummary((prev) => (prev ? `${prev}\n${p.summaryAdd}` : p.summaryAdd));
-    if (p.bulletsTemplate) {
-      setExperiences((prev) =>
-        prev.map((e, idx) =>
-          idx === 0 ? { ...e, bullets: e.bullets ? `${e.bullets}\n${p.bulletsTemplate}` : p.bulletsTemplate } : e,
-        ),
-      );
-    }
-    toast.success(`Style: ${p.label}`);
   };
 
   const RESUME_PROFILE_PRESETS = [
@@ -926,44 +840,83 @@ function ResumeGeneratorEmbedded() {
     },
   ];
 
+  const [profilePreset, setProfilePreset] = useState("");
+  const [stylePreset, setStylePreset] = useState("");
+
+  const applyResumeProfilePreset = (label: string) => {
+    const p = RESUME_PROFILE_PRESETS.find((x) => x.label === label);
+    if (!p) return;
+    setProfilePreset(label);
+
+    setTitle(p.title);
+    setSummary(p.summary);
+    setSkills(p.skills.map((s) => ({ id: `${Date.now()}-${s}`, name: s })));
+
+    if ((p as any).exp?.length) {
+      setExperiences((p as any).exp.map((e: any, idx: number) => ({ id: `${Date.now()}-exp-${idx}`, ...e })));
+    }
+    if ((p as any).edu?.length) {
+      setEducation((p as any).edu.map((e: any, idx: number) => ({ id: `${Date.now()}-edu-${idx}`, ...e })));
+    }
+
+    toast.success(`Resume preset: ${p.label}`);
+  };
+
+  const applyResumeStylePreset = (label: string) => {
+    const p = RESUME_STYLE_PRESETS.find((x) => x.label === label);
+    if (!p) return;
+    setStylePreset(label);
+
+    if (p.summaryAdd) setSummary((prev) => (prev ? `${prev}\n${p.summaryAdd}` : p.summaryAdd));
+    if (p.bulletsTemplate) {
+      setExperiences((prev) =>
+        prev.map((e, idx) =>
+          idx === 0 ? { ...e, bullets: e.bullets ? `${e.bullets}\n${p.bulletsTemplate}` : p.bulletsTemplate } : e,
+        ),
+      );
+    }
+
+    toast.success(`Style: ${p.label}`);
+  };
+
   return (
     <div className="space-y-4 w-full max-w-full">
-      {/* Presets */}
+      {/* Presets as dropdowns */}
       <Card className="shadow-none w-full max-w-full">
         <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
           <div className="text-sm font-medium">Presets</div>
 
-          <div className="space-y-2">
-            <div className="text-xs text-muted-foreground">Profile</div>
-            <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {RESUME_PROFILE_PRESETS.map((p) => (
-                <Button
-                  key={p.label}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => applyResumeProfilePreset(p as any)}
-                  className="shrink-0"
-                >
-                  {p.label}
-                </Button>
-              ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label className="text-sm">Profile</Label>
+              <Select value={profilePreset} onValueChange={(v) => applyResumeProfilePreset(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose profile preset" />
+                </SelectTrigger>
+                <SelectContent>
+                  {RESUME_PROFILE_PRESETS.map((p) => (
+                    <SelectItem key={p.label} value={p.label}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <div className="text-xs text-muted-foreground">Writing style</div>
-            <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {RESUME_STYLE_PRESETS.map((p) => (
-                <Button
-                  key={p.label}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => applyResumeStylePreset(p)}
-                  className="shrink-0"
-                >
-                  {p.label}
-                </Button>
-              ))}
+            <div className="space-y-2">
+              <Label className="text-sm">Writing style</Label>
+              <Select value={stylePreset} onValueChange={(v) => applyResumeStylePreset(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose style preset" />
+                </SelectTrigger>
+                <SelectContent>
+                  {RESUME_STYLE_PRESETS.map((p) => (
+                    <SelectItem key={p.label} value={p.label}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -1290,7 +1243,7 @@ function ResumeGeneratorEmbedded() {
 }
 
 /* ---------------------------------
-  Cover Letter Generator (with presets)
+  Cover Letter Generator (dropdown presets)
 ----------------------------------*/
 function CoverLetterGeneratorEmbedded() {
   const [fullName, setFullName] = useState("");
@@ -1302,12 +1255,6 @@ function CoverLetterGeneratorEmbedded() {
   const [hiringManager, setHiringManager] = useState("");
   const [tone, setTone] = useState<"Professional" | "Bold" | "Friendly" | "Concise" | "Enthusiastic">("Professional");
   const [content, setContent] = useState("");
-
-  const applyCoverPreset = (p: { label: string; tone: any; content: string }) => {
-    setTone(p.tone);
-    setContent(p.content);
-    toast.success(`Cover letter preset: ${p.label}`);
-  };
 
   const COVER_PRESETS = [
     {
@@ -1372,6 +1319,18 @@ function CoverLetterGeneratorEmbedded() {
     },
   ];
 
+  const [coverPreset, setCoverPreset] = useState("");
+
+  const applyCoverPreset = (label: string) => {
+    const p = COVER_PRESETS.find((x) => x.label === label);
+    if (!p) return;
+
+    setCoverPreset(label);
+    setTone(p.tone as any);
+    setContent(p.content);
+    toast.success(`Cover letter preset: ${p.label}`);
+  };
+
   const letter = useMemo(() => {
     const greetings: Record<string, string> = {
       Professional: hiringManager ? `Dear ${hiringManager},` : "Dear Hiring Manager,",
@@ -1407,23 +1366,24 @@ ${fullName}`.trim();
 
   return (
     <div className="space-y-4 w-full max-w-full">
-      {/* Presets */}
+      {/* Preset dropdown */}
       <Card className="shadow-none w-full max-w-full">
         <CardContent className="pt-4 sm:pt-6 space-y-3 w-full">
           <div className="text-sm font-medium">Presets</div>
-          <div className="text-xs text-muted-foreground">Scenario</div>
-          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {COVER_PRESETS.map((p) => (
-              <Button
-                key={p.label}
-                size="sm"
-                variant="outline"
-                onClick={() => applyCoverPreset(p as any)}
-                className="shrink-0"
-              >
-                {p.label}
-              </Button>
-            ))}
+          <div className="space-y-2">
+            <Label className="text-sm">Scenario</Label>
+            <Select value={coverPreset} onValueChange={(v) => applyCoverPreset(v)}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Choose a cover letter preset" />
+              </SelectTrigger>
+              <SelectContent>
+                {COVER_PRESETS.map((p) => (
+                  <SelectItem key={p.label} value={p.label}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground">
             Presets fill a solid base. Customize with your metrics, projects, and why this company.
