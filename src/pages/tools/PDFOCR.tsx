@@ -1,12 +1,15 @@
-import { useState, useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, ScanSearch, Loader2 } from "lucide-react";
+import { Upload, X, Download, ScanSearch, Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import { saveAs } from "file-saver";
+
+// shadcn select
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // PDF.js
 import * as pdfjsLib from "pdfjs-dist";
@@ -18,6 +21,12 @@ import { createWorker } from "tesseract.js";
 // Build output PDF
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
+// Moat
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
+
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorker;
 
 interface PDFFile {
@@ -26,6 +35,24 @@ interface PDFFile {
 }
 
 type OcrLang = "eng" | "ell";
+type Scale = 1 | 2 | 3;
+
+type Settings = {
+  lang: OcrLang;
+  scale: Scale;
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  lang: "eng",
+  scale: 2,
+};
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  { name: "Fast (English, 1x)", settings: { lang: "eng", scale: 1 } },
+  { name: "Balanced (English, 2x)", settings: { lang: "eng", scale: 2 } },
+  { name: "High (English, 3x)", settings: { lang: "eng", scale: 3 } },
+  { name: "Greek try (2x)", settings: { lang: "ell", scale: 2 } },
+];
 
 function baseName(name: string) {
   return name.replace(/\.pdf$/i, "") || "document";
@@ -36,14 +63,21 @@ function clamp(n: number, min: number, max: number) {
 }
 
 export default function PDFOCR() {
+  const { toast } = useToast();
+
   const [pdfFile, setPdfFile] = useState<PDFFile | null>(null);
   const [converting, setConverting] = useState(false);
   const [progress, setProgress] = useState<{ page: number; total: number; status: string } | null>(null);
 
-  // Controls
-  const [lang, setLang] = useState<OcrLang>("eng");
-  const [scale, setScale] = useState<number>(2); // OCR quality
-  const { toast } = useToast();
+  // Moat settings
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "pdf-ocr";
+
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
@@ -66,6 +100,7 @@ export default function PDFOCR() {
     onDrop,
     accept: { "application/pdf": [".pdf"] },
     maxFiles: 1,
+    disabled: converting,
   });
 
   const clearFile = () => {
@@ -102,12 +137,13 @@ export default function PDFOCR() {
 
       // Create OCR worker
       worker = await createWorker();
+
+      // Attempt requested language; fallback to English if needed
       try {
-        await worker.loadLanguage(lang);
-        await worker.initialize(lang);
+        await worker.loadLanguage(settings.lang);
+        await worker.initialize(settings.lang);
       } catch {
-        // Greek can be tricky in-browser depending on build; fallback.
-        if (lang !== "eng") {
+        if (settings.lang !== "eng") {
           toast({
             title: "Greek OCR fallback",
             description: "Greek language pack may not be available in-browser. Falling back to English OCR.",
@@ -126,7 +162,7 @@ export default function PDFOCR() {
         setProgress({ page: pageNumber, total: totalPages, status: "Rendering page…" });
 
         const page = await pdf.getPage(pageNumber);
-        const viewport = page.getViewport({ scale });
+        const viewport = page.getViewport({ scale: settings.scale });
 
         // Render page to canvas
         const canvas = document.createElement("canvas");
@@ -139,11 +175,9 @@ export default function PDFOCR() {
 
         // OCR
         setProgress({ page: pageNumber, total: totalPages, status: "Running OCR…" });
-
-        // Note: We OCR the canvas element directly
         const { data } = await worker.recognize(canvas);
 
-        // Create PDF page with same pixel dimensions (1px = 1pt here; fine for search)
+        // Create PDF page with same pixel dimensions (1px = 1pt here; good enough for search)
         const w = canvas.width;
         const h = canvas.height;
         const outPage = outPdf.addPage([w, h]);
@@ -159,16 +193,13 @@ export default function PDFOCR() {
           height: h,
         });
 
-        // Add invisible text layer using word bounding boxes
-        // Tesseract gives bbox in image coordinates (origin top-left).
-        // PDF uses origin bottom-left, so we convert: y_pdf = h - y1
+        // Add “invisible” text layer using word bounding boxes
         const words = (data?.words || []) as Array<{
           text: string;
           bbox: { x0: number; y0: number; x1: number; y1: number };
           confidence?: number;
         }>;
 
-        // Use a tiny opacity so it stays “invisible” but reliably searchable
         const textOpacity = 0.01;
 
         for (const word of words) {
@@ -179,16 +210,12 @@ export default function PDFOCR() {
           const boxW = x1 - x0;
           const boxH = y1 - y0;
 
-          // Skip microscopic noise
           if (boxW < 2 || boxH < 2) continue;
 
           const x = clamp(x0, 0, w - 1);
           const y = clamp(h - y1, 0, h - 1);
-
-          // Approximate font size from bbox height
           const fontSize = clamp(boxH, 6, 48);
 
-          // Draw word
           outPage.drawText(t, {
             x,
             y,
@@ -210,6 +237,9 @@ export default function PDFOCR() {
         title: "Done!",
         description: "Downloaded a searchable (OCR) PDF.",
       });
+
+      // record “used settings” (optional but useful, no button needed)
+      moat.recordJob();
     } catch (e: any) {
       toast({
         title: "OCR failed",
@@ -232,8 +262,29 @@ export default function PDFOCR() {
       title="PDF OCR"
       description="Make scanned PDFs searchable by adding an invisible text layer (runs in your browser)."
     >
-      <div className="grid lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+
+        {/* LEFT */}
+        <div className="order-1 lg:order-2 space-y-6">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -274,15 +325,20 @@ export default function PDFOCR() {
                 <p className="text-sm font-medium">Language</p>
                 <p className="text-xs text-muted-foreground">English is the most reliable in-browser.</p>
               </div>
-              <select
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={lang}
-                onChange={(e) => setLang(e.target.value as OcrLang)}
+
+              <Select
+                value={settings.lang}
+                onValueChange={(v) => setSettings((p) => ({ ...p, lang: v as OcrLang }))}
                 disabled={converting}
               >
-                <option value="eng">English</option>
-                <option value="ell">Greek (may fallback)</option>
-              </select>
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Select language" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="eng">English</SelectItem>
+                  <SelectItem value="ell">Greek (may fallback)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center justify-between gap-3">
@@ -290,16 +346,21 @@ export default function PDFOCR() {
                 <p className="text-sm font-medium">Quality / scale</p>
                 <p className="text-xs text-muted-foreground">Higher = better OCR, slower.</p>
               </div>
-              <select
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={String(scale)}
-                onChange={(e) => setScale(Number(e.target.value))}
+
+              <Select
+                value={String(settings.scale)}
+                onValueChange={(v) => setSettings((p) => ({ ...p, scale: Number(v) as Scale }))}
                 disabled={converting}
               >
-                <option value="1">Fast (1x)</option>
-                <option value="2">Balanced (2x)</option>
-                <option value="3">High (3x)</option>
-              </select>
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Select quality" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">Fast (1x)</SelectItem>
+                  <SelectItem value="2">Balanced (2x)</SelectItem>
+                  <SelectItem value="3">High (3x)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </Card>
 
@@ -318,7 +379,8 @@ export default function PDFOCR() {
           </Button>
         </div>
 
-        <div className="space-y-6">
+        {/* RIGHT */}
+        <div className="order-2 lg:order-3 space-y-6">
           <Card className="p-6">
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
