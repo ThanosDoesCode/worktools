@@ -1,9 +1,9 @@
-import { useState, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, FileText, Loader2 } from "lucide-react";
+import { Upload, X, Download, FileText, Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // PDF text extraction (PDF.js)
@@ -14,6 +14,12 @@ import pdfWorker from "pdfjs-dist/build/pdf.worker.min?url";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
 
+// MOAT
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
+
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorker;
 
 interface PDFFile {
@@ -21,8 +27,73 @@ interface PDFFile {
   name: string;
 }
 
+type Settings = {
+  // Output content
+  includeTitlePage: boolean;
+  includePageHeadings: boolean;
+  collapseWhitespace: boolean;
+
+  // Chunking
+  chunkMaxLen: number; // 400..3000
+
+  // Export naming
+  filenameSuffix: string; // e.g. "docx" or "word"
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  includeTitlePage: true,
+  includePageHeadings: true,
+  collapseWhitespace: true,
+  chunkMaxLen: 1200,
+  filenameSuffix: "docx",
+};
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  {
+    name: "Readable (recommended)",
+    settings: { ...DEFAULT_SETTINGS, collapseWhitespace: true, chunkMaxLen: 1200 },
+  },
+  {
+    name: "More faithful spacing",
+    settings: { ...DEFAULT_SETTINGS, collapseWhitespace: false, chunkMaxLen: 1200 },
+  },
+  {
+    name: "No page headings",
+    settings: { ...DEFAULT_SETTINGS, includePageHeadings: false },
+  },
+  {
+    name: "Smaller paragraphs",
+    settings: { ...DEFAULT_SETTINGS, chunkMaxLen: 700 },
+  },
+];
+
 function baseName(name: string) {
   return name.replace(/\.pdf$/i, "") || "document";
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function normalizeWhitespace(s: string) {
+  return (s || "").replace(/\s+/g, " ").trim();
+}
+
+function chunkText(text: string, maxLen: number) {
+  const chunks: string[] = [];
+  let buf = (text || "").trim();
+  if (!buf) return chunks;
+
+  const limit = clamp(maxLen, 400, 3000);
+
+  while (buf.length > limit) {
+    const cut = buf.lastIndexOf(" ", limit);
+    const idx = cut > 200 ? cut : limit;
+    chunks.push(buf.slice(0, idx).trim());
+    buf = buf.slice(idx).trim();
+  }
+  if (buf) chunks.push(buf);
+  return chunks;
 }
 
 export default function PDFToWord() {
@@ -30,6 +101,16 @@ export default function PDFToWord() {
   const [converting, setConverting] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const { toast } = useToast();
+
+  // MOAT settings
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "pdf-to-word";
+
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
@@ -63,6 +144,13 @@ export default function PDFToWord() {
     setProgress(null);
   };
 
+  const settingsSummary = useMemo(() => {
+    const title = settings.includeTitlePage ? "title page" : "no title";
+    const headings = settings.includePageHeadings ? "page headings" : "no headings";
+    const ws = settings.collapseWhitespace ? "collapsed spaces" : "keep spacing";
+    return `${title} • ${headings} • ${ws} • chunk ${settings.chunkMaxLen}`;
+  }, [settings]);
+
   const convertToWord = async () => {
     if (!pdfFile) return;
 
@@ -79,23 +167,25 @@ export default function PDFToWord() {
 
       const children: Paragraph[] = [];
 
-      // Title + note (honest + free approach)
-      children.push(
-        new Paragraph({
-          text: baseName(pdfFile.name),
-          heading: HeadingLevel.TITLE,
-        }),
-      );
-      children.push(
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: "Text-first conversion (free, runs in your browser). Layout may differ from the original PDF.",
-              italics: true,
-            }),
-          ],
-        }),
-      );
+      // Optional title section
+      if (settings.includeTitlePage) {
+        children.push(
+          new Paragraph({
+            text: baseName(pdfFile.name),
+            heading: HeadingLevel.TITLE,
+          }),
+        );
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Text-first conversion (runs in your browser). Layout may differ from the original PDF.",
+                italics: true,
+              }),
+            ],
+          }),
+        );
+      }
 
       for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
         setProgress({ current: pageNumber, total: totalPages });
@@ -107,14 +197,17 @@ export default function PDFToWord() {
           .map((it) => (typeof it.str === "string" ? it.str : ""))
           .filter(Boolean);
 
-        const pageText = strings.join(" ").replace(/\s+/g, " ").trim();
+        let pageText = strings.join(" ");
+        pageText = settings.collapseWhitespace ? normalizeWhitespace(pageText) : pageText.trim();
 
-        children.push(
-          new Paragraph({
-            text: `Page ${pageNumber}`,
-            heading: HeadingLevel.HEADING_2,
-          }),
-        );
+        if (settings.includePageHeadings) {
+          children.push(
+            new Paragraph({
+              text: `Page ${pageNumber}`,
+              heading: HeadingLevel.HEADING_2,
+            }),
+          );
+        }
 
         if (!pageText) {
           children.push(
@@ -127,23 +220,12 @@ export default function PDFToWord() {
               ],
             }),
           );
-        } else {
-          // Keep it readable: chunk into reasonable paragraph sizes
-          const chunks: string[] = [];
-          const maxLen = 1200;
-          let buf = pageText;
+          continue;
+        }
 
-          while (buf.length > maxLen) {
-            const cut = buf.lastIndexOf(" ", maxLen);
-            const idx = cut > 200 ? cut : maxLen;
-            chunks.push(buf.slice(0, idx).trim());
-            buf = buf.slice(idx).trim();
-          }
-          if (buf) chunks.push(buf);
-
-          for (const chunk of chunks) {
-            children.push(new Paragraph({ children: [new TextRun(chunk)] }));
-          }
+        const chunks = chunkText(pageText, settings.chunkMaxLen);
+        for (const chunk of chunks) {
+          children.push(new Paragraph({ children: [new TextRun(chunk)] }));
         }
       }
 
@@ -152,12 +234,16 @@ export default function PDFToWord() {
       });
 
       const blob = await Packer.toBlob(doc);
-      saveAs(blob, `${baseName(pdfFile.name)}.docx`);
+
+      const suffix = (settings.filenameSuffix || "docx").trim().replace(/^\./, "") || "docx";
+      saveAs(blob, `${baseName(pdfFile.name)}.${suffix}`);
 
       toast({
         title: "Done!",
         description: "Your DOCX has been downloaded.",
       });
+
+      moat.recordJob();
     } catch (e: any) {
       toast({
         title: "Conversion failed",
@@ -175,8 +261,29 @@ export default function PDFToWord() {
       title="PDF to Word (Text Extract)"
       description="Extract selectable text from a PDF and download an editable DOCX."
     >
-      <div className="grid lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+
+        {/* LEFT */}
+        <div className="order-1 lg:order-2 space-y-6">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -211,6 +318,77 @@ export default function PDFToWord() {
             </Card>
           )}
 
+          {/* Options */}
+          <Card className="p-6 space-y-4">
+            <div className="text-xs text-muted-foreground">{settingsSummary}</div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Title page</p>
+                <p className="text-xs text-muted-foreground">Adds a title + note at the top of the DOCX.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={settings.includeTitlePage ? "on" : "off"}
+                onChange={(e) => setSettings((p) => ({ ...p, includeTitlePage: e.target.value === "on" }))}
+                disabled={converting}
+              >
+                <option value="on">On</option>
+                <option value="off">Off</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Page headings</p>
+                <p className="text-xs text-muted-foreground">Adds “Page N” headings.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={settings.includePageHeadings ? "on" : "off"}
+                onChange={(e) => setSettings((p) => ({ ...p, includePageHeadings: e.target.value === "on" }))}
+                disabled={converting}
+              >
+                <option value="on">On</option>
+                <option value="off">Off</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Whitespace</p>
+                <p className="text-xs text-muted-foreground">Collapse spacing for readability.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={settings.collapseWhitespace ? "collapse" : "keep"}
+                onChange={(e) => setSettings((p) => ({ ...p, collapseWhitespace: e.target.value === "collapse" }))}
+                disabled={converting}
+              >
+                <option value="collapse">Collapse spaces</option>
+                <option value="keep">Keep spacing</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Paragraph chunk size</p>
+                <p className="text-xs text-muted-foreground">Smaller chunks = more paragraphs.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={String(settings.chunkMaxLen)}
+                onChange={(e) => setSettings((p) => ({ ...p, chunkMaxLen: clamp(Number(e.target.value), 400, 3000) }))}
+                disabled={converting}
+              >
+                <option value="700">Small (700)</option>
+                <option value="1200">Normal (1200)</option>
+                <option value="1800">Large (1800)</option>
+                <option value="2500">Very large (2500)</option>
+              </select>
+            </div>
+          </Card>
+
           <Button onClick={convertToWord} disabled={!pdfFile || converting} className="w-full" size="lg">
             {converting ? (
               <>
@@ -226,7 +404,8 @@ export default function PDFToWord() {
           </Button>
         </div>
 
-        <div className="space-y-6">
+        {/* RIGHT */}
+        <div className="order-2 lg:order-3 space-y-6">
           <Card className="p-6">
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
