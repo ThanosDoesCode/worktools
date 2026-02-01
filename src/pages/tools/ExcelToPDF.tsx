@@ -3,7 +3,8 @@ import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, Table, Loader2, FileText } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Upload, X, Download, Table, Loader2, FileText, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import * as XLSX from "xlsx";
@@ -12,6 +13,7 @@ import autoTable from "jspdf-autotable";
 
 type PageSize = "a4" | "letter";
 type Orientation = "portrait" | "landscape";
+type HeaderMode = "auto" | "on" | "off";
 
 interface UploadFile {
   file: File;
@@ -41,6 +43,95 @@ function safeCell(v: any) {
   return String(v);
 }
 
+function isRowEmpty(row: string[]) {
+  return !row?.some((c) => (c ?? "").toString().trim() !== "");
+}
+
+function trimEmptyTrailingRows(rows: string[][]) {
+  let end = rows.length;
+  while (end > 0 && isRowEmpty(rows[end - 1])) end--;
+  return rows.slice(0, end);
+}
+
+function trimEmptyTrailingCols(rows: string[][]) {
+  if (!rows.length) return rows;
+  const maxCols = Math.max(...rows.map((r) => r.length), 0);
+  if (maxCols === 0) return rows;
+
+  let lastNonEmptyCol = -1;
+  for (let c = 0; c < maxCols; c++) {
+    const any = rows.some((r) => (r[c] ?? "").toString().trim() !== "");
+    if (any) lastNonEmptyCol = c;
+  }
+  const keepCols = Math.max(1, lastNonEmptyCol + 1);
+  return rows.map((r) => r.slice(0, keepCols));
+}
+
+function padRect(rows: string[][]) {
+  const colCount = Math.max(...rows.map((r) => r.length), 1);
+  return rows.map((r) => {
+    const rr = [...r];
+    while (rr.length < colCount) rr.push("");
+    return rr;
+  });
+}
+
+function looksLikeHeaderAuto(bodyRect: string[][]) {
+  const first = bodyRect[0] || [];
+  const second = bodyRect[1] || [];
+  const hasSecond = second.some((c) => c !== "");
+  const firstHasText = first.some((c) => c !== "");
+  if (!firstHasText || !hasSecond) return false;
+
+  // Slightly better than “row exists”: header tends to have more text than numbers
+  const firstTexty = first.filter((c) => isNaN(Number(c)) && String(c).trim() !== "").length;
+  const secondTexty = second.filter((c) => isNaN(Number(c)) && String(c).trim() !== "").length;
+
+  return firstTexty >= Math.max(1, secondTexty - 1);
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function buildColumnWidths(doc: jsPDF, rowsRect: string[][], marginX: number) {
+  // Compute “relative” widths by content length per column
+  const colCount = Math.max(...rowsRect.map((r) => r.length), 1);
+  const maxLens = new Array(colCount).fill(1);
+
+  for (const r of rowsRect) {
+    for (let c = 0; c < colCount; c++) {
+      const v = (r[c] ?? "").toString();
+      maxLens[c] = Math.max(maxLens[c], v.length);
+    }
+  }
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const usable = pageWidth - marginX * 2;
+
+  // Convert text length to points-ish (rough heuristic for 9pt font)
+  // Keep widths sane, so one long column doesn't eat the whole page.
+  const weights = maxLens.map((len) => clamp(len, 3, 40));
+  const total = weights.reduce((a, b) => a + b, 0) || 1;
+
+  const minW = 60; // ~ small column
+  const maxW = 260; // ~ big column
+
+  const raw = weights.map((w) => (usable * w) / total);
+  const widths = raw.map((w) => clamp(w, minW, maxW));
+
+  // If clamping changed totals, rescale to fit exactly
+  const sum = widths.reduce((a, b) => a + b, 0) || 1;
+  const scale = usable / sum;
+
+  const finalWidths = widths.map((w) => w * scale);
+
+  const columnStyles: Record<number, any> = {};
+  for (let i = 0; i < colCount; i++) columnStyles[i] = { cellWidth: finalWidths[i] };
+
+  return columnStyles;
+}
+
 export default function ExcelToPDF() {
   const [uploaded, setUploaded] = useState<UploadFile | null>(null);
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
@@ -50,6 +141,15 @@ export default function ExcelToPDF() {
 
   const [pageSize, setPageSize] = useState<PageSize>("a4");
   const [orientation, setOrientation] = useState<Orientation>("portrait");
+
+  // ✅ MOAT SETTINGS
+  const [moatEnabled, setMoatEnabled] = useState(true);
+  const [cleanEmpty, setCleanEmpty] = useState(true);
+  const [autoFitCols, setAutoFitCols] = useState(true);
+  const [autoOrient, setAutoOrient] = useState(true);
+  const [repeatHeader, setRepeatHeader] = useState(true);
+  const [pageNumbers, setPageNumbers] = useState(true);
+  const [headerMode, setHeaderMode] = useState<HeaderMode>("auto");
 
   const { toast } = useToast();
 
@@ -79,7 +179,6 @@ export default function ExcelToPDF() {
       try {
         const buf = await file.arrayBuffer();
 
-        // XLSX can read CSV too, but we handle both in the same path.
         const wb = XLSX.read(buf, {
           type: "array",
           cellDates: true,
@@ -148,11 +247,26 @@ export default function ExcelToPDF() {
 
   const hasData = useMemo(() => table.length > 0 && table.some((r) => r.some((c) => c !== "")), [table]);
 
+  // ✅ MOAT: cleaned/padded export table
+  const exportTable = useMemo(() => {
+    let rows = table;
+
+    if (moatEnabled && cleanEmpty) {
+      rows = trimEmptyTrailingRows(rows);
+      rows = trimEmptyTrailingCols(rows);
+    }
+
+    // Ensure rectangular
+    rows = padRect(rows);
+
+    return rows;
+  }, [table, moatEnabled, cleanEmpty]);
+
   const preview = useMemo(() => {
     const maxRows = 15;
     const maxCols = 8;
 
-    const rows = table.slice(0, maxRows).map((r) => r.slice(0, maxCols));
+    const rows = exportTable.slice(0, maxRows).map((r) => r.slice(0, maxCols));
     const colsCount = Math.max(1, ...rows.map((r) => r.length));
     const padded = rows.map((r) => {
       const rr = [...r];
@@ -163,10 +277,10 @@ export default function ExcelToPDF() {
     return {
       rows: padded,
       colsCount,
-      truncatedRows: table.length > maxRows,
-      truncatedCols: (table[0]?.length || 0) > maxCols,
+      truncatedRows: exportTable.length > maxRows,
+      truncatedCols: (exportTable[0]?.length || 0) > maxCols,
     };
-  }, [table]);
+  }, [exportTable]);
 
   const convertToPDF = async () => {
     if (!uploaded || !workbook || !sheetName) return;
@@ -183,35 +297,34 @@ export default function ExcelToPDF() {
     setConverting(true);
 
     try {
+      const title = `${baseName(uploaded.name)} — ${sheetName}`;
+
+      const colCount = Math.max(...exportTable.map((r) => r.length), 1);
+
+      // ✅ MOAT: auto orientation if wide
+      const orientationToUse: Orientation =
+        moatEnabled && autoOrient ? (colCount >= 9 ? "landscape" : orientation) : orientation;
+
       const doc = new jsPDF({
-        orientation: orientation === "portrait" ? "p" : "l",
+        orientation: orientationToUse === "portrait" ? "p" : "l",
         unit: "pt",
         format: pageSize,
       });
 
-      // Build a rectangular table (pad rows to same column length)
-      const colCount = Math.max(...table.map((r) => r.length), 1);
-      const body = table.map((r) => {
-        const rr = [...r];
-        while (rr.length < colCount) rr.push("");
-        return rr;
-      });
+      // ✅ Header detection mode
+      const autoHeader = looksLikeHeaderAuto(exportTable);
+      const useHeader = headerMode === "on" ? true : headerMode === "off" ? false : autoHeader;
 
-      // If the first row looks like headers, we can treat it as head.
-      // Simple heuristic: if first row has any non-empty and second row exists.
-      const first = body[0] || [];
-      const second = body[1] || [];
-      const hasSecond = second.some((c) => c !== "");
-      const looksLikeHeader = first.some((c) => c !== "") && hasSecond;
-
-      const head = looksLikeHeader ? [first] : undefined;
-      const startIndex = looksLikeHeader ? 1 : 0;
-      const bodyRows = body.slice(startIndex);
-
-      const title = `${baseName(uploaded.name)} — ${sheetName}`;
+      const head = useHeader ? [exportTable[0] || []] : undefined;
+      const bodyRows = useHeader ? exportTable.slice(1) : exportTable;
 
       doc.setFontSize(12);
       doc.text(title, 40, 40);
+
+      const marginX = 40;
+
+      const columnStyles =
+        moatEnabled && autoFitCols ? buildColumnWidths(doc, useHeader ? exportTable : exportTable, marginX) : undefined;
 
       autoTable(doc, {
         startY: 60,
@@ -226,9 +339,24 @@ export default function ExcelToPDF() {
         headStyles: {
           fontStyle: "bold",
         },
-        margin: { left: 40, right: 40 },
+        margin: { left: marginX, right: marginX },
         tableWidth: "auto",
-        horizontalPageBreak: true, // if table too wide, it breaks into multiple “column pages”
+        horizontalPageBreak: true,
+        columnStyles,
+
+        // ✅ MOAT: repeat header + page numbers
+        showHead: useHeader && moatEnabled && repeatHeader ? "everyPage" : "firstPage",
+        didDrawPage: (data) => {
+          if (!moatEnabled || !pageNumbers) return;
+          const pageCount = doc.getNumberOfPages();
+          const page = doc.getCurrentPageInfo().pageNumber;
+
+          doc.setFontSize(9);
+          const footer = `Page ${page} / ${pageCount}`;
+          const w = doc.internal.pageSize.getWidth();
+          const h = doc.internal.pageSize.getHeight();
+          doc.text(footer, w - marginX, h - 20, { align: "right" });
+        },
       });
 
       const outName = `${baseName(uploaded.name)}-${sheetName}.pdf`;
@@ -334,6 +462,91 @@ export default function ExcelToPDF() {
                   </select>
                 </div>
               </div>
+
+              {/* ✅ MOAT CARD */}
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <div className="text-sm font-semibold">Moat mode</div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <Checkbox
+                      checked={moatEnabled}
+                      onCheckedChange={(v) => setMoatEnabled(Boolean(v))}
+                      disabled={converting}
+                      id="moatEnabled"
+                    />
+                    <label htmlFor="moatEnabled" className="text-sm text-muted-foreground cursor-pointer">
+                      Enable
+                    </label>
+                  </div>
+                </div>
+
+                <div className={`space-y-3 ${!moatEnabled ? "opacity-50 pointer-events-none" : ""}`}>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={cleanEmpty}
+                        onCheckedChange={(v) => setCleanEmpty(Boolean(v))}
+                        disabled={converting}
+                      />
+                      Clean empty rows/cols
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={autoFitCols}
+                        onCheckedChange={(v) => setAutoFitCols(Boolean(v))}
+                        disabled={converting}
+                      />
+                      Auto-fit columns
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={autoOrient}
+                        onCheckedChange={(v) => setAutoOrient(Boolean(v))}
+                        disabled={converting}
+                      />
+                      Auto orientation (wide → landscape)
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={repeatHeader}
+                        onCheckedChange={(v) => setRepeatHeader(Boolean(v))}
+                        disabled={converting}
+                      />
+                      Repeat header on pages
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={pageNumbers}
+                        onCheckedChange={(v) => setPageNumbers(Boolean(v))}
+                        disabled={converting}
+                      />
+                      Page numbers
+                    </label>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium">Header row</div>
+                    <select
+                      className="w-full h-10 rounded-md border bg-background px-3 text-sm"
+                      value={headerMode}
+                      onChange={(e) => setHeaderMode(e.target.value as HeaderMode)}
+                      disabled={converting}
+                    >
+                      <option value="auto">Auto-detect</option>
+                      <option value="on">Always use first row</option>
+                      <option value="off">No header row</option>
+                    </select>
+                    <div className="text-xs text-muted-foreground">
+                      Moat tip: If your file has a title row above headers, set “No header row”.
+                    </div>
+                  </div>
+                </div>
+              </div>
             </Card>
           )}
 
@@ -393,8 +606,7 @@ export default function ExcelToPDF() {
                 <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground flex gap-2">
                   <FileText className="h-4 w-4 mt-0.5 shrink-0" />
                   <div>
-                    Tip: If your sheet is wide, choose <b>Landscape</b>. The export supports wide tables via horizontal
-                    page breaks.
+                    Tip: With <b>Moat mode</b> on, exports are cleaner, auto-fit, and print-friendly.
                   </div>
                 </div>
               </div>
@@ -408,6 +620,7 @@ export default function ExcelToPDF() {
               <li>• Sheet selection for Excel files</li>
               <li>• Multi-page tables</li>
               <li>• Private: runs in your browser</li>
+              <li>• Moat mode: cleanup + autofit + header repeat + page numbers</li>
             </ul>
           </Card>
         </div>
