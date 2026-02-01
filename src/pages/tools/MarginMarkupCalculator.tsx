@@ -26,10 +26,49 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 const CURRENCY_SYMBOL: Record<Currency, string> = {
+  // Original
   USD: "$",
   EUR: "€",
   GBP: "£",
   SEK: "kr",
+
+  // North America
+  CAD: "$", // Canadian Dollar
+  MXN: "$", // Mexican Peso
+
+  // Europe (Non-Euro)
+  CHF: "CHF", // Swiss Franc
+  NOK: "kr", // Norwegian Krone
+  DKK: "kr", // Danish Krone
+  PLN: "zł", // Polish Zloty
+  TRY: "₺", // Turkish Lira
+
+  // Asia & Pacific
+  JPY: "¥", // Japanese Yen
+  CNY: "¥", // Chinese Yuan
+  INR: "₹", // Indian Rupee
+  AUD: "$", // Australian Dollar
+  NZD: "$", // New Zealand Dollar
+  SGD: "$", // Singapore Dollar
+  HKD: "$", // Hong Kong Dollar
+  KRW: "₩", // South Korean Won
+  THB: "฿", // Thai Baht
+  IDR: "Rp", // Indonesian Rupiah
+
+  // South America & Africa
+  BRL: "R$", // Brazilian Real
+  ZAR: "R", // South African Rand
+  NGN: "₦", // Nigerian Naira
+
+  // Middle East
+  ILS: "₪", // Israeli New Shekel
+  AED: "د.إ", // UAE Dirham
+  SAR: "﷼", // Saudi Riyal
+
+  // Cryptocurrencies
+  BTC: "₿", // Bitcoin
+  ETH: "Ξ", // Ethereum
+  LTC: "Ł", // Litecoin
 };
 
 const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
