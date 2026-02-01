@@ -306,6 +306,14 @@ export default function MergePDFs() {
           />
 
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+
+          <div className="rounded-xl border border-border bg-muted/30 p-4 text-xs text-muted-foreground flex gap-2">
+            <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+            <div>
+              <b>Moat</b>: save/share merge settings (output name defaults, default page ranges). Your PDF files are
+              never stored or uploaded.
+            </div>
+          </div>
         </div>
 
         {/* LEFT (FILES) */}
