@@ -1,9 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, FileSpreadsheet, Loader2 } from "lucide-react";
+import { Upload, X, Download, FileSpreadsheet, Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import { saveAs } from "file-saver";
@@ -13,6 +13,12 @@ import JSZip from "jszip";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min?url";
 
+// MOAT
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
+
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorker;
 
 interface PDFFile {
@@ -20,15 +26,50 @@ interface PDFFile {
   name: string;
 }
 
+/** ---- Settings we store/share via Moat (NOT the file contents) ---- */
+type OutputMode = "multi" | "single";
+
+type Settings = {
+  mode: OutputMode;
+
+  // Table heuristics
+  splitOnMultiSpace: boolean; // split rows into columns
+  minCols: number; // how many cols to consider "tabular"
+  maxCellLen: number; // discard "tabular" if cells are too long
+  addPageSeparatorRow: boolean; // for single CSV, add "--- Page N ---"
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  mode: "multi",
+  splitOnMultiSpace: true,
+  minCols: 2,
+  maxCellLen: 120,
+  addPageSeparatorRow: true,
+};
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  { name: "Safe default (ZIP per page)", settings: { ...DEFAULT_SETTINGS, mode: "multi" } },
+  {
+    name: "Single CSV (with separators)",
+    settings: { ...DEFAULT_SETTINGS, mode: "single", addPageSeparatorRow: true },
+  },
+  { name: "Single CSV (no separators)", settings: { ...DEFAULT_SETTINGS, mode: "single", addPageSeparatorRow: false } },
+  { name: "Aggressive columns (min 3 cols)", settings: { ...DEFAULT_SETTINGS, minCols: 3 } },
+  { name: "No column splitting (text rows)", settings: { ...DEFAULT_SETTINGS, splitOnMultiSpace: false } },
+];
+
 function baseName(name: string) {
   return name.replace(/\.pdf$/i, "") || "document";
 }
 
+function clampInt(n: number, min: number, max: number) {
+  const x = Math.floor(Number.isFinite(n) ? n : min);
+  return Math.max(min, Math.min(max, x));
+}
+
 function escapeCsvCell(value: string) {
   const v = value ?? "";
-  // Escape quotes by doubling them
   const escaped = v.replace(/"/g, '""');
-  // Wrap in quotes if it contains comma, quote, or newline
   if (/[",\n\r]/.test(escaped)) return `"${escaped}"`;
   return escaped;
 }
@@ -40,16 +81,25 @@ function splitLineToCells(line: string): string[] {
   return normalized.split(/\s{2,}/g).map((c) => c.trim());
 }
 
-function looksTabular(cells: string[]) {
-  return cells.length >= 2 && cells.every((c) => c.length <= 120);
+function looksTabular(cells: string[], minCols: number, maxCellLen: number) {
+  return cells.length >= minCols && cells.every((c) => c.length <= maxCellLen);
 }
 
 export default function PDFToCSV() {
   const [pdfFile, setPdfFile] = useState<PDFFile | null>(null);
   const [converting, setConverting] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
-  const [mode, setMode] = useState<"multi" | "single">("multi"); // multi = ZIP per page, single = one CSV
   const { toast } = useToast();
+
+  // Moat settings
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "pdf-to-csv";
+
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
@@ -57,6 +107,7 @@ export default function PDFToCSV() {
       if (file && (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"))) {
         setPdfFile({ file, name: file.name });
         setProgress(null);
+        toast({ title: "Loaded", description: "PDF ready to convert." });
       } else {
         toast({
           title: "Only PDFs supported",
@@ -133,24 +184,27 @@ export default function PDFToCSV() {
 
         for (const line of lines) {
           if (!line) continue;
-          const cells = splitLineToCells(line);
-          if (looksTabular(cells)) pageRows.push(cells);
-          else pageRows.push([line]);
+
+          if (settings.splitOnMultiSpace) {
+            const cells = splitLineToCells(line);
+            if (looksTabular(cells, settings.minCols, settings.maxCellLen)) pageRows.push(cells);
+            else pageRows.push([line]);
+          } else {
+            pageRows.push([line]);
+          }
         }
 
-        // Export page CSV
         const pageCsv = pageRows.map((row) => row.map(escapeCsvCell).join(",")).join("\n");
 
-        if (mode === "multi") {
+        if (settings.mode === "multi") {
           zip.file(`${base}-page-${String(pageNumber).padStart(3, "0")}.csv`, pageCsv);
         } else {
-          // Add a simple separator row between pages for combined file
-          if (pageNumber > 1) combinedRows.push([`--- Page ${pageNumber} ---`]);
+          if (pageNumber > 1 && settings.addPageSeparatorRow) combinedRows.push([`--- Page ${pageNumber} ---`]);
           combinedRows.push(...pageRows);
         }
       }
 
-      if (mode === "multi") {
+      if (settings.mode === "multi") {
         const zipBlob = await zip.generateAsync({ type: "blob" });
         saveAs(zipBlob, `${base}-csv.zip`);
         toast({
@@ -159,7 +213,6 @@ export default function PDFToCSV() {
         });
       } else {
         const combinedCsv = combinedRows.map((row) => row.map(escapeCsvCell).join(",")).join("\n");
-
         const blob = new Blob([combinedCsv], { type: "text/csv;charset=utf-8" });
         saveAs(blob, `${base}.csv`);
         toast({
@@ -167,6 +220,9 @@ export default function PDFToCSV() {
           description: `Exported a single CSV from ${totalPages} page(s).`,
         });
       }
+
+      // Record “job” (settings only)
+      moat.recordJob();
     } catch (e: any) {
       toast({
         title: "Conversion failed",
@@ -179,10 +235,35 @@ export default function PDFToCSV() {
     }
   };
 
+  const modeLabel = useMemo(() => {
+    return settings.mode === "multi" ? "ZIP (one CSV per page)" : "Single CSV file";
+  }, [settings.mode]);
+
   return (
     <ToolLayout title="PDF to CSV (Table Extract)" description="Extract text and simple tables from PDF into CSV.">
-      <div className="grid lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+
+        {/* LEFT */}
+        <div className="order-1 lg:order-2 space-y-6 lg:col-span-1">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -217,6 +298,7 @@ export default function PDFToCSV() {
             </Card>
           )}
 
+          {/* SETTINGS */}
           <Card className="p-6 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -225,13 +307,83 @@ export default function PDFToCSV() {
               </div>
               <select
                 className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={mode}
-                onChange={(e) => setMode(e.target.value as "multi" | "single")}
+                value={settings.mode}
+                onChange={(e) => setSettings((p) => ({ ...p, mode: e.target.value as OutputMode }))}
                 disabled={converting}
               >
                 <option value="multi">ZIP (one CSV per page)</option>
                 <option value="single">Single CSV file</option>
               </select>
+            </div>
+
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Split into columns</p>
+                  <p className="text-xs text-muted-foreground">Uses multiple spaces/tabs as column separators.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={settings.splitOnMultiSpace}
+                  onChange={(e) => setSettings((p) => ({ ...p, splitOnMultiSpace: e.target.checked }))}
+                  disabled={converting}
+                />
+              </div>
+
+              {settings.splitOnMultiSpace && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-xs text-muted-foreground">
+                    Min columns
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm text-foreground"
+                      value={settings.minCols}
+                      onChange={(e) =>
+                        setSettings((p) => ({ ...p, minCols: clampInt(Number(e.target.value || 2), 1, 10) }))
+                      }
+                      disabled={converting}
+                    />
+                  </label>
+
+                  <label className="text-xs text-muted-foreground">
+                    Max cell length
+                    <input
+                      type="number"
+                      min={20}
+                      max={300}
+                      className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm text-foreground"
+                      value={settings.maxCellLen}
+                      onChange={(e) =>
+                        setSettings((p) => ({ ...p, maxCellLen: clampInt(Number(e.target.value || 120), 20, 300) }))
+                      }
+                      disabled={converting}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {settings.mode === "single" && (
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Add page separator rows</p>
+                    <p className="text-xs text-muted-foreground">Adds “--- Page N ---” between pages.</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={settings.addPageSeparatorRow}
+                    onChange={(e) => setSettings((p) => ({ ...p, addPageSeparatorRow: e.target.checked }))}
+                    disabled={converting}
+                  />
+                </div>
+              )}
+
+              <div className="text-xs text-muted-foreground">
+                Current: <span className="font-medium text-foreground">{modeLabel}</span>
+              </div>
             </div>
           </Card>
 
@@ -250,7 +402,8 @@ export default function PDFToCSV() {
           </Button>
         </div>
 
-        <div className="space-y-6">
+        {/* RIGHT */}
+        <div className="order-2 lg:order-3 space-y-6 lg:col-span-1">
           <Card className="p-6">
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
@@ -281,6 +434,7 @@ export default function PDFToCSV() {
               <li>• Works best on simple tables with consistent spacing</li>
               <li>• Complex PDFs may produce imperfect columns</li>
               <li>• For perfect table extraction you usually need backend engines</li>
+              <li>• Your file never leaves your device</li>
             </ul>
           </Card>
         </div>
