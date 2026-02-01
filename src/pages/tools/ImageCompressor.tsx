@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import JSZip from "jszip";
 import heic2any from "heic2any";
@@ -10,8 +10,14 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, X, Download, Loader2, Wand2, FileArchive } from "lucide-react";
+import { Upload, X, Download, Loader2, Wand2, FileArchive, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+/** Moat layer (adjust paths if your project differs) */
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
 
 type MimeOut = "image/jpeg" | "image/webp" | "image/avif";
 type PresetId = "email-1mb" | "email-5mb" | "instagram-post" | "instagram-story" | "linkedin" | "website" | "custom";
@@ -39,6 +45,60 @@ interface ImgItem {
   qualityUsed?: number;
   outBlob?: Blob;
 }
+
+type Preset = {
+  id: PresetId;
+  name: string;
+  description: string;
+  targetBytes?: number; // per-image target
+  maxWidth?: number;
+};
+
+const PRESETS: Preset[] = [
+  {
+    id: "email-1mb",
+    name: "Email (≤ 1MB each)",
+    description: "Great for fast attachments",
+    targetBytes: 1 * 1024 * 1024,
+    maxWidth: 1600,
+  },
+  {
+    id: "email-5mb",
+    name: "Email (≤ 5MB each)",
+    description: "Safer for bigger images",
+    targetBytes: 5 * 1024 * 1024,
+    maxWidth: 2400,
+  },
+  {
+    id: "instagram-post",
+    name: "Instagram Post (1080px)",
+    description: "Feeds nicely at 1080px width",
+    targetBytes: 900 * 1024,
+    maxWidth: 1080,
+  },
+  {
+    id: "instagram-story",
+    name: "Instagram Story/Reel (1080px)",
+    description: "Fits story width (no crop)",
+    targetBytes: 1200 * 1024,
+    maxWidth: 1080,
+  },
+  {
+    id: "linkedin",
+    name: "LinkedIn Post (1200px)",
+    description: "Sharp for LinkedIn feed",
+    targetBytes: 1200 * 1024,
+    maxWidth: 1200,
+  },
+  {
+    id: "website",
+    name: "Website (1600px)",
+    description: "Good for blogs/hero images",
+    targetBytes: 1600 * 1024,
+    maxWidth: 1600,
+  },
+  { id: "custom", name: "Custom", description: "Pick your own size + quality + target", maxWidth: 1600 },
+];
 
 function safeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -108,60 +168,6 @@ async function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
 async function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   return loadImageFromBlob(file);
 }
-
-type Preset = {
-  id: PresetId;
-  name: string;
-  description: string;
-  targetBytes?: number; // per-image target
-  maxWidth?: number;
-};
-
-const PRESETS: Preset[] = [
-  {
-    id: "email-1mb",
-    name: "Email (≤ 1MB each)",
-    description: "Great for fast attachments",
-    targetBytes: 1 * 1024 * 1024,
-    maxWidth: 1600,
-  },
-  {
-    id: "email-5mb",
-    name: "Email (≤ 5MB each)",
-    description: "Safer for bigger images",
-    targetBytes: 5 * 1024 * 1024,
-    maxWidth: 2400,
-  },
-  {
-    id: "instagram-post",
-    name: "Instagram Post (1080px)",
-    description: "Feeds nicely at 1080px width",
-    targetBytes: 900 * 1024,
-    maxWidth: 1080,
-  },
-  {
-    id: "instagram-story",
-    name: "Instagram Story/Reel (1080px)",
-    description: "Fits story width (no crop)",
-    targetBytes: 1200 * 1024,
-    maxWidth: 1080,
-  },
-  {
-    id: "linkedin",
-    name: "LinkedIn Post (1200px)",
-    description: "Sharp for LinkedIn feed",
-    targetBytes: 1200 * 1024,
-    maxWidth: 1200,
-  },
-  {
-    id: "website",
-    name: "Website (1600px)",
-    description: "Good for blogs/hero images",
-    targetBytes: 1600 * 1024,
-    maxWidth: 1600,
-  },
-  { id: "custom", name: "Custom", description: "Pick your own size + quality + target", maxWidth: 1600 },
-];
 
 async function canvasEncode(params: {
   img: HTMLImageElement;
@@ -307,43 +313,152 @@ function allocateBudgets(params: {
   return budgets.map((b, i) => minPerImageBytes + (variable[i] / varSum) * remaining);
 }
 
+/** -----------------------------
+ *  MOAT SETTINGS (what we store/share)
+ *  - We do NOT store uploaded files.
+ *  - Only store knobs the user cares about.
+ * ------------------------------ */
+type CompressorSettings = {
+  presetId: PresetId;
+  outType: MimeOut;
+
+  jpgBgMode: BgMode;
+  jpgBgCustom: string;
+
+  customTargetMB: number;
+  customMaxWidth: number;
+
+  minQuality: number;
+  maxQuality: number;
+
+  renameToCompressed: boolean;
+
+  fitTotalLimit: boolean;
+  totalLimitMB: number;
+};
+
+const DEFAULT_SETTINGS: CompressorSettings = {
+  presetId: "email-1mb",
+  outType: "image/webp",
+
+  jpgBgMode: "white",
+  jpgBgCustom: "#ffffff",
+
+  customTargetMB: 1,
+  customMaxWidth: 1600,
+
+  minQuality: 55,
+  maxQuality: 90,
+
+  renameToCompressed: true,
+
+  fitTotalLimit: false,
+  totalLimitMB: 10,
+};
+
+const RECOMMENDED_MOAT_PRESETS = [
+  {
+    name: "Email safe (1MB, ZIP)",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      presetId: "email-1mb",
+      outType: "image/jpeg",
+      fitTotalLimit: true,
+      totalLimitMB: 10,
+      minQuality: 50,
+      maxQuality: 85,
+      renameToCompressed: true,
+      jpgBgMode: "white",
+    } satisfies CompressorSettings,
+  },
+  {
+    name: "Instagram post (1080 WebP)",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      presetId: "instagram-post",
+      outType: "image/webp",
+      minQuality: 60,
+      maxQuality: 90,
+      fitTotalLimit: false,
+    } satisfies CompressorSettings,
+  },
+  {
+    name: "Instagram story (1080 WebP)",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      presetId: "instagram-story",
+      outType: "image/webp",
+      minQuality: 60,
+      maxQuality: 90,
+      fitTotalLimit: false,
+    } satisfies CompressorSettings,
+  },
+  {
+    name: "LinkedIn (1200 JPG)",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      presetId: "linkedin",
+      outType: "image/jpeg",
+      minQuality: 55,
+      maxQuality: 88,
+      jpgBgMode: "white",
+      fitTotalLimit: false,
+    } satisfies CompressorSettings,
+  },
+  {
+    name: "Website (1600 WebP)",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      presetId: "website",
+      outType: "image/webp",
+      minQuality: 60,
+      maxQuality: 92,
+      fitTotalLimit: false,
+    } satisfies CompressorSettings,
+  },
+] as const;
+
 export default function ImageCompressor() {
   const { toast } = useToast();
 
+  /** Files (NOT in moat) */
   const [items, setItems] = useState<ImgItem[]>([]);
   const [compressing, setCompressing] = useState(false);
   const [zipping, setZipping] = useState(false);
 
-  const [presetId, setPresetId] = useState<PresetId>("email-1mb");
-  const preset = useMemo(() => PRESETS.find((p) => p.id === presetId)!, [presetId]);
+  /** Moat-managed settings */
+  const toolSlug = "image-compressor";
+  const [settings, setSettings] = useState<CompressorSettings>(DEFAULT_SETTINGS);
+  const setSettingsForMoat = (s: Record<string, unknown>) => setSettings(s as CompressorSettings);
 
-  const [outType, setOutType] = useState<MimeOut>("image/webp");
+  const moat = useMoat(settings as Record<string, unknown>, setSettingsForMoat, {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_MOAT_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
+
+  /** Derived from settings */
+  const presetId = settings.presetId;
+  const preset = useMemo(() => PRESETS.find((p) => p.id === presetId)!, [presetId]);
+  const outType = settings.outType;
+
   const [webpSupported, setWebpSupported] = useState(true);
   const [avifSupported, setAvifSupported] = useState(false);
 
-  const [jpgBgMode, setJpgBgMode] = useState<BgMode>("white");
-  const [jpgBgCustom, setJpgBgCustom] = useState<string>("#ffffff");
-
-  const [customTargetMB, setCustomTargetMB] = useState<number>(1);
-  const [customMaxWidth, setCustomMaxWidth] = useState<number>(1600);
-  const [minQuality, setMinQuality] = useState<number>(55);
-  const [maxQuality, setMaxQuality] = useState<number>(90);
-  const [renameToCompressed, setRenameToCompressed] = useState(true);
-
-  const [fitTotalLimit, setFitTotalLimit] = useState<boolean>(false);
-  const [totalLimitMB, setTotalLimitMB] = useState<number>(10);
-
-  useMemo(() => {
+  useEffect(() => {
     (async () => {
       const w = await supportsEncoding("image/webp");
       const a = await supportsEncoding("image/avif");
       setWebpSupported(w);
       setAvifSupported(a);
 
-      if (!w && outType === "image/webp") setOutType("image/jpeg");
-      if (!a && outType === "image/avif") setOutType(w ? "image/webp" : "image/jpeg");
+      // if current outType becomes unsupported, fall back
+      setSettings((prev) => {
+        if (!w && prev.outType === "image/webp") return { ...prev, outType: "image/jpeg" };
+        if (!a && prev.outType === "image/avif") return { ...prev, outType: w ? "image/webp" : "image/jpeg" };
+        return prev;
+      });
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onDrop = useCallback(
@@ -414,6 +529,7 @@ export default function ImageCompressor() {
 
       setItems((prev) => [...prev, ...newItems]);
 
+      // Try to read dimensions (best-effort)
       try {
         for (const it of newItems) {
           let img: HTMLImageElement;
@@ -477,7 +593,7 @@ export default function ImageCompressor() {
   const compressAll = async () => {
     if (items.length === 0) return;
 
-    if (outType === "image/webp" && !webpSupported) {
+    if (settings.outType === "image/webp" && !webpSupported) {
       toast({
         title: "WebP not supported here",
         description: "Switch output to JPG or AVIF.",
@@ -485,7 +601,7 @@ export default function ImageCompressor() {
       });
       return;
     }
-    if (outType === "image/avif" && !avifSupported) {
+    if (settings.outType === "image/avif" && !avifSupported) {
       toast({
         title: "AVIF not supported here",
         description: "Switch output to WebP or JPG.",
@@ -498,15 +614,16 @@ export default function ImageCompressor() {
 
     try {
       const perImageTargetBytes =
-        presetId === "custom" ? Math.max(0, customTargetMB) * 1024 * 1024 : preset.targetBytes;
+        settings.presetId === "custom" ? Math.max(0, settings.customTargetMB) * 1024 * 1024 : preset.targetBytes;
 
-      const maxWidth = presetId === "custom" ? Math.max(320, customMaxWidth) : (preset.maxWidth ?? 1600);
+      const maxWidth =
+        settings.presetId === "custom" ? Math.max(320, settings.customMaxWidth) : (preset.maxWidth ?? 1600);
 
-      const minQ = clamp(minQuality / 100, 0.1, 0.95);
-      const maxQ = clamp(maxQuality / 100, minQ, 0.98);
+      const minQ = clamp(settings.minQuality / 100, 0.1, 0.95);
+      const maxQ = clamp(settings.maxQuality / 100, minQ, 0.98);
 
-      const totalLimitBytes = Math.max(0.1, totalLimitMB) * 1024 * 1024;
-      const useTotal = fitTotalLimit && items.length > 1;
+      const totalLimitBytes = Math.max(0.1, settings.totalLimitMB) * 1024 * 1024;
+      const useTotal = settings.fitTotalLimit && items.length > 1;
 
       let budgets: number[] | null = null;
       if (useTotal) {
@@ -555,27 +672,27 @@ export default function ImageCompressor() {
 
           const { blob, w, h, q } = await compressToTarget({
             img,
-            outType,
+            outType: settings.outType,
             origW,
             origH,
             maxWidth,
             targetBytes: targetForThis,
             minQ,
             maxQ,
-            jpgBgMode,
-            jpgBgCustom,
+            jpgBgMode: settings.jpgBgMode,
+            jpgBgCustom: settings.jpgBgCustom,
           });
 
           const base = it.name.replace(/\.[^.]+$/, "");
-          const outExt = extFromMime(outType);
-          const outName = renameToCompressed ? `${base}-compressed.${outExt}` : `${base}.${outExt}`;
+          const outExt = extFromMime(settings.outType);
+          const outName = settings.renameToCompressed ? `${base}-compressed.${outExt}` : `${base}.${outExt}`;
           const outUrl = URL.createObjectURL(blob);
 
           updated.push({
             ...it,
             outUrl,
             outName,
-            outType,
+            outType: settings.outType,
             outSize: blob.size,
             outWidth: w,
             outHeight: h,
@@ -596,18 +713,21 @@ export default function ImageCompressor() {
       }
 
       setItems(lastUpdated);
+      moat.recordJob();
 
       if (useTotal) {
-        const totalLimitBytes2 = Math.max(0.1, totalLimitMB) * 1024 * 1024;
+        const totalLimitBytes2 = Math.max(0.1, settings.totalLimitMB) * 1024 * 1024;
         if (lastTotalOut <= totalLimitBytes2) {
           toast({
             title: "Compressed to total limit!",
-            description: `All images fit under ${totalLimitMB}MB total.`,
+            description: `All images fit under ${settings.totalLimitMB}MB total.`,
           });
         } else {
           toast({
             title: "Best-effort compression done",
-            description: `Could not fully reach ${totalLimitMB}MB total with current settings. Try lower Max quality or switch format.`,
+            description:
+              `Could not fully reach ${settings.totalLimitMB}MB total with current settings. ` +
+              `Try lower Max quality or switch format.`,
             variant: "destructive",
           });
         }
@@ -649,6 +769,7 @@ export default function ImageCompressor() {
       return;
     }
     ready.forEach(downloadOne);
+    moat.recordJob();
   };
 
   const downloadZip = async () => {
@@ -694,6 +815,8 @@ export default function ImageCompressor() {
         title: "ZIP downloaded!",
         description: "A ZIP with all compressed images was created locally.",
       });
+
+      moat.recordJob();
     } catch (e: any) {
       toast({
         title: "ZIP failed",
@@ -708,14 +831,73 @@ export default function ImageCompressor() {
   const outTotal = useMemo(() => items.reduce((acc, it) => acc + (it.outSize ?? 0), 0), [items]);
   const outReady = items.some((it) => !!it.outBlob);
 
+  const applyPresetId = (id: PresetId) => {
+    setSettings((prev) => {
+      // keep custom values, just change presetId
+      const next = { ...prev, presetId: id };
+
+      // if they choose a non-custom preset, it's safe to keep customTarget/maxWidth around
+      // (used only when presetId === "custom")
+      return next;
+    });
+  };
+
+  const resetToDefaults = () => {
+    // clear outputs but keep uploads (so reset feels safe)
+    setItems((prev) => {
+      prev.forEach((it) => {
+        if (it.outUrl) URL.revokeObjectURL(it.outUrl);
+      });
+      return prev.map((it) => ({
+        ...it,
+        outUrl: undefined,
+        outBlob: undefined,
+        outName: undefined,
+        outSize: undefined,
+      }));
+    });
+
+    setSettings(DEFAULT_SETTINGS);
+    toast({ title: "Reset", description: "Settings reset. Uploads kept." });
+    moat.recordJob();
+  };
+
   return (
     <ToolLayout
       title="Image Compressor"
       description="Compress images for email, Instagram, LinkedIn, and web — private, fast."
     >
-      <div className="grid lg:grid-cols-2 gap-8">
-        {/* Left */}
-        <div className="space-y-6">
+      <div className="grid lg:grid-cols-3 gap-8">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+
+          <div className="rounded-xl border border-border bg-muted/30 p-4 text-xs text-muted-foreground flex gap-2">
+            <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+            <div>
+              <b>Moat</b>: save your favorite compression setups (IG/LinkedIn/Email), reuse last settings, share a link
+              with the exact knobs — without ever uploading files.
+            </div>
+          </div>
+        </div>
+
+        {/* LEFT: UPLOAD + SETTINGS + ACTIONS */}
+        <div className="order-1 lg:order-2 lg:col-span-1 space-y-6">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -737,7 +919,7 @@ export default function ImageCompressor() {
           <Card className="p-6 space-y-5">
             <div className="space-y-2">
               <Label>Preset</Label>
-              <Select value={presetId} onValueChange={(v) => setPresetId(v as PresetId)}>
+              <Select value={settings.presetId} onValueChange={(v) => applyPresetId(v as PresetId)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Choose a preset" />
                 </SelectTrigger>
@@ -754,7 +936,10 @@ export default function ImageCompressor() {
 
             <div className="space-y-2">
               <Label>Output format</Label>
-              <Select value={outType} onValueChange={(v) => setOutType(v as MimeOut)}>
+              <Select
+                value={settings.outType}
+                onValueChange={(v) => setSettings((p) => ({ ...p, outType: v as MimeOut }))}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Output format" />
                 </SelectTrigger>
@@ -772,7 +957,7 @@ export default function ImageCompressor() {
               )}
             </div>
 
-            {outType === "image/jpeg" && (
+            {settings.outType === "image/jpeg" && (
               <div className="rounded-lg border p-4 space-y-3">
                 <div className="space-y-1">
                   <Label>JPG background (for transparent images)</Label>
@@ -782,7 +967,10 @@ export default function ImageCompressor() {
                 <div className="grid gap-3 sm:grid-cols-2 items-end">
                   <div className="space-y-2">
                     <Label>Background</Label>
-                    <Select value={jpgBgMode} onValueChange={(v) => setJpgBgMode(v as BgMode)}>
+                    <Select
+                      value={settings.jpgBgMode}
+                      onValueChange={(v) => setSettings((p) => ({ ...p, jpgBgMode: v as BgMode }))}
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -794,12 +982,12 @@ export default function ImageCompressor() {
                     </Select>
                   </div>
 
-                  {jpgBgMode === "custom" && (
+                  {settings.jpgBgMode === "custom" && (
                     <div className="space-y-2">
                       <Label>Custom color</Label>
                       <Input
-                        value={jpgBgCustom}
-                        onChange={(e) => setJpgBgCustom(e.target.value)}
+                        value={settings.jpgBgCustom}
+                        onChange={(e) => setSettings((p) => ({ ...p, jpgBgCustom: e.target.value }))}
                         placeholder="#ffffff"
                       />
                       <p className="text-xs text-muted-foreground">Use hex like #ffffff</p>
@@ -816,7 +1004,11 @@ export default function ImageCompressor() {
                   <Label>Fit ALL images into a total limit</Label>
                   <p className="text-xs text-muted-foreground">Best for email limits (example: 10MB total)</p>
                 </div>
-                <Switch checked={fitTotalLimit} onCheckedChange={setFitTotalLimit} disabled={items.length < 2} />
+                <Switch
+                  checked={settings.fitTotalLimit}
+                  onCheckedChange={(v) => setSettings((p) => ({ ...p, fitTotalLimit: v }))}
+                  disabled={items.length < 2}
+                />
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 items-end">
@@ -826,9 +1018,9 @@ export default function ImageCompressor() {
                     type="number"
                     min={1}
                     step={1}
-                    value={totalLimitMB}
-                    onChange={(e) => setTotalLimitMB(Math.max(1, Number(e.target.value)))}
-                    disabled={!fitTotalLimit}
+                    value={settings.totalLimitMB}
+                    onChange={(e) => setSettings((p) => ({ ...p, totalLimitMB: Math.max(1, Number(e.target.value)) }))}
+                    disabled={!settings.fitTotalLimit}
                   />
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -844,7 +1036,7 @@ export default function ImageCompressor() {
             </div>
 
             {/* Custom options */}
-            {presetId === "custom" && (
+            {settings.presetId === "custom" && (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Target size per image (MB)</Label>
@@ -852,8 +1044,8 @@ export default function ImageCompressor() {
                     type="number"
                     min={0.1}
                     step={0.1}
-                    value={customTargetMB}
-                    onChange={(e) => setCustomTargetMB(Number(e.target.value))}
+                    value={settings.customTargetMB}
+                    onChange={(e) => setSettings((p) => ({ ...p, customTargetMB: Number(e.target.value) }))}
                   />
                 </div>
                 <div className="space-y-2">
@@ -862,8 +1054,8 @@ export default function ImageCompressor() {
                     type="number"
                     min={320}
                     step={10}
-                    value={customMaxWidth}
-                    onChange={(e) => setCustomMaxWidth(Number(e.target.value))}
+                    value={settings.customMaxWidth}
+                    onChange={(e) => setSettings((p) => ({ ...p, customMaxWidth: Number(e.target.value) }))}
                   />
                 </div>
               </div>
@@ -877,8 +1069,8 @@ export default function ImageCompressor() {
                   min={10}
                   max={95}
                   step={1}
-                  value={minQuality}
-                  onChange={(e) => setMinQuality(clamp(Number(e.target.value), 10, 95))}
+                  value={settings.minQuality}
+                  onChange={(e) => setSettings((p) => ({ ...p, minQuality: clamp(Number(e.target.value), 10, 95) }))}
                 />
               </div>
               <div className="space-y-2">
@@ -888,8 +1080,8 @@ export default function ImageCompressor() {
                   min={10}
                   max={98}
                   step={1}
-                  value={maxQuality}
-                  onChange={(e) => setMaxQuality(clamp(Number(e.target.value), 10, 98))}
+                  value={settings.maxQuality}
+                  onChange={(e) => setSettings((p) => ({ ...p, maxQuality: clamp(Number(e.target.value), 10, 98) }))}
                 />
               </div>
             </div>
@@ -899,7 +1091,10 @@ export default function ImageCompressor() {
                 <Label>Rename with “-compressed”</Label>
                 <p className="text-xs text-muted-foreground">Keeps originals untouched</p>
               </div>
-              <Switch checked={renameToCompressed} onCheckedChange={setRenameToCompressed} />
+              <Switch
+                checked={settings.renameToCompressed}
+                onCheckedChange={(v) => setSettings((p) => ({ ...p, renameToCompressed: v }))}
+              />
             </div>
           </Card>
 
@@ -920,25 +1115,7 @@ export default function ImageCompressor() {
             </Button>
 
             <Button
-              onClick={() => {
-                const ready = items.filter((x) => x.outUrl && x.outName);
-                if (ready.length === 0) {
-                  toast({
-                    title: "Nothing to download",
-                    description: "Compress your images first.",
-                    variant: "destructive",
-                  });
-                  return;
-                }
-                ready.forEach((it) => {
-                  const a = document.createElement("a");
-                  a.href = it.outUrl!;
-                  a.download = it.outName!;
-                  document.body.appendChild(a);
-                  a.click();
-                  a.remove();
-                });
-              }}
+              onClick={downloadAll}
               disabled={items.every((x) => !x.outUrl)}
               variant="secondary"
               className="w-full"
@@ -964,14 +1141,19 @@ export default function ImageCompressor() {
           </Button>
 
           {items.length > 0 && (
-            <Button variant="ghost" onClick={clearAll} className="w-full">
-              Clear all
-            </Button>
+            <div className="grid gap-2">
+              <Button variant="ghost" onClick={clearAll} className="w-full">
+                Clear uploads
+              </Button>
+              <Button variant="ghost" onClick={resetToDefaults} className="w-full">
+                Reset settings
+              </Button>
+            </div>
           )}
         </div>
 
-        {/* Right */}
-        <div className="space-y-6">
+        {/* RIGHT: LIST + HELP */}
+        <div className="order-2 lg:order-3 lg:col-span-1 space-y-6">
           {items.length > 0 && (
             <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
@@ -1007,7 +1189,14 @@ export default function ImageCompressor() {
 
                     <div className="flex items-center gap-2 shrink-0">
                       {it.outUrl && it.outName ? (
-                        <Button variant="secondary" size="sm" onClick={() => downloadOne(it)}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            downloadOne(it);
+                            moat.recordJob();
+                          }}
+                        >
                           <Download className="h-4 w-4 mr-2" />
                           Download
                         </Button>
@@ -1039,7 +1228,7 @@ export default function ImageCompressor() {
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                   2
                 </span>
-                <span>Choose a preset, output format, and quality limits (optional total size limit)</span>
+                <span>Choose preset + output format + quality limits (optional total size limit)</span>
               </li>
               <li className="flex gap-3">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
