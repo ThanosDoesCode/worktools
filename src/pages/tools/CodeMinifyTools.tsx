@@ -521,12 +521,15 @@ export default function CodeMinifyTools() {
             <Label className="flex items-center gap-2">
               Compare <ArrowLeftRight className="h-4 w-4" />
             </Label>
-            <Select value={compareSnippetId} onValueChange={setCompareSnippetId}>
+            <Select
+              value={compareSnippetId || "none"}
+              onValueChange={(v) => setCompareSnippetId(v === "none" ? "" : v)}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Optional" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="none">None</SelectItem>
                 {orderedSnippets
                   .filter((s) => s.id !== activeSnippetId)
                   .map((s) => (
