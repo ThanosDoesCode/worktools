@@ -643,6 +643,7 @@ export default function ImageConverter() {
           />
 
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
 
         {/* LEFT */}
         <div className="order-1 lg:order-2 space-y-6">
