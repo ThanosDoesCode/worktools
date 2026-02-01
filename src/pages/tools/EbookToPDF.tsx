@@ -664,7 +664,7 @@ export default function EbookToPDF() {
 
           <div className="min-w-0">
             <Label>Smart actions</Label>
-            <div className="mt-1 grid gap-1">
+            <div className="grid gap-1">
               <Button
                 variant="secondary"
                 onClick={recommendSettings}
