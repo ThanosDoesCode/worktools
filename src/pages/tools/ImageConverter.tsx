@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import heic2any from "heic2any";
 
@@ -9,32 +9,22 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Upload, X, Download, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Upload, X, Download, Image as ImageIcon, Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-type OutputFormat =
-  | "image/png"
-  | "image/jpeg"
-  | "image/webp"
-  | "image/avif"
-  | "image/x-icon";
+/** Moat layer (adjust paths if your project differs) */
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
 
+type OutputFormat = "image/png" | "image/jpeg" | "image/webp" | "image/avif" | "image/x-icon";
 type BgMode = "white" | "black" | "custom";
 
 interface ImgItem {
   id: string;
-
-  /** Original file as uploaded (for naming/traceability) */
   originalFile: File;
-
-  /** File we actually decode/render (HEIC -> PNG conversion becomes this) */
   workingFile: File;
 
   name: string;
@@ -73,31 +63,12 @@ function extFromMime(mime: OutputFormat) {
 
 function isHeicLike(file: File) {
   const name = file.name.toLowerCase();
-  return (
-    file.type === "image/heic" ||
-    file.type === "image/heif" ||
-    name.endsWith(".heic") ||
-    name.endsWith(".heif")
-  );
+  return file.type === "image/heic" || file.type === "image/heif" || name.endsWith(".heic") || name.endsWith(".heif");
 }
 
 function isSvgLike(file: File) {
   const name = file.name.toLowerCase();
   return file.type === "image/svg+xml" || name.endsWith(".svg");
-}
-
-function isIcoLike(file: File) {
-  const name = file.name.toLowerCase();
-  return (
-    file.type === "image/x-icon" ||
-    file.type === "image/vnd.microsoft.icon" ||
-    name.endsWith(".ico")
-  );
-}
-
-function isBmpLike(file: File) {
-  const name = file.name.toLowerCase();
-  return file.type === "image/bmp" || name.endsWith(".bmp");
 }
 
 // Checks whether the browser can encode a specific MIME type
@@ -140,8 +111,8 @@ async function loadImageFromFile(file: File): Promise<HTMLImageElement> {
 
 /**
  * Minimal ICO encoder:
- * Creates a single-icon ICO file containing one PNG image (commonly 256x256).
- * This is enough for favicon usage in most cases.
+ * Creates a single-icon ICO file containing one PNG image.
+ * (Good enough for favicon usage in most cases.)
  */
 async function canvasToIcoBlob(canvas: HTMLCanvasElement, size = 256): Promise<Blob> {
   const c = document.createElement("canvas");
@@ -168,8 +139,6 @@ async function canvasToIcoBlob(canvas: HTMLCanvasElement, size = 256): Promise<B
   header[5] = 0;
 
   // ICONDIRENTRY (16 bytes)
-  // width(1), height(1), colorCount(1)=0, reserved(1)=0,
-  // planes(2)=1, bitCount(2)=32, bytesInRes(4), imageOffset(4)
   const entry = new Uint8Array(16);
   entry[0] = size === 256 ? 0 : size; // 0 means 256 in ICO
   entry[1] = size === 256 ? 0 : size;
@@ -181,15 +150,13 @@ async function canvasToIcoBlob(canvas: HTMLCanvasElement, size = 256): Promise<B
   entry[7] = 0;
 
   const bytesInRes = pngBytes.length;
-  const imageOffset = 6 + 16; // header + entry
+  const imageOffset = 6 + 16;
 
-  // bytesInRes (LE)
   entry[8] = bytesInRes & 0xff;
   entry[9] = (bytesInRes >> 8) & 0xff;
   entry[10] = (bytesInRes >> 16) & 0xff;
   entry[11] = (bytesInRes >> 24) & 0xff;
 
-  // imageOffset (LE)
   entry[12] = imageOffset & 0xff;
   entry[13] = (imageOffset >> 8) & 0xff;
   entry[14] = (imageOffset >> 16) & 0xff;
@@ -203,44 +170,138 @@ async function canvasToIcoBlob(canvas: HTMLCanvasElement, size = 256): Promise<B
   return new Blob([out], { type: "image/x-icon" });
 }
 
+/** -----------------------------
+ * MOAT SETTINGS (what we persist/share)
+ * - we NEVER store uploaded files
+ * - only store conversion settings
+ * ------------------------------ */
+type ConverterSettings = {
+  format: OutputFormat;
+  quality: number;
+
+  resizeEnabled: boolean;
+  targetWidth: number;
+  targetHeight: number; // 0 means auto
+  keepAspect: boolean;
+  dontUpscale: boolean;
+
+  jpgBgMode: BgMode;
+  jpgBgCustom: string;
+};
+
+const DEFAULT_SETTINGS: ConverterSettings = {
+  format: "image/webp",
+  quality: 85,
+
+  resizeEnabled: false,
+  targetWidth: 1200,
+  targetHeight: 0,
+  keepAspect: true,
+  dontUpscale: true,
+
+  jpgBgMode: "white",
+  jpgBgCustom: "#ffffff",
+};
+
+const RECOMMENDED_MOAT_PRESETS = [
+  {
+    name: "WebP for web (good default)",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      format: "image/webp",
+      quality: 85,
+      resizeEnabled: false,
+    } satisfies ConverterSettings,
+  },
+  {
+    name: "PNG (keep transparency)",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      format: "image/png",
+      resizeEnabled: false,
+    } satisfies ConverterSettings,
+  },
+  {
+    name: "JPG for email (white bg)",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      format: "image/jpeg",
+      quality: 82,
+      jpgBgMode: "white",
+      resizeEnabled: true,
+      targetWidth: 1600,
+      targetHeight: 0,
+      keepAspect: true,
+      dontUpscale: true,
+    } satisfies ConverterSettings,
+  },
+  {
+    name: "Instagram (1080px WebP)",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      format: "image/webp",
+      quality: 88,
+      resizeEnabled: true,
+      targetWidth: 1080,
+      targetHeight: 0,
+      keepAspect: true,
+      dontUpscale: true,
+    } satisfies ConverterSettings,
+  },
+  {
+    name: "Favicon (ICO 256)",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      format: "image/x-icon",
+      resizeEnabled: true,
+      targetWidth: 256,
+      targetHeight: 256,
+      keepAspect: false,
+      dontUpscale: false,
+    } satisfies ConverterSettings,
+  },
+] as const;
+
 export default function ImageConverter() {
   const { toast } = useToast();
 
+  /** Files (NOT in moat) */
   const [items, setItems] = useState<ImgItem[]>([]);
   const [converting, setConverting] = useState(false);
 
-  const [format, setFormat] = useState<OutputFormat>("image/webp");
-  const [quality, setQuality] = useState(85); // used for jpg/webp/avif
+  /** Moat-managed settings */
+  const toolSlug = "image-converter";
+  const [settings, setSettings] = useState<ConverterSettings>(DEFAULT_SETTINGS);
+  const setSettingsForMoat = (s: Record<string, unknown>) => setSettings(s as ConverterSettings);
 
-  // Resize
-  const [resizeEnabled, setResizeEnabled] = useState(false);
-  const [targetWidth, setTargetWidth] = useState<number>(1200);
-  const [targetHeight, setTargetHeight] = useState<number>(0); // 0 means "auto" when aspect locked
-  const [keepAspect, setKeepAspect] = useState(true);
-  const [dontUpscale, setDontUpscale] = useState(true);
+  const moat = useMoat(settings as Record<string, unknown>, setSettingsForMoat, {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_MOAT_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
 
-  // JPG background when transparency exists
-  const [jpgBgMode, setJpgBgMode] = useState<BgMode>("white");
-  const [jpgBgCustom, setJpgBgCustom] = useState<string>("#ffffff");
+  /** Encoding support */
+  const [avifSupported, setAvifSupported] = useState(false);
+  const [webpSupported, setWebpSupported] = useState(true);
 
-  const [avifSupported, setAvifSupported] = useState<boolean>(false);
-  const [webpSupported, setWebpSupported] = useState<boolean>(true);
-
-  // detect encoding support once
-  useMemo(() => {
+  useEffect(() => {
     (async () => {
       const w = await supportsEncoding("image/webp");
       const a = await supportsEncoding("image/avif");
       setWebpSupported(w);
       setAvifSupported(a);
-      if (!w) setFormat("image/png");
+
+      // If the current format is unsupported, fall back safely
+      setSettings((prev) => {
+        if (!w && prev.format === "image/webp") return { ...prev, format: "image/png" };
+        if (!a && prev.format === "image/avif") return { ...prev, format: w ? "image/webp" : "image/png" };
+        return prev;
+      });
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
-      // Accept broad set of image extensions & types
       const allowed = acceptedFiles.filter((f) => {
         const nameOk = /\.(jpg|jpeg|png|webp|avif|bmp|svg|ico|heic|heif)$/i.test(f.name);
         const typeOk = [
@@ -256,7 +317,6 @@ export default function ImageConverter() {
           "image/heif",
         ].includes(f.type);
 
-        // Some browsers leave type empty for uncommon formats
         return typeOk || nameOk;
       });
 
@@ -274,7 +334,7 @@ export default function ImageConverter() {
       for (const file of allowed) {
         let workingFile = file;
 
-        // HEIC/HEIF -> PNG conversion for browser compatibility
+        // HEIC/HEIF -> PNG for decode compatibility
         if (isHeicLike(file)) {
           try {
             const converted = await heic2any({
@@ -283,11 +343,10 @@ export default function ImageConverter() {
               quality: 0.92,
             });
 
-            // heic2any can return Blob or Blob[]
             const blob = Array.isArray(converted) ? converted[0] : converted;
             const base = file.name.replace(/\.[^.]+$/, "");
             workingFile = new File([blob], `${base}.png`, { type: "image/png" });
-          } catch (e) {
+          } catch {
             toast({
               title: "HEIC/HEIF decode failed",
               description: `Could not decode "${file.name}" in this browser.`,
@@ -311,19 +370,29 @@ export default function ImageConverter() {
 
       setItems((prev) => [...prev, ...newItems]);
 
-      // Try to read dimensions (nice UX)
+      // Read dimensions (best-effort)
       try {
         for (const it of newItems) {
-          const img = await loadImageFromFile(it.workingFile);
-          setItems((prev) =>
-            prev.map((p) => (p.id === it.id ? { ...p, width: img.width, height: img.height } : p))
-          );
+          let img: HTMLImageElement;
+          try {
+            img = await loadImageFromFile(it.workingFile);
+          } catch {
+            if (isSvgLike(it.workingFile)) {
+              const svgText = await it.workingFile.text();
+              const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+              img = await loadImageFromBlob(svgBlob);
+            } else {
+              throw new Error();
+            }
+          }
+
+          setItems((prev) => prev.map((p) => (p.id === it.id ? { ...p, width: img.width, height: img.height } : p)));
         }
       } catch {
         // ignore
       }
     },
-    [toast]
+    [toast],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -351,6 +420,21 @@ export default function ImageConverter() {
     setItems([]);
   };
 
+  const clearOutputsOnly = () => {
+    setItems((prev) => {
+      prev.forEach((it) => {
+        if (it.convertedUrl) URL.revokeObjectURL(it.convertedUrl);
+      });
+      return prev.map((it) => ({
+        ...it,
+        convertedUrl: undefined,
+        convertedName: undefined,
+        convertedType: undefined,
+        convertedSize: undefined,
+      }));
+    });
+  };
+
   const removeItem = (id: string) => {
     setItems((prev) => {
       const found = prev.find((x) => x.id === id);
@@ -363,8 +447,7 @@ export default function ImageConverter() {
   const convertAll = async () => {
     if (items.length === 0) return;
 
-    // guard: avif/webp support
-    if (format === "image/avif" && !avifSupported) {
+    if (settings.format === "image/avif" && !avifSupported) {
       toast({
         title: "AVIF not supported in this browser",
         description: "Choose WebP, PNG, JPG, or ICO instead.",
@@ -372,7 +455,7 @@ export default function ImageConverter() {
       });
       return;
     }
-    if (format === "image/webp" && !webpSupported) {
+    if (settings.format === "image/webp" && !webpSupported) {
       toast({
         title: "WebP not supported in this browser",
         description: "Choose PNG, JPG, or ICO instead.",
@@ -389,12 +472,10 @@ export default function ImageConverter() {
       for (const it of items) {
         if (it.convertedUrl) URL.revokeObjectURL(it.convertedUrl);
 
-        // Load image (SVG/BMP/ICO usually work if browser can decode them)
         let img: HTMLImageElement;
         try {
           img = await loadImageFromFile(it.workingFile);
-        } catch (e) {
-          // SVG can fail to render if it references external stuff; try as text->data url fallback
+        } catch {
           if (isSvgLike(it.workingFile)) {
             const svgText = await it.workingFile.text();
             const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
@@ -407,73 +488,71 @@ export default function ImageConverter() {
         const originalW = img.width || it.width || 0;
         const originalH = img.height || it.height || 0;
 
-        let outW = originalW || 1;
-        let outH = originalH || 1;
+        let outW = Math.max(1, originalW || 1);
+        let outH = Math.max(1, originalH || 1);
 
-        if (resizeEnabled && originalW > 0 && originalH > 0) {
-          const w = Math.max(1, targetWidth || originalW);
-          const h = Math.max(1, targetHeight || 0);
+        if (settings.resizeEnabled && originalW > 0 && originalH > 0) {
+          const w = Math.max(1, settings.targetWidth || originalW);
+          const h = Math.max(0, settings.targetHeight || 0);
 
-          if (keepAspect) {
-            // If height is 0, compute from width. If both set, fit by width.
+          if (settings.keepAspect) {
             const baseW = w > 0 ? w : originalW;
             const computedH = Math.round((originalH * baseW) / originalW);
             outW = baseW;
-            outH = targetHeight > 0 ? Math.round((originalH * baseW) / originalW) : computedH;
+            outH = h > 0 ? Math.round((originalH * baseW) / originalW) : computedH;
           } else {
             outW = w;
-            outH = targetHeight > 0 ? h : originalH;
+            outH = h > 0 ? h : originalH;
           }
 
-          if (dontUpscale) {
+          if (settings.dontUpscale) {
             outW = Math.min(outW, originalW);
             outH = Math.min(outH, originalH);
           }
         }
 
         const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, outW);
-        canvas.height = Math.max(1, outH);
+        canvas.width = Math.max(1, Math.round(outW));
+        canvas.height = Math.max(1, Math.round(outH));
 
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("Canvas not supported");
 
-        // If output is JPG, fill background first (since JPG has no alpha)
-        if (format === "image/jpeg") {
+        // Fill bg for JPG
+        if (settings.format === "image/jpeg") {
           const bg =
-            jpgBgMode === "white"
+            settings.jpgBgMode === "white"
               ? "#ffffff"
-              : jpgBgMode === "black"
+              : settings.jpgBgMode === "black"
                 ? "#000000"
-                : jpgBgCustom || "#ffffff";
+                : settings.jpgBgCustom || "#ffffff";
           ctx.fillStyle = bg;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        // Create output blob
+        // Encode
         let blob: Blob | null = null;
 
-        if (format === "image/x-icon") {
-          // ICO: generate favicon-style ico (single PNG icon embedded)
-          // Choose 256 by default, but if smaller canvas, pick the min dimension
+        if (settings.format === "image/x-icon") {
+          // pick a favicon-ish size. if user resized to a specific square, respect it.
           const maxSize = Math.min(256, canvas.width, canvas.height);
           const icoSize = maxSize >= 256 ? 256 : maxSize >= 128 ? 128 : maxSize >= 64 ? 64 : 32;
           blob = await canvasToIcoBlob(canvas, icoSize);
         } else {
-          const q = Math.max(0.1, Math.min(1, quality / 100));
+          const q = Math.max(0.1, Math.min(1, settings.quality / 100));
           const needsQuality =
-            format === "image/jpeg" || format === "image/webp" || format === "image/avif";
+            settings.format === "image/jpeg" || settings.format === "image/webp" || settings.format === "image/avif";
 
           blob = await new Promise((resolve) => {
-            canvas.toBlob((b) => resolve(b), format, needsQuality ? q : undefined);
+            canvas.toBlob((b) => resolve(b), settings.format, needsQuality ? q : undefined);
           });
         }
 
         if (!blob) throw new Error("Could not encode image");
 
-        const outExt = extFromMime(format);
+        const outExt = extFromMime(settings.format);
         const base = it.name.replace(/\.[^.]+$/, "");
         const outName = `${base}.${outExt}`;
         const outUrl = URL.createObjectURL(blob);
@@ -482,7 +561,7 @@ export default function ImageConverter() {
           ...it,
           convertedUrl: outUrl,
           convertedName: outName,
-          convertedType: format,
+          convertedType: settings.format,
           convertedSize: blob.size,
           width: originalW,
           height: originalH,
@@ -490,11 +569,9 @@ export default function ImageConverter() {
       }
 
       setItems(updated);
+      moat.recordJob();
 
-      toast({
-        title: "Converted!",
-        description: "Your converted files are ready to download.",
-      });
+      toast({ title: "Converted!", description: "Your converted files are ready to download." });
     } catch (e: any) {
       toast({
         title: "Conversion failed",
@@ -527,32 +604,53 @@ export default function ImageConverter() {
       return;
     }
     ready.forEach(downloadOne);
+    moat.recordJob();
   };
 
   const totalSize = useMemo(() => items.reduce((acc, it) => acc + it.size, 0), [items]);
+  const qualityDisabled = settings.format === "image/png" || settings.format === "image/x-icon";
 
-  const supportedHint = useMemo(() => {
-    const base = "Supports JPG, PNG, WebP, AVIF, BMP, SVG, ICO";
-    return `${base}, HEIC/HEIF`;
-  }, []);
+  const supportedHint = useMemo(() => "Supports JPG, PNG, WebP, AVIF, BMP, SVG, ICO, HEIC/HEIF", []);
 
-  const qualityDisabled = format === "image/png" || format === "image/x-icon";
+  const resetSettings = () => {
+    clearOutputsOnly(); // keep uploads
+    setSettings(DEFAULT_SETTINGS);
+    toast({ title: "Reset", description: "Settings reset. Uploads kept." });
+    moat.recordJob();
+  };
 
   return (
     <ToolLayout
       title="Image Converter"
       description="Convert images in your browser — private, fast, no uploads. Supports JPG/PNG/WebP/AVIF + HEIC/HEIF, BMP, SVG, ICO."
     >
-      <div className="grid lg:grid-cols-2 gap-8">
-        {/* Left */}
-        <div className="space-y-6">
+      <div className="grid lg:grid-cols-3 gap-8">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+
+        {/* LEFT */}
+        <div className="order-1 lg:order-2 space-y-6">
           <Card className="p-6">
             <div
               {...getRootProps()}
               className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                isDragActive
-                  ? "border-primary bg-primary/5"
-                  : "border-muted-foreground/25 hover:border-primary/50"
+                isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
               }`}
             >
               <input {...getInputProps()} />
@@ -567,7 +665,7 @@ export default function ImageConverter() {
           <Card className="p-6 space-y-5">
             <div className="space-y-2">
               <Label>Output format</Label>
-              <Select value={format} onValueChange={(v) => setFormat(v as OutputFormat)}>
+              <Select value={settings.format} onValueChange={(v) => setSettings((p) => ({ ...p, format: v as OutputFormat }))}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select format" />
                 </SelectTrigger>
@@ -579,21 +677,17 @@ export default function ImageConverter() {
                   <SelectItem value="image/x-icon">ICO (favicon)</SelectItem>
                 </SelectContent>
               </Select>
-              {!webpSupported && (
-                <p className="text-xs text-muted-foreground">WebP encoding not supported in this browser.</p>
-              )}
-              {!avifSupported && (
-                <p className="text-xs text-muted-foreground">AVIF encoding not supported in this browser.</p>
-              )}
+              {!webpSupported && <p className="text-xs text-muted-foreground">WebP encoding not supported in this browser.</p>}
+              {!avifSupported && <p className="text-xs text-muted-foreground">AVIF encoding not supported in this browser.</p>}
             </div>
 
-            {format === "image/jpeg" && (
+            {settings.format === "image/jpeg" && (
               <div className="space-y-3 rounded-md border p-3">
                 <div className="text-sm font-medium">JPG background (for transparent images)</div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Background</Label>
-                    <Select value={jpgBgMode} onValueChange={(v) => setJpgBgMode(v as BgMode)}>
+                    <Select value={settings.jpgBgMode} onValueChange={(v) => setSettings((p) => ({ ...p, jpgBgMode: v as BgMode }))}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -604,12 +698,12 @@ export default function ImageConverter() {
                       </SelectContent>
                     </Select>
                   </div>
-                  {jpgBgMode === "custom" && (
+                  {settings.jpgBgMode === "custom" && (
                     <div className="space-y-2">
                       <Label>Custom color</Label>
                       <Input
-                        value={jpgBgCustom}
-                        onChange={(e) => setJpgBgCustom(e.target.value)}
+                        value={settings.jpgBgCustom}
+                        onChange={(e) => setSettings((p) => ({ ...p, jpgBgCustom: e.target.value }))}
                         placeholder="#ffffff"
                       />
                       <p className="text-xs text-muted-foreground">Use hex like #ffffff</p>
@@ -622,19 +716,17 @@ export default function ImageConverter() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Quality</Label>
-                <span className="text-sm text-muted-foreground">{quality}%</span>
+                <span className="text-sm text-muted-foreground">{settings.quality}%</span>
               </div>
               <Slider
-                value={[quality]}
-                onValueChange={(v) => setQuality(v[0] ?? 85)}
+                value={[settings.quality]}
+                onValueChange={(v) => setSettings((p) => ({ ...p, quality: v[0] ?? 85 }))}
                 min={10}
                 max={100}
                 step={1}
                 disabled={qualityDisabled}
               />
-              <p className="text-xs text-muted-foreground">
-                Quality applies to JPG/WebP/AVIF. PNG and ICO are lossless.
-              </p>
+              <p className="text-xs text-muted-foreground">Quality applies to JPG/WebP/AVIF. PNG and ICO are lossless.</p>
             </div>
 
             <div className="flex items-center justify-between">
@@ -642,18 +734,18 @@ export default function ImageConverter() {
                 <Label>Resize</Label>
                 <p className="text-xs text-muted-foreground">Scale images to a target width/height</p>
               </div>
-              <Switch checked={resizeEnabled} onCheckedChange={setResizeEnabled} />
+              <Switch checked={settings.resizeEnabled} onCheckedChange={(v) => setSettings((p) => ({ ...p, resizeEnabled: v }))} />
             </div>
 
-            {resizeEnabled && (
+            {settings.resizeEnabled && (
               <div className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Target width (px)</Label>
                     <Input
                       type="number"
-                      value={targetWidth}
-                      onChange={(e) => setTargetWidth(Math.max(1, Number(e.target.value || 1)))}
+                      value={settings.targetWidth}
+                      onChange={(e) => setSettings((p) => ({ ...p, targetWidth: Math.max(1, Number(e.target.value || 1)) }))}
                       min={1}
                     />
                   </div>
@@ -661,8 +753,8 @@ export default function ImageConverter() {
                     <Label>Target height (px)</Label>
                     <Input
                       type="number"
-                      value={targetHeight}
-                      onChange={(e) => setTargetHeight(Math.max(0, Number(e.target.value || 0)))}
+                      value={settings.targetHeight}
+                      onChange={(e) => setSettings((p) => ({ ...p, targetHeight: Math.max(0, Number(e.target.value || 0)) }))}
                       min={0}
                     />
                     <p className="text-xs text-muted-foreground">0 = auto (when aspect ratio is on)</p>
@@ -671,12 +763,12 @@ export default function ImageConverter() {
 
                 <div className="flex items-center justify-between">
                   <Label>Keep aspect ratio</Label>
-                  <Switch checked={keepAspect} onCheckedChange={setKeepAspect} />
+                  <Switch checked={settings.keepAspect} onCheckedChange={(v) => setSettings((p) => ({ ...p, keepAspect: v }))} />
                 </div>
 
                 <div className="flex items-center justify-between">
                   <Label>Don’t upscale</Label>
-                  <Switch checked={dontUpscale} onCheckedChange={setDontUpscale} />
+                  <Switch checked={settings.dontUpscale} onCheckedChange={(v) => setSettings((p) => ({ ...p, dontUpscale: v }))} />
                 </div>
               </div>
             )}
@@ -698,33 +790,31 @@ export default function ImageConverter() {
               )}
             </Button>
 
-            <Button
-              onClick={downloadAll}
-              disabled={items.every((x) => !x.convertedUrl)}
-              variant="secondary"
-              className="w-full"
-              size="lg"
-            >
+            <Button onClick={downloadAll} disabled={items.every((x) => !x.convertedUrl)} variant="secondary" className="w-full" size="lg">
               <Download className="h-4 w-4 mr-2" />
               Download all
             </Button>
           </div>
 
           {items.length > 0 && (
-            <Button variant="ghost" onClick={clearAll} className="w-full">
-              Clear all
-            </Button>
+            <div className="grid gap-2">
+              <Button variant="ghost" onClick={clearAll} className="w-full">
+                Clear uploads
+              </Button>
+              <Button variant="ghost" onClick={resetSettings} className="w-full">
+                Reset settings
+              </Button>
+            </div>
           )}
         </div>
 
-        {/* Right */}
-        <div className="space-y-6">
+        {/* RIGHT */}
+        <div className="order-2 lg:order-3 space-y-6">
           {items.length > 0 && (
             <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">{items.length}</span> image
-                  {items.length === 1 ? "" : "s"} •{" "}
+                  <span className="font-medium text-foreground">{items.length}</span> image{items.length === 1 ? "" : "s"} •{" "}
                   <span className="font-medium text-foreground">{formatBytes(totalSize)}</span>
                 </div>
               </div>
@@ -760,7 +850,14 @@ export default function ImageConverter() {
 
                     <div className="flex items-center gap-2 shrink-0">
                       {it.convertedUrl && it.convertedName ? (
-                        <Button variant="secondary" size="sm" onClick={() => downloadOne(it)}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            downloadOne(it);
+                            moat.recordJob();
+                          }}
+                        >
                           <Download className="h-4 w-4 mr-2" />
                           Download
                         </Button>
