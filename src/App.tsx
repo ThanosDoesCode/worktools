@@ -51,7 +51,6 @@ import VaultPage from "./pages/VaultPage";
 import WorkflowsPage from "./pages/WorkflowsPage";
 import PreferencesPage from "./pages/PreferencesPage";
 import TrustCenterPage from "./pages/TrustCenterPage";
-import CropPDF from "./pages/tools/CropPDF";
 
 const queryClient = new QueryClient();
 
