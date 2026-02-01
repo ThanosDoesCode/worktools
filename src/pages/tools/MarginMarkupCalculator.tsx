@@ -12,7 +12,37 @@ import { PresetsPanel } from "@/components/moat/PresetsPanel";
 import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
 import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
 
-type Currency = "USD" | "EUR" | "GBP" | "SEK" | "CAD" | "MXN" | "CHF" | "NOK" | "DKK" | "PLN" | "TRY" | "JPY" | "CNY" | "INR" | "AUD" | "NZD" | "SGD" | "HKD" | "KRW" | "THB" | "IDR" | "BRL" | "ZAR" | "NGN" | "ILS" | "AED" | "SAR" | "BTC" | "ETH" | "LTC";
+type Currency =
+  | "USD"
+  | "EUR"
+  | "GBP"
+  | "SEK"
+  | "CAD"
+  | "MXN"
+  | "CHF"
+  | "NOK"
+  | "DKK"
+  | "PLN"
+  | "TRY"
+  | "JPY"
+  | "CNY"
+  | "INR"
+  | "AUD"
+  | "NZD"
+  | "SGD"
+  | "HKD"
+  | "KRW"
+  | "THB"
+  | "IDR"
+  | "BRL"
+  | "ZAR"
+  | "NGN"
+  | "ILS"
+  | "AED"
+  | "SAR"
+  | "BTC"
+  | "ETH"
+  | "LTC";
 type Settings = {
   currency: Currency;
   decimals: number;
@@ -68,7 +98,6 @@ const CURRENCY_SYMBOL: Record<Currency, string> = {
   // Cryptocurrencies
   BTC: "₿", // Bitcoin
   ETH: "Ξ", // Ethereum
-  LTC: "Ł", // Litecoin
 };
 
 const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
@@ -185,13 +214,6 @@ Settings: ${settings.currency} • decimals ${settings.decimals} • formulas ${
           />
 
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
-
-          <div className="rounded-xl border border-border bg-muted/30 p-4 text-xs text-muted-foreground flex gap-2">
-            <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-            <div>
-              <b>Moat</b>: save/share calculator settings (currency, decimals, formulas). Your numbers aren’t stored.
-            </div>
-          </div>
         </div>
 
         {/* INPUT PANEL */}
