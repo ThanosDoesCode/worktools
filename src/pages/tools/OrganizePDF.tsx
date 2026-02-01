@@ -1,12 +1,33 @@
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, FileText, Loader2, ArrowUp, ArrowDown, RotateCw, Trash2, Layers } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  Upload,
+  X,
+  Download,
+  FileText,
+  Loader2,
+  ArrowUp,
+  ArrowDown,
+  RotateCw,
+  Trash2,
+  Layers,
+  Sparkles,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PDFDocument, degrees } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
+
+/** ✅ Moat layer (adjust paths if your project differs) */
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
@@ -23,6 +44,38 @@ interface PageItem {
   deleted: boolean;
   thumbnail?: string;
 }
+
+type Settings = {
+  /** Export filename suffix */
+  fileSuffix: string; // e.g. "organized"
+  /** Thumbnail scale (quality/speed tradeoff) */
+  thumbScale: number; // 0.15..0.6
+  /** Thumbnail jpeg quality */
+  thumbQuality: number; // 0.3..0.95
+  /** Default rotation applied when a PDF is loaded */
+  defaultRotation: 0 | 90 | 180 | 270;
+  /** When true, confirm before removing file (simple safety) */
+  confirmClear: boolean;
+  /** When true, auto-mark pages as deleted when user clicks trash (toggle stays same, just UI preference) */
+  dimDeleted: boolean;
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  fileSuffix: "organized",
+  thumbScale: 0.3,
+  thumbQuality: 0.7,
+  defaultRotation: 0,
+  confirmClear: false,
+  dimDeleted: true,
+};
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  { name: "Fast thumbnails", settings: { ...DEFAULT_SETTINGS, thumbScale: 0.2, thumbQuality: 0.6 } },
+  { name: "High quality thumbnails", settings: { ...DEFAULT_SETTINGS, thumbScale: 0.45, thumbQuality: 0.85 } },
+  { name: "Rotate default 90°", settings: { ...DEFAULT_SETTINGS, defaultRotation: 90 } },
+  { name: "No confirm, speed", settings: { ...DEFAULT_SETTINGS, confirmClear: false } },
+  { name: "Safer (confirm clear)", settings: { ...DEFAULT_SETTINGS, confirmClear: true } },
+];
 
 function safeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -41,32 +94,46 @@ function baseName(name: string) {
   return (name || "document").replace(/\.pdf$/i, "") || "document";
 }
 
-async function generateThumbnails(file: File): Promise<string[]> {
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+async function generateThumbnails(file: File, scale: number, quality: number): Promise<string[]> {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const thumbnails: string[] = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 0.3 });
+    const viewport = page.getViewport({ scale });
     const canvas = document.createElement("canvas");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     const ctx = canvas.getContext("2d")!;
     await page.render({ canvasContext: ctx, viewport }).promise;
-    thumbnails.push(canvas.toDataURL("image/jpeg", 0.7));
+    thumbnails.push(canvas.toDataURL("image/jpeg", quality));
   }
 
   return thumbnails;
 }
 
 export default function OrganizePDF() {
+  const { toast } = useToast();
+
+  /** ✅ Moat settings only (share/save). Files/pages stay local. */
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "organize-pdf";
+
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
+
   const [pdfFile, setPdfFile] = useState<PDFFile | null>(null);
   const [pages, setPages] = useState<PageItem[]>([]);
   const [working, setWorking] = useState(false);
   const [loadingThumbnails, setLoadingThumbnails] = useState(false);
-
-  const { toast } = useToast();
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
@@ -82,21 +149,22 @@ export default function OrganizePDF() {
       setPdfFile({ file, name: file.name, size: file.size });
       setWorking(true);
       setLoadingThumbnails(true);
+
       try {
         const bytes = await file.arrayBuffer();
         const doc = await PDFDocument.load(bytes);
         const count = doc.getPageCount();
 
-        const initialPages = Array.from({ length: count }).map((_, i) => ({
+        const initialPages: PageItem[] = Array.from({ length: count }).map((_, i) => ({
           id: safeId(),
           index: i,
-          rotation: 0 as const,
+          rotation: settings.defaultRotation,
           deleted: false,
         }));
         setPages(initialPages);
 
-        // Generate thumbnails in background
-        generateThumbnails(file)
+        // Generate thumbnails in background (best effort)
+        generateThumbnails(file, settings.thumbScale, settings.thumbQuality)
           .then((thumbs) => {
             setPages((prev) => prev.map((p, i) => ({ ...p, thumbnail: thumbs[i] })));
             setLoadingThumbnails(false);
@@ -116,7 +184,7 @@ export default function OrganizePDF() {
         setWorking(false);
       }
     },
-    [toast],
+    [toast, settings.defaultRotation, settings.thumbScale, settings.thumbQuality],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -126,6 +194,10 @@ export default function OrganizePDF() {
   });
 
   const clearFile = () => {
+    if (settings.confirmClear && (pdfFile || pages.length)) {
+      const ok = window.confirm("Remove the current PDF and reset pages?");
+      if (!ok) return;
+    }
     setPdfFile(null);
     setPages([]);
   };
@@ -172,6 +244,8 @@ export default function OrganizePDF() {
       const src = await PDFDocument.load(bytes);
       const out = await PDFDocument.create();
 
+      // NOTE: activePages.map(p => p.index) would export based on original indices,
+      // but since users reorder, we must export in current visual order using p.index.
       const indices = activePages.map((p) => p.index);
       const copied = await out.copyPages(src, indices);
 
@@ -185,15 +259,19 @@ export default function OrganizePDF() {
       const blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
 
+      const suffix = (settings.fileSuffix || "organized").trim().replace(/\.pdf$/i, "") || "organized";
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${baseName(pdfFile.name)}-organized.pdf`;
+      a.download = `${baseName(pdfFile.name)}-${suffix}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1500);
 
       toast({ title: "Done!", description: "Organized PDF downloaded." });
+
+      /** ✅ record activity so Moat can remember last-used settings/presets */
+      moat.recordJob();
     } catch (e: any) {
       toast({
         title: "Export failed",
@@ -207,8 +285,30 @@ export default function OrganizePDF() {
 
   return (
     <ToolLayout title="Organize PDF" description="Reorder, rotate, and delete pages — then download a new PDF.">
-      <div className="grid lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
+      {/* ✅ 3-column layout: Moat | Tool | Help */}
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+
+        {/* MAIN TOOL COLUMN */}
+        <div className="order-1 lg:order-2 space-y-6">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -220,6 +320,85 @@ export default function OrganizePDF() {
               <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-lg font-medium">Drop your PDF here</p>
               <p className="text-sm text-muted-foreground mt-1">or click to browse</p>
+            </div>
+          </Card>
+
+          {/* Moat-backed settings */}
+          <Card className="p-6 space-y-4">
+            <div className="space-y-2">
+              <Label>Export filename suffix</Label>
+              <Input
+                value={settings.fileSuffix}
+                onChange={(e) => setSettings((p) => ({ ...p, fileSuffix: e.target.value }))}
+                placeholder="organized"
+                disabled={working}
+              />
+              <p className="text-xs text-muted-foreground">Output will be: filename-{`{suffix}`}.pdf</p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Thumbnail scale</Label>
+                <Input
+                  type="number"
+                  min={0.15}
+                  max={0.6}
+                  step={0.05}
+                  value={settings.thumbScale}
+                  onChange={(e) =>
+                    setSettings((p) => ({ ...p, thumbScale: clamp(Number(e.target.value || 0.3), 0.15, 0.6) }))
+                  }
+                  disabled={working}
+                />
+                <p className="text-xs text-muted-foreground">Lower = faster, higher = clearer</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Thumbnail quality</Label>
+                <Input
+                  type="number"
+                  min={0.3}
+                  max={0.95}
+                  step={0.05}
+                  value={settings.thumbQuality}
+                  onChange={(e) =>
+                    setSettings((p) => ({ ...p, thumbQuality: clamp(Number(e.target.value || 0.7), 0.3, 0.95) }))
+                  }
+                  disabled={working}
+                />
+                <p className="text-xs text-muted-foreground">JPEG quality for thumbnails</p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Default rotation on load</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {([0, 90, 180, 270] as const).map((deg) => (
+                    <Button
+                      key={deg}
+                      type="button"
+                      variant={settings.defaultRotation === deg ? "default" : "outline"}
+                      onClick={() => setSettings((p) => ({ ...p, defaultRotation: deg }))}
+                      disabled={working}
+                    >
+                      {deg}°
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Confirm clear</Label>
+                <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                  <div className="text-xs text-muted-foreground">Ask before removing current PDF</div>
+                  <Switch
+                    checked={settings.confirmClear}
+                    onCheckedChange={(v) => setSettings((p) => ({ ...p, confirmClear: v }))}
+                    disabled={working}
+                  />
+                </div>
+              </div>
             </div>
           </Card>
 
@@ -248,7 +427,9 @@ export default function OrganizePDF() {
                 {pages.map((p, idx) => (
                   <div
                     key={p.id}
-                    className={`relative rounded-lg border p-2 transition-opacity ${p.deleted ? "opacity-40" : ""}`}
+                    className={`relative rounded-lg border p-2 transition-opacity ${
+                      p.deleted && settings.dimDeleted ? "opacity-40" : ""
+                    }`}
                   >
                     {/* Thumbnail */}
                     <div
@@ -337,7 +518,8 @@ export default function OrganizePDF() {
           </Button>
         </div>
 
-        <div className="space-y-6">
+        {/* HELP COLUMN */}
+        <div className="order-2 lg:order-3 space-y-6">
           <Card className="p-6">
             <h3 className="font-semibold mb-4">What you can do</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
