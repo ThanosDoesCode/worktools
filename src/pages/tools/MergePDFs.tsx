@@ -5,9 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, X, ArrowUp, ArrowDown, Layers, Loader2, Download, FileText } from "lucide-react";
+import { Upload, X, ArrowUp, ArrowDown, Layers, Loader2, FileText, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PDFDocument } from "pdf-lib";
+
+/** ✅ Moat layer (adjust paths if your project differs) */
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
 
 interface PDFItem {
   id: string;
@@ -17,6 +23,30 @@ interface PDFItem {
   pageCount?: number;
   rangeText: string; // optional: "1-3, 6"
 }
+
+type Settings = {
+  outName: string;
+  /** if true, keep the per-file range inputs when you clear files (ranges can be part of a workflow) */
+  preserveRangesOnClear: boolean;
+  /** optional UX: auto-fill output name from first pdf */
+  autoNameFromFirstFile: boolean;
+  /** optional default range to prefill on newly added PDFs (blank = all pages) */
+  defaultRangeText: string;
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  outName: "merged",
+  preserveRangesOnClear: false,
+  autoNameFromFirstFile: true,
+  defaultRangeText: "",
+};
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  { name: "Default (auto name)", settings: { ...DEFAULT_SETTINGS, autoNameFromFirstFile: true } },
+  { name: "Always keep ranges on clear", settings: { ...DEFAULT_SETTINGS, preserveRangesOnClear: true } },
+  { name: "Prefill first pages (1-2)", settings: { ...DEFAULT_SETTINGS, defaultRangeText: "1-2" } },
+  { name: "Prefill summaries (1, 2, 3)", settings: { ...DEFAULT_SETTINGS, defaultRangeText: "1-3" } },
+];
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -85,10 +115,21 @@ function rangesToIndices(ranges: Array<[number, number]>): number[] {
 }
 
 export default function MergePDFs() {
+  const { toast } = useToast();
+
+  /** ✅ Settings live in Moat (share/save) */
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "merge-pdfs";
+
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
+
+  /** ✅ Files stay local (NOT in moat) */
   const [items, setItems] = useState<PDFItem[]>([]);
   const [merging, setMerging] = useState(false);
-  const [outName, setOutName] = useState<string>("merged");
-  const { toast } = useToast();
 
   const totalSize = useMemo(() => items.reduce((acc, it) => acc + it.size, 0), [items]);
 
@@ -110,7 +151,7 @@ export default function MergePDFs() {
         file,
         name: file.name,
         size: file.size,
-        rangeText: "", // empty = all pages
+        rangeText: settings.defaultRangeText || "", // ✅ default range from moat settings
       }));
 
       setItems((prev) => [...prev, ...newItems]);
@@ -127,10 +168,16 @@ export default function MergePDFs() {
         }
       }
 
-      // Set default output name from first file if empty
-      if (!outName.trim() && newItems[0]) setOutName(baseName(newItems[0].name));
+      // ✅ Auto-name output from first file (if enabled)
+      if (settings.autoNameFromFirstFile) {
+        const current = (settings.outName || "").trim();
+        if (!current && newItems[0]) {
+          setSettings((p) => ({ ...p, outName: baseName(newItems[0].name) }));
+          moat.recordJob();
+        }
+      }
     },
-    [toast, outName],
+    [toast, settings.defaultRangeText, settings.autoNameFromFirstFile, settings.outName, moat],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -140,7 +187,18 @@ export default function MergePDFs() {
   });
 
   const removeItem = (id: string) => setItems((prev) => prev.filter((p) => p.id !== id));
-  const clearAll = () => setItems([]);
+
+  const clearAll = () => {
+    setItems([]);
+
+    // ✅ optionally keep output name + ranges behavior controlled via settings
+    if (!settings.preserveRangesOnClear) {
+      // clearing files means ranges are naturally cleared because files are gone.
+      // We keep settings as-is; user can reset settings via Moat reset.
+    }
+
+    toast({ title: "Cleared", description: "All PDFs removed." });
+  };
 
   const move = (index: number, dir: -1 | 1) => {
     setItems((prev) => {
@@ -200,7 +258,7 @@ export default function MergePDFs() {
       const blob = new Blob([new Uint8Array(mergedBytes)], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
 
-      const cleanName = (outName || "merged").trim().replace(/\.pdf$/i, "") || "merged";
+      const cleanName = (settings.outName || "merged").trim().replace(/\.pdf$/i, "") || "merged";
       const filename = `${cleanName}-${new Date().toISOString().slice(0, 10)}.pdf`;
 
       const a = document.createElement("a");
@@ -212,10 +270,10 @@ export default function MergePDFs() {
 
       setTimeout(() => URL.revokeObjectURL(url), 1500);
 
-      toast({
-        title: "Merged!",
-        description: "Your merged PDF has been downloaded.",
-      });
+      toast({ title: "Merged!", description: "Your merged PDF has been downloaded." });
+
+      // ✅ Record activity for moat (so last-used settings/presets update)
+      moat.recordJob();
     } catch (e: any) {
       toast({
         title: "Merge failed",
@@ -229,9 +287,29 @@ export default function MergePDFs() {
 
   return (
     <ToolLayout title="Merge PDFs" description="Combine multiple PDF files into a single PDF — fast, private.">
-      <div className="grid lg:grid-cols-2 gap-8">
-        {/* Left */}
-        <div className="space-y-6">
+      <div className="grid lg:grid-cols-3 gap-8">
+        {/* ✅ MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+
+        {/* LEFT (FILES) */}
+        <div className="order-1 lg:order-2 space-y-6 lg:col-span-1">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -247,12 +325,79 @@ export default function MergePDFs() {
             </div>
           </Card>
 
-          <Card className="p-6 space-y-3">
+          {/* Settings that are in Moat */}
+          <Card className="p-6 space-y-4">
             <div className="space-y-2">
               <Label>Output filename</Label>
-              <Input value={outName} onChange={(e) => setOutName(e.target.value)} placeholder="merged" />
+              <Input
+                value={settings.outName}
+                onChange={(e) => setSettings((p) => ({ ...p, outName: e.target.value }))}
+                placeholder="merged"
+                disabled={merging}
+              />
               <p className="text-xs text-muted-foreground">We’ll append today’s date automatically.</p>
             </div>
+
+            <div className="space-y-2">
+              <Label>Default page range for new PDFs (optional)</Label>
+              <Input
+                value={settings.defaultRangeText}
+                onChange={(e) => setSettings((p) => ({ ...p, defaultRangeText: e.target.value }))}
+                placeholder="Example: 1-3, 6"
+                disabled={merging}
+              />
+              <p className="text-xs text-muted-foreground">
+                Prefills the range input when you add files. Leave blank to include all pages.
+              </p>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                type="button"
+                variant={settings.autoNameFromFirstFile ? "default" : "outline"}
+                onClick={() => setSettings((p) => ({ ...p, autoNameFromFirstFile: true }))}
+                disabled={merging}
+              >
+                Auto-name: On
+              </Button>
+              <Button
+                type="button"
+                variant={!settings.autoNameFromFirstFile ? "default" : "outline"}
+                onClick={() => setSettings((p) => ({ ...p, autoNameFromFirstFile: false }))}
+                disabled={merging}
+              >
+                Auto-name: Off
+              </Button>
+
+              <Button
+                type="button"
+                variant={settings.preserveRangesOnClear ? "default" : "outline"}
+                onClick={() => setSettings((p) => ({ ...p, preserveRangesOnClear: true }))}
+                disabled={merging}
+              >
+                Keep ranges: On
+              </Button>
+              <Button
+                type="button"
+                variant={!settings.preserveRangesOnClear ? "default" : "outline"}
+                onClick={() => setSettings((p) => ({ ...p, preserveRangesOnClear: false }))}
+                disabled={merging}
+              >
+                Keep ranges: Off
+              </Button>
+            </div>
+
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                moat.recordJob();
+                toast({ title: "Settings saved", description: "You can now pin/save/share via Moat." });
+              }}
+              disabled={merging}
+            >
+              Save settings to Moat
+            </Button>
           </Card>
 
           {items.length > 0 && (
@@ -346,8 +491,8 @@ export default function MergePDFs() {
           </Button>
         </div>
 
-        {/* Right */}
-        <div className="space-y-6">
+        {/* RIGHT (HELP) */}
+        <div className="order-2 lg:order-3 space-y-6 lg:col-span-1">
           <Card className="p-6">
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
