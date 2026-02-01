@@ -1,9 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, Code, Loader2 } from "lucide-react";
+import { Upload, X, Download, Code, Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import { saveAs } from "file-saver";
@@ -11,6 +11,15 @@ import { saveAs } from "file-saver";
 // PDF.js
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min?url";
+
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+
+// MOAT
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
 
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -24,12 +33,49 @@ function baseName(name: string) {
 }
 
 function escapeHtml(s: string) {
-  return s
+  return (s || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+/**
+ * Settings saved/shared via Moat
+ */
+type Settings = {
+  mode: "readable" | "pre";
+  includeHeader: boolean;
+  includePageHeadings: boolean;
+  maxCharsPerPage: number; // to keep output manageable
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  mode: "readable",
+  includeHeader: true,
+  includePageHeadings: true,
+  maxCharsPerPage: 25000,
+};
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  { name: "Readable (web page)", settings: { ...DEFAULT_SETTINGS, mode: "readable" } },
+  { name: "Preserve lines (best effort)", settings: { ...DEFAULT_SETTINGS, mode: "pre" } },
+  {
+    name: "Minimal (no headings)",
+    settings: { ...DEFAULT_SETTINGS, includeHeader: false, includePageHeadings: false },
+  },
+  { name: "Smaller output", settings: { ...DEFAULT_SETTINGS, maxCharsPerPage: 8000 } },
+];
+
+function truncate(s: string, max: number) {
+  const t = s || "";
+  if (t.length <= max) return t;
+  return t.slice(0, Math.max(0, max - 1)) + "…";
 }
 
 /**
@@ -40,7 +86,17 @@ export default function PDFToHTML() {
   const [pdfFile, setPdfFile] = useState<PDFFile | null>(null);
   const [converting, setConverting] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
-  const [mode, setMode] = useState<"readable" | "pre">("readable");
+
+  // Moat settings
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "pdf-to-html";
+
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
+
   const { toast } = useToast();
 
   const onDrop = useCallback(
@@ -49,6 +105,7 @@ export default function PDFToHTML() {
       if (file && (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"))) {
         setPdfFile({ file, name: file.name });
         setProgress(null);
+        toast({ title: "Loaded", description: "PDF ready to convert." });
       } else {
         toast({
           title: "Only PDFs supported",
@@ -93,14 +150,7 @@ export default function PDFToHTML() {
         const page = await pdf.getPage(pageNumber);
         const textContent = await page.getTextContent();
 
-        const strings = (textContent.items as any[])
-          .map((it) => (typeof it.str === "string" ? it.str : ""))
-          .filter(Boolean);
-
-        // “Readable” mode: collapse whitespace
-        const pageText = strings.join(" ").replace(/\s+/g, " ").trim();
-
-        if (mode === "pre") {
+        if (settings.mode === "pre") {
           // preserve “line-ish” breaks by rough y-grouping (still imperfect)
           const items = (textContent.items as any[]).map((it) => ({
             str: String(it.str || ""),
@@ -116,25 +166,35 @@ export default function PDFToHTML() {
           }
 
           const yKeys = Array.from(lineMap.keys()).sort((a, b) => b - a);
-          const lines = yKeys.map((y) => {
-            const parts = lineMap.get(y)!.sort((a, b) => a.x - b.x);
-            return parts
-              .map((p) => p.str)
-              .join(" ")
-              .replace(/\s+/g, " ")
-              .trim();
-          });
+          const lines = yKeys
+            .map((y) => {
+              const parts = lineMap.get(y)!.sort((a, b) => a.x - b.x);
+              return parts
+                .map((p) => p.str)
+                .join(" ")
+                .replace(/\s+/g, " ")
+                .trim();
+            })
+            .filter(Boolean);
+
+          const body = truncate(lines.join("\n"), settings.maxCharsPerPage);
 
           pageBlocks.push(`
-            <section class="page">
-              <h2>Page ${pageNumber}</h2>
-              <pre>${escapeHtml(lines.filter(Boolean).join("\n"))}</pre>
+            <section class="page" id="page-${pageNumber}">
+              ${settings.includePageHeadings ? `<h2>Page ${pageNumber}</h2>` : ""}
+              <pre>${escapeHtml(body || "(No selectable text found on this page.)")}</pre>
             </section>
           `);
         } else {
+          const strings = (textContent.items as any[])
+            .map((it) => (typeof it.str === "string" ? it.str : ""))
+            .filter(Boolean);
+
+          const pageText = truncate(strings.join(" ").replace(/\s+/g, " ").trim(), settings.maxCharsPerPage);
+
           pageBlocks.push(`
-            <section class="page">
-              <h2>Page ${pageNumber}</h2>
+            <section class="page" id="page-${pageNumber}">
+              ${settings.includePageHeadings ? `<h2>Page ${pageNumber}</h2>` : ""}
               <p>${escapeHtml(pageText || "(No selectable text found on this page.)")}</p>
             </section>
           `);
@@ -142,6 +202,14 @@ export default function PDFToHTML() {
       }
 
       const title = baseName(pdfFile.name);
+
+      const header = settings.includeHeader
+        ? `<header>
+            <h1>${escapeHtml(title)}</h1>
+            <div class="meta">Converted from PDF to HTML (text-based). Layout/images/tables may not match the original.</div>
+            <div class="note">Tip: If this is a scanned PDF, run OCR first.</div>
+          </header>`
+        : "";
 
       const html = `<!doctype html>
 <html lang="en">
@@ -161,15 +229,14 @@ export default function PDFToHTML() {
     p { margin: 0; white-space: pre-wrap; }
     pre { margin: 0; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; }
     .note { margin-top: 10px; font-size: 13px; opacity: 0.75; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px;
+            border: 1px solid rgba(127,127,127,0.25); font-size: 12px; opacity: 0.85; }
   </style>
 </head>
 <body>
   <div class="container">
-    <header>
-      <h1>${escapeHtml(title)}</h1>
-      <div class="meta">Converted from PDF to HTML (text-based). Layout/images/tables may not match the original.</div>
-      <div class="note">Tip: If this is a scanned PDF, run OCR first.</div>
-    </header>
+    ${header}
+    <div class="pill">Mode: ${settings.mode === "pre" ? "Preserve lines" : "Readable"} • Max chars/page: ${settings.maxCharsPerPage}</div>
     ${pageBlocks.join("\n")}
   </div>
 </body>
@@ -178,10 +245,8 @@ export default function PDFToHTML() {
       const blob = new Blob([html], { type: "text/html;charset=utf-8" });
       saveAs(blob, `${title}.html`);
 
-      toast({
-        title: "Done!",
-        description: "Downloaded an HTML file.",
-      });
+      toast({ title: "Done!", description: "Downloaded an HTML file." });
+      moat.recordJob();
     } catch (e: any) {
       toast({
         title: "Conversion failed",
@@ -194,13 +259,44 @@ export default function PDFToHTML() {
     }
   };
 
+  const settingsSummary = useMemo(() => {
+    const parts = [
+      settings.mode === "readable" ? "Readable" : "Preserve lines",
+      settings.includeHeader ? "Header on" : "Header off",
+      settings.includePageHeadings ? "Page titles on" : "Page titles off",
+      `Max chars/page ${settings.maxCharsPerPage}`,
+    ];
+    return parts.join(" • ");
+  }, [settings]);
+
   return (
     <ToolLayout
       title="PDF to HTML (Text-based)"
       description="Convert PDF selectable text into a simple HTML page — free and client-side."
     >
-      <div className="grid lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+
+        {/* LEFT */}
+        <div className="order-1 lg:order-2 space-y-6">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -236,22 +332,63 @@ export default function PDFToHTML() {
           )}
 
           <Card className="p-6 space-y-4">
+            <div className="text-xs text-muted-foreground">{settingsSummary}</div>
+
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium">Output style</p>
-                <p className="text-xs text-muted-foreground">
-                  Readable is best for web pages; Pre keeps more line breaks.
-                </p>
+                <p className="text-xs text-muted-foreground">Readable for web pages; Pre keeps more line breaks.</p>
               </div>
               <select
                 className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={mode}
-                onChange={(e) => setMode(e.target.value as "readable" | "pre")}
+                value={settings.mode}
+                onChange={(e) => setSettings((p) => ({ ...p, mode: e.target.value as Settings["mode"] }))}
                 disabled={converting}
               >
                 <option value="readable">Readable</option>
                 <option value="pre">Preserve lines (best effort)</option>
               </select>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Include header</Label>
+                <p className="text-xs text-muted-foreground">Title + conversion notes at the top.</p>
+              </div>
+              <Switch
+                checked={settings.includeHeader}
+                onCheckedChange={(v) => setSettings((p) => ({ ...p, includeHeader: v }))}
+                disabled={converting}
+              />
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Page headings</Label>
+                <p className="text-xs text-muted-foreground">Adds “Page N” headings in the HTML.</p>
+              </div>
+              <Switch
+                checked={settings.includePageHeadings}
+                onCheckedChange={(v) => setSettings((p) => ({ ...p, includePageHeadings: v }))}
+                disabled={converting}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Max characters per page</Label>
+              <input
+                type="number"
+                min={1000}
+                max={200000}
+                step={1000}
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={settings.maxCharsPerPage}
+                onChange={(e) =>
+                  setSettings((p) => ({ ...p, maxCharsPerPage: clamp(Number(e.target.value || 0), 1000, 200000) }))
+                }
+                disabled={converting}
+              />
+              <p className="text-xs text-muted-foreground">Prevents huge HTML files on very large PDFs.</p>
             </div>
           </Card>
 
@@ -270,7 +407,8 @@ export default function PDFToHTML() {
           </Button>
         </div>
 
-        <div className="space-y-6">
+        {/* RIGHT */}
+        <div className="order-2 lg:order-3 space-y-6">
           <Card className="p-6">
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
