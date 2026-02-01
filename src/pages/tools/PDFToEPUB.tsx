@@ -387,16 +387,6 @@ p { margin: 0 0 1em; }`,
           />
 
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
-
-          <Card className="p-4 bg-muted/30 border border-border">
-            <div className="flex gap-2 text-xs text-muted-foreground">
-              <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-              <div>
-                <b>Moat</b> saves/share EPUB settings (chapter mode, language, headings). It does <b>not</b> store your
-                PDF.
-              </div>
-            </div>
-          </Card>
         </div>
 
         {/* LEFT */}
