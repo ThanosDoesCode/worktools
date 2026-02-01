@@ -256,6 +256,7 @@ Team Monthly Cost: ${formatCurrency(calculations.teamMonthlyCost)}`;
           />
 
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
 
         {/* Input Panel */}
         <div className="order-1 lg:order-2 lg:col-span-1 space-y-6">
