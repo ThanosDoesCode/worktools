@@ -706,7 +706,6 @@ export default function ExcelToPDF() {
               <li>• Sheet selection for Excel files</li>
               <li>• Multi-page tables (including wide tables)</li>
               <li>• Private: runs in your browser</li>
-              <li>• Moat: presets + remember settings + share link</li>
             </ul>
           </Card>
         </div>
