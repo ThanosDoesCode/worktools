@@ -297,16 +297,6 @@ export default function PDFProtect() {
           />
 
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
-
-          <Card className="p-4 bg-muted/30 border border-border">
-            <div className="flex gap-2 text-xs text-muted-foreground">
-              <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-              <div>
-                <b>Moat</b> saves/share your protection options (permissions + “same owner password”). It does{" "}
-                <b>not</b> store files or passwords.
-              </div>
-            </div>
-          </Card>
         </div>
 
         {/* LEFT (Upload + Advanced perms + Passwords) */}
