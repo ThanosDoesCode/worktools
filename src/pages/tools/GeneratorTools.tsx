@@ -534,15 +534,6 @@ const GeneratorTools = () => {
             <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
           </div>
 
-          <Card className="p-4 mt-3 bg-muted/30">
-            <div className="flex items-start gap-2 text-xs text-muted-foreground">
-              <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-              <div>
-                <b>Moat</b>: QR templates + quality knobs + history. Your settings are saved locally — no uploads.
-              </div>
-            </div>
-          </Card>
-
           <Card className="p-4 mt-3">
             <div className="flex items-center justify-between">
               <div className="text-sm font-semibold">History</div>
