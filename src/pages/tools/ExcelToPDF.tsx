@@ -480,18 +480,6 @@ export default function ExcelToPDF() {
             <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
           </div>
 
-          <Card className="p-4 mt-3 bg-muted/30">
-            <div className="flex items-start gap-2 text-xs text-muted-foreground">
-              <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-              <div>
-                <b>Moat presets</b> save your export style (not your file).
-                <br />
-                Use them to get consistent “print-ready” PDFs in one click.
-              </div>
-            </div>
-          </Card>
-        </div>
-
         {/* Left */}
         <div className="order-1 lg:order-2 space-y-6">
           <Card className="p-6">
