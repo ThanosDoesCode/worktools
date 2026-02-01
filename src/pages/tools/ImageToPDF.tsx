@@ -367,14 +367,6 @@ Status: ${pdfUrl ? "PDF generated" : "Ready to convert"}`;
           />
 
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
-
-          <div className="rounded-xl border border-border bg-muted/30 p-4 text-xs text-muted-foreground flex gap-2">
-            <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-            <div>
-              <b>Moat</b>: save/share conversion settings (page size, margin, fit mode, captions). Your images are never
-              stored.
-            </div>
-          </div>
         </div>
 
         {/* INPUT PANEL */}
