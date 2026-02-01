@@ -103,7 +103,7 @@ async function loadImg(url: string): Promise<HTMLImageElement> {
 }
 
 /** Convert any image file to a JPEG dataURL (stable for jsPDF.addImage) */
-async function fileToJpegDataUrl(file: File, quality = 0.85): Promise<{ dataUrl: string; w: number; h: number }> {
+async function fileToJpegDataUrl(file: File, quality = 0.92): Promise<{ dataUrl: string; w: number; h: number }> {
   const objectUrl = URL.createObjectURL(file);
   try {
     const img = await loadImg(objectUrl);
