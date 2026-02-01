@@ -12,6 +12,8 @@ import { PresetsPanel } from "@/components/moat/PresetsPanel";
 import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
 import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 type Currency =
   | "USD"
   | "EUR"
@@ -105,6 +107,42 @@ const CURRENCY_SYMBOL: Record<Currency, string> = {
   LTC: "Ł",
 };
 
+// Optional: nicer labels in the dropdown
+const CURRENCY_LABEL: Record<Currency, string> = {
+  USD: "US Dollar",
+  EUR: "Euro",
+  GBP: "British Pound",
+  SEK: "Swedish Krona",
+  CAD: "Canadian Dollar",
+  MXN: "Mexican Peso",
+  CHF: "Swiss Franc",
+  NOK: "Norwegian Krone",
+  DKK: "Danish Krone",
+  PLN: "Polish Złoty",
+  TRY: "Turkish Lira",
+  JPY: "Japanese Yen",
+  CNY: "Chinese Yuan",
+  INR: "Indian Rupee",
+  AUD: "Australian Dollar",
+  NZD: "New Zealand Dollar",
+  SGD: "Singapore Dollar",
+  HKD: "Hong Kong Dollar",
+  KRW: "South Korean Won",
+  THB: "Thai Baht",
+  IDR: "Indonesian Rupiah",
+  BRL: "Brazilian Real",
+  ZAR: "South African Rand",
+  NGN: "Nigerian Naira",
+  ILS: "Israeli Shekel",
+  AED: "UAE Dirham",
+  SAR: "Saudi Riyal",
+  BTC: "Bitcoin",
+  ETH: "Ethereum",
+  LTC: "Litecoin",
+};
+
+const ALL_CURRENCIES: Currency[] = Object.keys(CURRENCY_SYMBOL) as Currency[];
+
 const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
   {
     name: "Quick (USD) — rounded",
@@ -172,7 +210,6 @@ export default function MeetingCostCalculator() {
     const baseMeetingCost = p * salary * hoursInMeeting;
 
     const overheadCost = settings.includeOverhead ? baseMeetingCost * (settings.overheadPct / 100) : 0;
-    const meetingCost = baseMeetingCost;
     const totalMeetingCost = baseMeetingCost + overheadCost;
 
     const costPerMinute = totalMeetingCost / durMin;
@@ -180,7 +217,7 @@ export default function MeetingCostCalculator() {
     const annualCost = monthlyCost * 12;
 
     return {
-      meetingCost,
+      meetingCost: baseMeetingCost,
       costPerMinute,
       monthlyCost,
       annualCost,
@@ -237,7 +274,6 @@ export default function MeetingCostCalculator() {
   };
 
   const formatCurrencyCompact = (value: number) => {
-    // keep UI compact for big numbers
     return `${currencySymbol}${value.toLocaleString("en-US", {
       notation: value >= 100000 ? "compact" : "standard",
       compactDisplay: "short",
@@ -250,7 +286,6 @@ export default function MeetingCostCalculator() {
 
   return (
     <ToolLayout title="Meeting Cost Calculator" description="Calculate how much your meetings really cost">
-      {/* 3-column layout: moat | inputs | results */}
       <div className="grid gap-8 lg:grid-cols-3">
         {/* MOAT COLUMN */}
         <div className="order-3 lg:order-1 space-y-3">
@@ -274,21 +309,28 @@ export default function MeetingCostCalculator() {
 
         {/* INPUT PANEL */}
         <div className="order-1 lg:order-2 tool-input-panel space-y-6">
-          {/* Currency + formatting */}
+          {/* ✅ Currency dropdown (all currencies) */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Currency</Label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {(["USD", "EUR", "GBP", "SEK"] as Currency[]).map((c) => (
-                <Button
-                  key={c}
-                  type="button"
-                  variant={settings.currency === c ? "default" : "outline"}
-                  onClick={() => setSettings((p) => ({ ...p, currency: c }))}
-                >
-                  {CURRENCY_SYMBOL[c]} {c}
-                </Button>
-              ))}
-            </div>
+            <Label htmlFor="currency" className="text-sm font-medium">
+              Currency
+            </Label>
+
+            <Select
+              value={settings.currency}
+              onValueChange={(v) => setSettings((p) => ({ ...p, currency: v as Currency }))}
+            >
+              <SelectTrigger id="currency">
+                <SelectValue placeholder="Select currency" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[320px]">
+                {ALL_CURRENCIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {CURRENCY_SYMBOL[c]} {c} — {CURRENCY_LABEL[c] ?? c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             <p className="text-xs text-muted-foreground">Formatting only</p>
           </div>
 
