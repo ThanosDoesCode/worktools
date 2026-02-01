@@ -22,6 +22,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Wand2,
+  Edit3,
 } from "lucide-react";
 
 import {
@@ -498,160 +499,178 @@ export default function CodeMinifyTools() {
       title="Minify & Prettify"
       description="Snippets + presets + compare. Lightweight format/minify for JSON/HTML/CSS/JS."
     >
-      {/* Moat Bar */}
-      <div className="mb-6 bg-surface-elevated rounded-xl p-4 border border-border space-y-4">
-        {/* Top controls: mobile-first column, desktop grid */}
-        <div className="grid gap-3 md:grid-cols-3 items-start">
-          {/* Snippet selector */}
-          <div className="min-w-0 space-y-1">
-            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Snippet</Label>
-            <Select value={activeSnippetId} onValueChange={setActiveSnippetId}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pick a snippet" />
-              </SelectTrigger>
-              <SelectContent>
-                {orderedSnippets.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.pinned ? "📌 " : ""}
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Compare */}
-          <div className="min-w-0 space-y-1">
-            <Label className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
-              Compare
-              <ArrowLeftRight className="h-4 w-4" />
-            </Label>
-            <Select
-              value={compareSnippetId || "none"}
-              onValueChange={(v) => setCompareSnippetId(v === "none" ? "" : v)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Optional" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {orderedSnippets
-                  .filter((s) => s.id !== activeSnippetId)
-                  .map((s) => (
+      {/* Moat Toolbar */}
+      <div className="mb-6 bg-surface-elevated rounded-xl border border-border p-4 space-y-3">
+        {/* Toolbar main row */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          {/* Left: Snippet group */}
+          <div className="flex flex-1 min-w-[0] items-center gap-2">
+            <div className="flex flex-col flex-1 min-w-[0]">
+              <Label className="mb-1 text-xs text-muted-foreground">Snippet</Label>
+              <Select value={activeSnippetId} onValueChange={setActiveSnippetId}>
+                <SelectTrigger className="h-10 px-3">
+                  <SelectValue placeholder="Select snippet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {orderedSnippets.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.pinned ? "📌 " : ""}
                       {s.name}
                     </SelectItem>
                   ))}
-              </SelectContent>
-            </Select>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Icon actions */}
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
+                onClick={openRename}
+                disabled={!activeSnippet}
+                title="Rename snippet"
+              >
+                <Edit3 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
+                onClick={togglePin}
+                disabled={!activeSnippet}
+                title={activeSnippet?.pinned ? "Unpin snippet" : "Pin snippet"}
+              >
+                <Pin className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 hover:text-destructive hover:bg-destructive/10"
+                onClick={openDelete}
+                disabled={!activeSnippet}
+                title="Delete snippet"
+              >
+                <Trash className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
-          {/* Presets */}
-          <div className="min-w-0 space-y-1">
-            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Presets</Label>
-            <Select
-              value={selectedPresetId}
-              onValueChange={(val) => {
-                setSelectedPresetId(val);
-                if (val) applyPreset(val);
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Apply a preset" />
-              </SelectTrigger>
-              <SelectContent>
-                <div className="px-2 py-1.5 text-xs text-muted-foreground">Built-in</div>
-                {BUILT_IN_PRESETS.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-                <div className="px-2 py-1.5 text-xs text-muted-foreground mt-1">Your presets</div>
-                {customPresets.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">No saved presets yet</div>
-                ) : (
-                  customPresets.map((p) => (
+          {/* Middle: Compare group */}
+          <div className="flex flex-1 min-w-[0] items-center gap-2">
+            <div className="flex flex-col flex-1 min-w-[0]">
+              <Label className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
+                Compare
+                <ArrowLeftRight className="h-3 w-3" />
+              </Label>
+              <Select
+                value={compareSnippetId || "none"}
+                onValueChange={(v) => setCompareSnippetId(v === "none" ? "" : v)}
+              >
+                <SelectTrigger className="h-10 px-3">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {orderedSnippets
+                    .filter((s) => s.id !== activeSnippetId)
+                    .map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.pinned ? "📌 " : ""}
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Right: Presets group */}
+          <div className="flex flex-1 min-w-[0] items-center gap-2">
+            <div className="flex flex-col flex-1 min-w-[0]">
+              <Label className="mb-1 text-xs text-muted-foreground">Presets</Label>
+              <Select
+                value={selectedPresetId}
+                onValueChange={(val) => {
+                  setSelectedPresetId(val);
+                  if (val) applyPreset(val);
+                }}
+              >
+                <SelectTrigger className="h-10 px-3">
+                  <SelectValue placeholder="Choose preset" />
+                </SelectTrigger>
+                <SelectContent>
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">Built-in</div>
+                  {BUILT_IN_PRESETS.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name}
                     </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
+                  ))}
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground mt-1">Your presets</div>
+                  {customPresets.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">No saved presets yet</div>
+                  ) : (
+                    customPresets.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
-              <Button variant="outline" onClick={openSavePreset} className="w-full">
-                <BookmarkPlus className="h-4 w-4 mr-2" /> Save preset
+            <div className="flex items-center gap-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-8 px-3"
+                onClick={openSavePreset}
+                title="Save current settings as preset"
+              >
+                <BookmarkPlus className="h-3 w-3 mr-1" />
+                Save
               </Button>
               <Button
-                variant="outline"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
                 onClick={() => requestDeletePreset(selectedPresetId)}
                 disabled={!selectedPresetId || !customPresets.some((p) => p.id === selectedPresetId)}
-                title="Delete selected custom preset"
+                title="Delete selected preset"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
-
-            <p className="text-xs text-muted-foreground mt-2">
-              Presets save your preferred mode + action (minify/prettify).
-            </p>
           </div>
         </div>
 
-        {/* Actions row */}
-        <div className="flex flex-wrap gap-2 pt-2 border-t border-border/60">
-          <div className="flex flex-1 flex-wrap gap-2">
-            <Button variant="outline" onClick={openRename} disabled={!activeSnippet} className="w-full sm:w-auto">
-              <FolderOpen className="h-4 w-4 mr-2" /> Rename
-            </Button>
-            <Button variant="outline" onClick={togglePin} disabled={!activeSnippet} className="w-full sm:w-auto">
-              <Pin className="h-4 w-4 mr-2" /> Pin
-            </Button>
-            <Button onClick={openSaveAsNew} className="w-full sm:w-auto">
+        {/* Second row: primary snippet actions + compare summary */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={openSaveAsNew} className="h-10 px-3">
               <Save className="h-4 w-4 mr-2" /> Save as new
-            </Button>
-            <Button variant="outline" onClick={openDelete} disabled={!activeSnippet} className="w-full sm:w-auto">
-              <Trash2 className="h-4 w-4 mr-2" /> Delete
             </Button>
           </div>
 
           {compareOutput && (
-            <div className="flex flex-1 min-w-[220px] gap-2 sm:justify-end">
-              <div className="flex-1 rounded-lg p-3 bg-muted/40 border border-border">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Current chars</p>
+            <div className="flex flex-wrap gap-2 md:justify-end">
+              <div className="rounded-lg p-2.5 bg-muted/40 border border-border min-w-[120px]">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Current</p>
                 <p className="font-semibold text-sm">{outChars.toLocaleString()}</p>
               </div>
-              <div className="flex-1 rounded-lg p-3 bg-muted/40 border border-border">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Compare chars</p>
+              <div className="rounded-lg p-2.5 bg-muted/40 border border-border min-w-[120px]">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Compare</p>
                 <p className="font-semibold text-sm">{compareOutput.output.length.toLocaleString()}</p>
               </div>
-              <div className="flex-1 rounded-lg p-3 bg-muted/40 border border-border hidden md:block">
+              <div className="rounded-lg p-2.5 bg-muted/40 border border-border min-w-[120px]">
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Δ chars</p>
                 <p className="font-semibold text-sm">{(outChars - compareOutput.output.length).toLocaleString()}</p>
               </div>
             </div>
           )}
         </div>
-
-        {/* Delta summary for small screens (separate to avoid crowding) */}
-        {compareOutput && (
-          <div className="md:hidden grid grid-cols-3 gap-2">
-            <div className="rounded-lg p-3 bg-muted/40 border border-border">
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Current</p>
-              <p className="font-semibold text-sm">{outChars.toLocaleString()}</p>
-            </div>
-            <div className="rounded-lg p-3 bg-muted/40 border border-border">
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Compare</p>
-              <p className="font-semibold text-sm">{compareOutput.output.length.toLocaleString()}</p>
-            </div>
-            <div className="rounded-lg p-3 bg-muted/40 border border-border">
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Δ chars</p>
-              <p className="font-semibold text-sm">{(outChars - compareOutput.output.length).toLocaleString()}</p>
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="grid lg:grid-cols-2 gap-8">
@@ -770,7 +789,7 @@ export default function CodeMinifyTools() {
                         ? `Paste HTML here...`
                         : `Paste CSS or JS here...`
                   }
-                  className="min-h-[260px]"
+                  className="min-h[260px]"
                 />
 
                 {/* Actions */}
