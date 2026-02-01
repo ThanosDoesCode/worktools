@@ -350,7 +350,11 @@ export default function CodeMinifyTools() {
               .trim();
       return { name: s.name, output: out, isError: false };
     } catch (e: any) {
-      return { name: s.name, output: `⚠️ Error: ${e?.message ? String(e.message) : "Invalid input"}`, isError: true };
+      return {
+        name: s.name,
+        output: `⚠️ Error: ${e?.message ? String(e.message) : "Invalid input"}`,
+        isError: true,
+      };
     }
   }, [compareSnippetId, snippets, indentSize, trimTrailingSpaces, removeLineComments, removeBlockComments]);
 
@@ -495,12 +499,12 @@ export default function CodeMinifyTools() {
       description="Snippets + presets + compare. Lightweight format/minify for JSON/HTML/CSS/JS."
     >
       {/* Moat Bar */}
-      <div className="mb-6 bg-surface-elevated rounded-xl p-4 border border-border">
-        {/* Row 1 */}
-        <div className="grid gap-3 lg:grid-cols-3 items-start">
+      <div className="mb-6 bg-surface-elevated rounded-xl p-4 border border-border space-y-4">
+        {/* Top controls: mobile-first column, desktop grid */}
+        <div className="grid gap-3 md:grid-cols-3 items-start">
           {/* Snippet selector */}
-          <div className="min-w-0 self-start">
-            <Label>Snippet</Label>
+          <div className="min-w-0 space-y-1">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Snippet</Label>
             <Select value={activeSnippetId} onValueChange={setActiveSnippetId}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Pick a snippet" />
@@ -517,9 +521,10 @@ export default function CodeMinifyTools() {
           </div>
 
           {/* Compare */}
-          <div className="min-w-0 self-start">
-            <Label className="flex items-center gap-2">
-              Compare <ArrowLeftRight className="h-4 w-4" />
+          <div className="min-w-0 space-y-1">
+            <Label className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+              Compare
+              <ArrowLeftRight className="h-4 w-4" />
             </Label>
             <Select
               value={compareSnippetId || "none"}
@@ -543,8 +548,8 @@ export default function CodeMinifyTools() {
           </div>
 
           {/* Presets */}
-          <div className="min-w-0 self-start">
-            <Label>Presets</Label>
+          <div className="min-w-0 space-y-1">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Presets</Label>
             <Select
               value={selectedPresetId}
               onValueChange={(val) => {
@@ -595,36 +600,55 @@ export default function CodeMinifyTools() {
           </div>
         </div>
 
-        {/* Row 2: Actions */}
-        <div className="mt-4 flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:justify-end">
-          <Button variant="outline" onClick={openRename} disabled={!activeSnippet} className="sm:w-auto w-full">
-            <FolderOpen className="h-4 w-4 mr-2" /> Rename
-          </Button>
-          <Button variant="outline" onClick={togglePin} disabled={!activeSnippet} className="sm:w-auto w-full">
-            <Pin className="h-4 w-4 mr-2" /> Pin
-          </Button>
-          <Button onClick={openSaveAsNew} className="sm:w-auto w-full">
-            <Save className="h-4 w-4 mr-2" /> Save as new
-          </Button>
-          <Button variant="outline" onClick={openDelete} disabled={!activeSnippet} className="sm:w-auto w-full">
-            <Trash2 className="h-4 w-4 mr-2" /> Delete
-          </Button>
+        {/* Actions row */}
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-border/60">
+          <div className="flex flex-1 flex-wrap gap-2">
+            <Button variant="outline" onClick={openRename} disabled={!activeSnippet} className="w-full sm:w-auto">
+              <FolderOpen className="h-4 w-4 mr-2" /> Rename
+            </Button>
+            <Button variant="outline" onClick={togglePin} disabled={!activeSnippet} className="w-full sm:w-auto">
+              <Pin className="h-4 w-4 mr-2" /> Pin
+            </Button>
+            <Button onClick={openSaveAsNew} className="w-full sm:w-auto">
+              <Save className="h-4 w-4 mr-2" /> Save as new
+            </Button>
+            <Button variant="outline" onClick={openDelete} disabled={!activeSnippet} className="w-full sm:w-auto">
+              <Trash2 className="h-4 w-4 mr-2" /> Delete
+            </Button>
+          </div>
+
+          {compareOutput && (
+            <div className="flex flex-1 min-w-[220px] gap-2 sm:justify-end">
+              <div className="flex-1 rounded-lg p-3 bg-muted/40 border border-border">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Current chars</p>
+                <p className="font-semibold text-sm">{outChars.toLocaleString()}</p>
+              </div>
+              <div className="flex-1 rounded-lg p-3 bg-muted/40 border border-border">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Compare chars</p>
+                <p className="font-semibold text-sm">{compareOutput.output.length.toLocaleString()}</p>
+              </div>
+              <div className="flex-1 rounded-lg p-3 bg-muted/40 border border-border hidden md:block">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Δ chars</p>
+                <p className="font-semibold text-sm">{(outChars - compareOutput.output.length).toLocaleString()}</p>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Compare summary */}
+        {/* Delta summary for small screens (separate to avoid crowding) */}
         {compareOutput && (
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="md:hidden grid grid-cols-3 gap-2">
             <div className="rounded-lg p-3 bg-muted/40 border border-border">
-              <p className="text-xs text-muted-foreground">Current chars</p>
-              <p className="font-semibold">{outChars.toLocaleString()}</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Current</p>
+              <p className="font-semibold text-sm">{outChars.toLocaleString()}</p>
             </div>
             <div className="rounded-lg p-3 bg-muted/40 border border-border">
-              <p className="text-xs text-muted-foreground">Compare chars</p>
-              <p className="font-semibold">{compareOutput.output.length.toLocaleString()}</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Compare</p>
+              <p className="font-semibold text-sm">{compareOutput.output.length.toLocaleString()}</p>
             </div>
             <div className="rounded-lg p-3 bg-muted/40 border border-border">
-              <p className="text-xs text-muted-foreground">Δ chars</p>
-              <p className="font-semibold">{(outChars - compareOutput.output.length).toLocaleString()}</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Δ chars</p>
+              <p className="font-semibold text-sm">{(outChars - compareOutput.output.length).toLocaleString()}</p>
             </div>
           </div>
         )}
@@ -649,7 +673,7 @@ export default function CodeMinifyTools() {
 
               <TabsContent value={mode} className="mt-6 space-y-4">
                 {/* Action toggle */}
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Wand2 className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm font-medium">Mode</span>
@@ -788,7 +812,10 @@ export default function CodeMinifyTools() {
                     <span className="inline-flex items-center gap-2">
                       <CheckCircle className="h-4 w-4" />
                       {savings
-                        ? `Saved ${Math.max(0, savings.diff).toLocaleString()} chars (${Math.max(0, savings.pct).toFixed(1)}%)`
+                        ? `Saved ${Math.max(0, savings.diff).toLocaleString()} chars (${Math.max(
+                            0,
+                            savings.pct,
+                          ).toFixed(1)}%)`
                         : "Ready"}
                     </span>
                   ) : isError ? (
@@ -809,7 +836,9 @@ export default function CodeMinifyTools() {
             </div>
 
             <pre
-              className={`mt-4 rounded-md border p-4 text-sm overflow-auto min-h-[260px] ${isError ? "text-destructive" : ""}`}
+              className={`mt-4 rounded-md border p-4 text-sm overflow-auto min-h-[260px] ${
+                isError ? "text-destructive" : ""
+              }`}
             >
               {output || "Paste input to see output..."}
             </pre>
