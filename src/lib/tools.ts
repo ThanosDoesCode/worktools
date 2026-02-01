@@ -20,6 +20,16 @@ export const tools: Tool[] = [
     icon: "Mail",
   },
 
+  {
+    id: "2",
+    name: "Crop PDF",
+    description: "Crop your PDFs",
+    category: "pdfs",
+    slug: "crop-pdf",
+    keywords: ["crop", "pdf"],
+    icon: "",
+  },
+
   // Finance
   {
     id: "3",
