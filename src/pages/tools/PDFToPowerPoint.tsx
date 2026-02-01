@@ -1,9 +1,9 @@
-import { useState, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, Presentation, Loader2 } from "lucide-react";
+import { Upload, X, Download, Presentation, Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import { saveAs } from "file-saver";
@@ -13,6 +13,12 @@ import PptxGenJS from "pptxgenjs";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min?url";
 
+// MOAT
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
+
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorker;
 
 interface PDFFile {
@@ -21,6 +27,43 @@ interface PDFFile {
 }
 
 type SlideSize = "wide" | "standard";
+type ImageFormat = "png" | "jpeg";
+
+type Settings = {
+  slideSize: SlideSize;
+  scale: 1 | 2 | 3;
+  imageFormat: ImageFormat;
+  jpegQuality: number; // 0.5..1
+  useObjectStreams: boolean; // pptx packaging hint (kept as setting only)
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  slideSize: "wide",
+  scale: 2,
+  imageFormat: "png",
+  jpegQuality: 0.92,
+  useObjectStreams: true,
+};
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  { name: "Widescreen • PNG • 2x", settings: { ...DEFAULT_SETTINGS, slideSize: "wide", imageFormat: "png", scale: 2 } },
+  {
+    name: "Widescreen • JPG • 2x (smaller)",
+    settings: { ...DEFAULT_SETTINGS, slideSize: "wide", imageFormat: "jpeg", scale: 2, jpegQuality: 0.85 },
+  },
+  {
+    name: "Standard • PNG • 2x",
+    settings: { ...DEFAULT_SETTINGS, slideSize: "standard", imageFormat: "png", scale: 2 },
+  },
+  {
+    name: "High quality • PNG • 3x",
+    settings: { ...DEFAULT_SETTINGS, slideSize: "wide", imageFormat: "png", scale: 3 },
+  },
+];
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
 
 function baseName(name: string) {
   return name.replace(/\.pdf$/i, "") || "document";
@@ -36,10 +79,15 @@ export default function PDFToPowerPoint() {
   const [converting, setConverting] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
 
-  // Options
-  const [slideSize, setSlideSize] = useState<SlideSize>("wide"); // 16:9
-  const [scale, setScale] = useState<number>(2); // render quality
-  const [imageFormat, setImageFormat] = useState<"png" | "jpeg">("png");
+  // Moat settings (only settings get saved/shared; files never do)
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "pdf-to-powerpoint";
+
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
 
   const { toast } = useToast();
 
@@ -49,6 +97,7 @@ export default function PDFToPowerPoint() {
       if (file && (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"))) {
         setPdfFile({ file, name: file.name });
         setProgress(null);
+        toast({ title: "Loaded", description: "PDF ready to convert." });
       } else {
         toast({
           title: "Only PDFs supported",
@@ -71,6 +120,12 @@ export default function PDFToPowerPoint() {
     setProgress(null);
   };
 
+  const settingsSummary = useMemo(() => {
+    const size = settings.slideSize === "wide" ? "16:9" : "4:3";
+    const fmt = settings.imageFormat === "jpeg" ? `JPG (${Math.round(settings.jpegQuality * 100)}%)` : "PNG";
+    return `${size} • ${settings.scale}x • ${fmt}`;
+  }, [settings]);
+
   const convertToPowerPoint = async () => {
     if (!pdfFile) return;
 
@@ -86,18 +141,17 @@ export default function PDFToPowerPoint() {
       setProgress({ current: 0, total: totalPages });
 
       const pptx = new PptxGenJS();
-      pptx.layout = slideSize === "wide" ? "LAYOUT_WIDE" : "LAYOUT_4X3";
+      pptx.layout = settings.slideSize === "wide" ? "LAYOUT_WIDE" : "LAYOUT_4X3";
 
-      // Get slide dimensions (in inches) from pptxgen defaults:
-      // wide: 13.333 x 7.5, 4x3: 10 x 7.5
-      const slideW = slideSize === "wide" ? 13.333 : 10;
+      // pptxgen slide sizes (in inches)
+      const slideW = settings.slideSize === "wide" ? 13.333 : 10;
       const slideH = 7.5;
 
       for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
         setProgress({ current: pageNumber, total: totalPages });
 
         const page = await pdf.getPage(pageNumber);
-        const viewport = page.getViewport({ scale });
+        const viewport = page.getViewport({ scale: settings.scale });
 
         const canvas = document.createElement("canvas");
         const ctx = canvas.getContext("2d");
@@ -108,13 +162,16 @@ export default function PDFToPowerPoint() {
 
         await page.render({ canvasContext: ctx, viewport }).promise;
 
-        // Convert to image (data URL)
-        const mime = imageFormat === "png" ? "image/png" : "image/jpeg";
-        const dataUrl = canvasToDataUrl(canvas, mime, imageFormat === "jpeg" ? 0.92 : undefined);
+        const mime = settings.imageFormat === "png" ? "image/png" : "image/jpeg";
+        const dataUrl = canvasToDataUrl(
+          canvas,
+          mime,
+          settings.imageFormat === "jpeg" ? clamp(settings.jpegQuality, 0.5, 1) : undefined,
+        );
 
-        // Add slide and fit image to slide while preserving aspect ratio
         const slide = pptx.addSlide();
 
+        // Fit image to slide with aspect preserved
         const imgAspect = canvas.width / canvas.height;
         const slideAspect = slideW / slideH;
 
@@ -124,16 +181,12 @@ export default function PDFToPowerPoint() {
           y = 0;
 
         if (imgAspect > slideAspect) {
-          // Image wider: fit width
           w = slideW;
           h = w / imgAspect;
-          x = 0;
           y = (slideH - h) / 2;
         } else {
-          // Image taller: fit height
           h = slideH;
           w = h * imgAspect;
-          y = 0;
           x = (slideW - w) / 2;
         }
 
@@ -148,6 +201,8 @@ export default function PDFToPowerPoint() {
         title: "Done!",
         description: `Created ${totalPages} slide(s) and downloaded a PPTX.`,
       });
+
+      moat.recordJob();
     } catch (e: any) {
       toast({
         title: "Conversion failed",
@@ -165,8 +220,29 @@ export default function PDFToPowerPoint() {
       title="PDF to PowerPoint (Slides)"
       description="Convert each PDF page into a PowerPoint slide (as an image)."
     >
-      <div className="grid lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+
+        {/* LEFT */}
+        <div className="order-1 lg:order-2 space-y-6">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -203,6 +279,8 @@ export default function PDFToPowerPoint() {
 
           {/* Options */}
           <Card className="p-6 space-y-4">
+            <div className="text-xs text-muted-foreground">{settingsSummary}</div>
+
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium">Slide size</p>
@@ -210,8 +288,8 @@ export default function PDFToPowerPoint() {
               </div>
               <select
                 className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={slideSize}
-                onChange={(e) => setSlideSize(e.target.value as SlideSize)}
+                value={settings.slideSize}
+                onChange={(e) => setSettings((p) => ({ ...p, slideSize: e.target.value as SlideSize }))}
                 disabled={converting}
               >
                 <option value="wide">Widescreen (16:9)</option>
@@ -226,8 +304,8 @@ export default function PDFToPowerPoint() {
               </div>
               <select
                 className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={String(scale)}
-                onChange={(e) => setScale(Number(e.target.value))}
+                value={String(settings.scale)}
+                onChange={(e) => setSettings((p) => ({ ...p, scale: Number(e.target.value) as 1 | 2 | 3 }))}
                 disabled={converting}
               >
                 <option value="1">Fast (1x)</option>
@@ -243,14 +321,37 @@ export default function PDFToPowerPoint() {
               </div>
               <select
                 className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={imageFormat}
-                onChange={(e) => setImageFormat(e.target.value as "png" | "jpeg")}
+                value={settings.imageFormat}
+                onChange={(e) => setSettings((p) => ({ ...p, imageFormat: e.target.value as ImageFormat }))}
                 disabled={converting}
               >
                 <option value="png">PNG</option>
                 <option value="jpeg">JPG</option>
               </select>
             </div>
+
+            {settings.imageFormat === "jpeg" && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">JPG quality</p>
+                    <p className="text-xs text-muted-foreground">Lower = smaller PPTX.</p>
+                  </div>
+                  <input
+                    type="number"
+                    min={50}
+                    max={100}
+                    step={1}
+                    className="h-10 w-24 rounded-md border bg-background px-3 text-sm text-right"
+                    value={Math.round(settings.jpegQuality * 100)}
+                    onChange={(e) =>
+                      setSettings((p) => ({ ...p, jpegQuality: clamp(Number(e.target.value || 0), 50, 100) / 100 }))
+                    }
+                    disabled={converting}
+                  />
+                </div>
+              </div>
+            )}
           </Card>
 
           <Button onClick={convertToPowerPoint} disabled={!pdfFile || converting} className="w-full" size="lg">
@@ -268,7 +369,8 @@ export default function PDFToPowerPoint() {
           </Button>
         </div>
 
-        <div className="space-y-6">
+        {/* RIGHT */}
+        <div className="order-2 lg:order-3 space-y-6">
           <Card className="p-6">
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
