@@ -2,16 +2,36 @@ import React, { useMemo, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import { PDFDocument } from "pdf-lib-with-encrypt";
+
+import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Lock, Download, FileText, Shield, Eye, EyeOff, Loader2, Settings2, Copy, Unlock } from "lucide-react";
+
+import {
+  Upload,
+  Lock,
+  Download,
+  FileText,
+  Shield,
+  Eye,
+  EyeOff,
+  Loader2,
+  Settings2,
+  Copy,
+  Unlock,
+  Sparkles,
+} from "lucide-react";
 import { toast } from "sonner";
-import { ToolLayout } from "@/components/layout/ToolLayout";
+
+/** Moat */
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
 
 function scorePassword(pw: string) {
   const p = pw || "";
@@ -47,23 +67,72 @@ function baseName(name: string) {
   return (name || "document").replace(/\.pdf$/i, "") || "document";
 }
 
+/** ----- Moat settings (ONLY settings, not files/passwords) ----- */
+type Settings = {
+  showAdvanced: boolean;
+  allowPrinting: boolean;
+  allowModifying: boolean;
+  allowCopying: boolean;
+  allowAnnotating: boolean;
+  useSameOwnerPassword: boolean;
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  showAdvanced: false,
+  allowPrinting: true,
+  allowModifying: false,
+  allowCopying: false,
+  allowAnnotating: true,
+  useSameOwnerPassword: true,
+};
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  { name: "Simple protection (no perms)", settings: { ...DEFAULT_SETTINGS, showAdvanced: false } },
+  {
+    name: "Strict (no print/copy/edit)",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      showAdvanced: true,
+      allowPrinting: false,
+      allowCopying: false,
+      allowModifying: false,
+      allowAnnotating: false,
+    },
+  },
+  {
+    name: "Allow printing only",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      showAdvanced: true,
+      allowPrinting: true,
+      allowCopying: false,
+      allowModifying: false,
+      allowAnnotating: false,
+    },
+  },
+  {
+    name: "Allow print + annotate",
+    settings: {
+      ...DEFAULT_SETTINGS,
+      showAdvanced: true,
+      allowPrinting: true,
+      allowCopying: false,
+      allowModifying: false,
+      allowAnnotating: true,
+    },
+  },
+];
+
+/** ------------------------------------------------------------ */
+
 export default function PDFProtect() {
   const [file, setFile] = useState<File | null>(null);
 
-  // Password fields
+  // Password fields (NOT in moat)
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [ownerPassword, setOwnerPassword] = useState("");
-  const [useSameOwnerPassword, setUseSameOwnerPassword] = useState(true);
-
   const [showPassword, setShowPassword] = useState(false);
-
-  // Advanced permissions
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [allowPrinting, setAllowPrinting] = useState(true);
-  const [allowModifying, setAllowModifying] = useState(false);
-  const [allowCopying, setAllowCopying] = useState(false);
-  const [allowAnnotating, setAllowAnnotating] = useState(true);
 
   // Processing
   const [isProcessing, setIsProcessing] = useState(false);
@@ -71,6 +140,24 @@ export default function PDFProtect() {
 
   const [outputBlob, setOutputBlob] = useState<Blob | null>(null);
   const [outputName, setOutputName] = useState<string>("");
+
+  // Moat settings
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "pdf-protect";
+
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
+
+  // local derived (from settings)
+  const showAdvanced = settings.showAdvanced;
+  const allowPrinting = settings.allowPrinting;
+  const allowModifying = settings.allowModifying;
+  const allowCopying = settings.allowCopying;
+  const allowAnnotating = settings.allowAnnotating;
+  const useSameOwnerPassword = settings.useSameOwnerPassword;
 
   const strength = useMemo(() => scorePassword(password), [password]);
   const passwordsMatch = password && confirmPassword && password === confirmPassword;
@@ -108,7 +195,6 @@ export default function PDFProtect() {
     setPassword("");
     setConfirmPassword("");
     setOwnerPassword("");
-    setUseSameOwnerPassword(true);
     setOutputBlob(null);
     setOutputName("");
     setProgress(0);
@@ -135,7 +221,6 @@ export default function PDFProtect() {
 
       // Build permissions object for pdf-lib-with-encrypt
       const permissions: Record<string, boolean> = {};
-      
       if (showAdvanced) {
         permissions.printing = allowPrinting;
         permissions.modifying = allowModifying;
@@ -145,16 +230,14 @@ export default function PDFProtect() {
 
       setProgress(70);
 
-      // IMPORTANT: Must call encrypt() BEFORE save() - this is the correct API
+      // IMPORTANT: encrypt() BEFORE save()
       (pdfDoc as any).encrypt({
         userPassword: userPw,
         ownerPassword: ownerPw,
         permissions: showAdvanced ? permissions : undefined,
       });
 
-      // Save without encryption options - encryption was already applied above
       const encryptedPdfBytes = await pdfDoc.save({ useObjectStreams: false });
-
       setProgress(90);
 
       const blob = new Blob([new Uint8Array(encryptedPdfBytes)], { type: "application/pdf" });
@@ -165,6 +248,9 @@ export default function PDFProtect() {
       setProgress(100);
 
       toast.success("PDF protected successfully! Recipients will be asked for the password when opening.");
+
+      // Record settings usage only (never passwords/files)
+      moat.recordJob();
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || "Failed to protect PDF. The file may already be encrypted or corrupted.");
@@ -192,9 +278,39 @@ export default function PDFProtect() {
       title="PDF Protect"
       description="Password-protect your PDF with AES encryption. Recipients will be prompted to enter the password when opening the file. Everything runs locally in your browser."
     >
-      <div className="grid lg:grid-cols-2 gap-8">
-        {/* LEFT */}
-        <div className="space-y-6">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+
+          <Card className="p-4 bg-muted/30 border border-border">
+            <div className="flex gap-2 text-xs text-muted-foreground">
+              <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+              <div>
+                <b>Moat</b> saves/share your protection options (permissions + “same owner password”). It does{" "}
+                <b>not</b> store files or passwords.
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* LEFT (Upload + Advanced perms + Passwords) */}
+        <div className="order-1 lg:order-2 space-y-6 lg:col-span-1">
           <Card>
             <CardContent className="p-6">
               <div
@@ -234,7 +350,10 @@ export default function PDFProtect() {
                   </Label>
                   <p className="text-xs text-muted-foreground">Control printing, editing, copying, etc.</p>
                 </div>
-                <Switch checked={showAdvanced} onCheckedChange={setShowAdvanced} />
+                <Switch
+                  checked={settings.showAdvanced}
+                  onCheckedChange={(v) => setSettings((p) => ({ ...p, showAdvanced: v }))}
+                />
               </div>
 
               {showAdvanced && (
@@ -250,7 +369,10 @@ export default function PDFProtect() {
                         <Label>Allow printing</Label>
                         <p className="text-xs text-muted-foreground">Print the document</p>
                       </div>
-                      <Switch checked={allowPrinting} onCheckedChange={setAllowPrinting} />
+                      <Switch
+                        checked={allowPrinting}
+                        onCheckedChange={(v) => setSettings((p) => ({ ...p, allowPrinting: v }))}
+                      />
                     </div>
 
                     <div className="flex items-center justify-between rounded-md border p-3">
@@ -258,7 +380,10 @@ export default function PDFProtect() {
                         <Label>Allow modifying</Label>
                         <p className="text-xs text-muted-foreground">Edit content</p>
                       </div>
-                      <Switch checked={allowModifying} onCheckedChange={setAllowModifying} />
+                      <Switch
+                        checked={allowModifying}
+                        onCheckedChange={(v) => setSettings((p) => ({ ...p, allowModifying: v }))}
+                      />
                     </div>
 
                     <div className="flex items-center justify-between rounded-md border p-3">
@@ -266,7 +391,10 @@ export default function PDFProtect() {
                         <Label>Allow copying</Label>
                         <p className="text-xs text-muted-foreground">Copy text/images</p>
                       </div>
-                      <Switch checked={allowCopying} onCheckedChange={setAllowCopying} />
+                      <Switch
+                        checked={allowCopying}
+                        onCheckedChange={(v) => setSettings((p) => ({ ...p, allowCopying: v }))}
+                      />
                     </div>
 
                     <div className="flex items-center justify-between rounded-md border p-3">
@@ -274,7 +402,10 @@ export default function PDFProtect() {
                         <Label>Allow annotating</Label>
                         <p className="text-xs text-muted-foreground">Add comments</p>
                       </div>
-                      <Switch checked={allowAnnotating} onCheckedChange={setAllowAnnotating} />
+                      <Switch
+                        checked={allowAnnotating}
+                        onCheckedChange={(v) => setSettings((p) => ({ ...p, allowAnnotating: v }))}
+                      />
                     </div>
                   </div>
 
@@ -326,11 +457,12 @@ export default function PDFProtect() {
                       variant="ghost"
                       size="icon"
                       className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                      onClick={() => setShowPassword(!showPassword)}
+                      onClick={() => setShowPassword((v) => !v)}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
+
                   {password && (
                     <div className="flex items-center gap-2">
                       <div className="flex gap-1">
@@ -374,7 +506,10 @@ export default function PDFProtect() {
                     <Label>Same owner password</Label>
                     <p className="text-xs text-muted-foreground">Use the same password for owner access</p>
                   </div>
-                  <Switch checked={useSameOwnerPassword} onCheckedChange={setUseSameOwnerPassword} />
+                  <Switch
+                    checked={useSameOwnerPassword}
+                    onCheckedChange={(v) => setSettings((p) => ({ ...p, useSameOwnerPassword: v }))}
+                  />
                 </div>
 
                 {!useSameOwnerPassword && (
@@ -458,7 +593,7 @@ export default function PDFProtect() {
         </div>
 
         {/* RIGHT - Info */}
-        <div className="space-y-6">
+        <div className="order-2 lg:order-3 space-y-6">
           <Card>
             <CardContent className="p-6 space-y-4">
               <div className="flex items-center gap-2">
