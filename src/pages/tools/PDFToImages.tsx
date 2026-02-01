@@ -1,15 +1,23 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, FileImage, Loader2 } from "lucide-react";
+import { Upload, X, Download, FileImage, Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import JSZip from "jszip";
 
 // pdfjs-dist (PDF.js)
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min?url";
+
+import { Label } from "@/components/ui/label";
+
+// MOAT
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
 
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -20,12 +28,47 @@ interface PDFFile {
 
 type OutputFormat = "png" | "jpeg" | "webp";
 
+type Settings = {
+  format: OutputFormat;
+  scale: 1 | 2 | 3;
+  jpgQuality: number; // 0.5..1
+  webpQuality: number; // 0.5..1
+  zipNameStyle: "pages" | "original";
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  format: "png",
+  scale: 2,
+  jpgQuality: 0.92,
+  webpQuality: 0.9,
+  zipNameStyle: "pages",
+};
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  { name: "PNG — Good (2x)", settings: { ...DEFAULT_SETTINGS, format: "png", scale: 2 } },
+  { name: "JPG — Small (2x)", settings: { ...DEFAULT_SETTINGS, format: "jpeg", scale: 2, jpgQuality: 0.8 } },
+  { name: "WebP — Smallest (2x)", settings: { ...DEFAULT_SETTINGS, format: "webp", scale: 2, webpQuality: 0.8 } },
+  { name: "High quality (3x)", settings: { ...DEFAULT_SETTINGS, format: "png", scale: 3 } },
+];
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
 export default function PDFToImages() {
   const [pdfFile, setPdfFile] = useState<PDFFile | null>(null);
   const [converting, setConverting] = useState(false);
-  const [format, setFormat] = useState<OutputFormat>("png");
-  const [scale, setScale] = useState<number>(2); // 1 = low, 2 = good, 3 = high
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+
+  // Moat settings
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "pdf-to-images";
+
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
 
   const { toast } = useToast();
 
@@ -35,6 +78,7 @@ export default function PDFToImages() {
       if (file && (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"))) {
         setPdfFile({ file, name: file.name });
         setProgress(null);
+        toast({ title: "Loaded", description: "PDF ready to convert." });
       } else {
         toast({
           title: "Only PDFs supported",
@@ -60,6 +104,17 @@ export default function PDFToImages() {
   const extForFormat = (f: OutputFormat) => (f === "jpeg" ? "jpg" : f);
   const mimeForFormat = (f: OutputFormat) => (f === "png" ? "image/png" : f === "jpeg" ? "image/jpeg" : "image/webp");
 
+  const baseName = useMemo(() => {
+    if (!pdfFile) return "pdf";
+    return pdfFile.name.replace(/\.pdf$/i, "") || "pdf";
+  }, [pdfFile]);
+
+  const getQuality = () => {
+    if (settings.format === "jpeg") return clamp(settings.jpgQuality, 0.5, 1);
+    if (settings.format === "webp") return clamp(settings.webpQuality, 0.5, 1);
+    return undefined;
+  };
+
   const convertToImages = async () => {
     if (!pdfFile) return;
 
@@ -75,14 +130,13 @@ export default function PDFToImages() {
       setProgress({ current: 0, total: totalPages });
 
       const zip = new JSZip();
-      const baseName = pdfFile.name.replace(/\.pdf$/i, "") || "pdf";
 
       for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
         setProgress({ current: pageNumber, total: totalPages });
 
         const page = await pdf.getPage(pageNumber);
 
-        const viewport = page.getViewport({ scale });
+        const viewport = page.getViewport({ scale: settings.scale });
         const canvas = document.createElement("canvas");
         const context = canvas.getContext("2d");
 
@@ -91,21 +145,18 @@ export default function PDFToImages() {
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
 
-        await page.render({
-          canvasContext: context,
-          viewport,
-        }).promise;
+        await page.render({ canvasContext: context, viewport }).promise;
 
         // Convert canvas to blob
         const blob: Blob = await new Promise((resolve, reject) => {
           canvas.toBlob(
             (b) => (b ? resolve(b) : reject(new Error("Failed to export image."))),
-            mimeForFormat(format),
-            format === "jpeg" ? 0.92 : undefined,
+            mimeForFormat(settings.format),
+            getQuality(),
           );
         });
 
-        const fileName = `${baseName}-page-${String(pageNumber).padStart(3, "0")}.${extForFormat(format)}`;
+        const fileName = `${baseName}-page-${String(pageNumber).padStart(3, "0")}.${extForFormat(settings.format)}`;
         zip.file(fileName, blob);
       }
 
@@ -114,7 +165,8 @@ export default function PDFToImages() {
 
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${baseName}-images.zip`;
+      a.download =
+        settings.zipNameStyle === "original" ? `${baseName}.zip` : `${baseName}-images-${settings.format}.zip`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -125,6 +177,8 @@ export default function PDFToImages() {
         title: "Done!",
         description: `Converted ${totalPages} page(s) and downloaded a ZIP.`,
       });
+
+      moat.recordJob();
     } catch (e: any) {
       toast({
         title: "Conversion failed",
@@ -137,10 +191,42 @@ export default function PDFToImages() {
     }
   };
 
+  const settingsSummary = useMemo(() => {
+    const fmt = settings.format === "jpeg" ? "JPG" : settings.format.toUpperCase();
+    const q =
+      settings.format === "jpeg"
+        ? `q ${Math.round(settings.jpgQuality * 100)}%`
+        : settings.format === "webp"
+          ? `q ${Math.round(settings.webpQuality * 100)}%`
+          : "lossless";
+    return `${fmt} • ${settings.scale}x • ${q}`;
+  }, [settings]);
+
   return (
     <ToolLayout title="PDF to Images" description="Convert PDF pages to JPG, PNG, or WebP images">
-      <div className="grid lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+
+        {/* LEFT */}
+        <div className="order-1 lg:order-2 space-y-6">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -166,11 +252,19 @@ export default function PDFToImages() {
                   <X className="h-4 w-4" />
                 </Button>
               </div>
+
+              {progress && (
+                <div className="mt-3 text-xs text-muted-foreground">
+                  Converting page {progress.current} / {progress.total}…
+                </div>
+              )}
             </Card>
           )}
 
           {/* Options */}
           <Card className="p-6 space-y-4">
+            <div className="text-xs text-muted-foreground">{settingsSummary}</div>
+
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium">Output format</p>
@@ -178,8 +272,8 @@ export default function PDFToImages() {
               </div>
               <select
                 className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={format}
-                onChange={(e) => setFormat(e.target.value as OutputFormat)}
+                value={settings.format}
+                onChange={(e) => setSettings((p) => ({ ...p, format: e.target.value as OutputFormat }))}
                 disabled={converting}
               >
                 <option value="png">PNG</option>
@@ -195,8 +289,8 @@ export default function PDFToImages() {
               </div>
               <select
                 className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={String(scale)}
-                onChange={(e) => setScale(Number(e.target.value))}
+                value={String(settings.scale)}
+                onChange={(e) => setSettings((p) => ({ ...p, scale: Number(e.target.value) as 1 | 2 | 3 }))}
                 disabled={converting}
               >
                 <option value="1">Low (1x)</option>
@@ -205,11 +299,51 @@ export default function PDFToImages() {
               </select>
             </div>
 
-            {progress && (
-              <div className="text-xs text-muted-foreground">
-                Converting page {progress.current} / {progress.total}…
+            {(settings.format === "jpeg" || settings.format === "webp") && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  {settings.format === "jpeg" ? "JPG quality" : "WebP quality"} (50%–100%)
+                </Label>
+                <input
+                  type="number"
+                  min={50}
+                  max={100}
+                  step={1}
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  value={
+                    settings.format === "jpeg"
+                      ? Math.round(settings.jpgQuality * 100)
+                      : Math.round(settings.webpQuality * 100)
+                  }
+                  onChange={(e) => {
+                    const pct = clamp(Number(e.target.value || 0), 50, 100) / 100;
+                    setSettings((p) =>
+                      settings.format === "jpeg" ? { ...p, jpgQuality: pct } : { ...p, webpQuality: pct },
+                    );
+                  }}
+                  disabled={converting}
+                />
+                <p className="text-xs text-muted-foreground">Lower = smaller files, more compression.</p>
               </div>
             )}
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">ZIP name</p>
+                <p className="text-xs text-muted-foreground">How the downloaded ZIP is named.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={settings.zipNameStyle}
+                onChange={(e) =>
+                  setSettings((p) => ({ ...p, zipNameStyle: e.target.value as Settings["zipNameStyle"] }))
+                }
+                disabled={converting}
+              >
+                <option value="pages">Add “-images-…”</option>
+                <option value="original">Original name only</option>
+              </select>
+            </div>
           </Card>
 
           <Button onClick={convertToImages} disabled={!pdfFile || converting} className="w-full" size="lg">
@@ -227,7 +361,8 @@ export default function PDFToImages() {
           </Button>
         </div>
 
-        <div className="space-y-6">
+        {/* RIGHT */}
+        <div className="order-2 lg:order-3 space-y-6">
           <Card className="p-6">
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
@@ -241,7 +376,7 @@ export default function PDFToImages() {
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                   2
                 </span>
-                <span>Select output format and quality</span>
+                <span>Select output format, scale, and quality</span>
               </li>
               <li className="flex gap-3">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
