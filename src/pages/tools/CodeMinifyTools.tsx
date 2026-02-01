@@ -314,7 +314,7 @@ export default function CodeMinifyTools() {
     if (!compareSnippetId) return null;
     const s = snippets.find((x) => x.id === compareSnippetId);
     if (!s) return null;
-    // Use same options but compare data's input/mode/action (that’s the point)
+    // Use same options but compare data's input/mode/action (that's the point)
     const tmpMode = s.data.mode;
     const tmpAction = s.data.action;
     const tmpInput = normalizeInput(s.data.input);
@@ -499,70 +499,83 @@ export default function CodeMinifyTools() {
       title="Minify & Prettify"
       description="Snippets + presets + compare. Lightweight format/minify for JSON/HTML/CSS/JS."
     >
-      {/* Moat Toolbar */}
-      <div className="mb-6 bg-surface-elevated rounded-xl border border-border p-4 space-y-3">
-        {/* Toolbar main row */}
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          {/* Left: Snippet group */}
-          <div className="flex flex-1 min-w-[0] items-center gap-2">
-            <div className="flex flex-col flex-1 min-w-[0]">
-              <Label className="mb-1 text-xs text-muted-foreground">Snippet</Label>
-              <Select value={activeSnippetId} onValueChange={setActiveSnippetId}>
-                <SelectTrigger className="h-10 px-3">
-                  <SelectValue placeholder="Select snippet" />
-                </SelectTrigger>
-                <SelectContent>
-                  {orderedSnippets.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.pinned ? "📌 " : ""}
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {/* Moat Toolbar - IMPROVED UX */}
+      <div className="mb-6 bg-surface-elevated rounded-xl border border-border p-4">
+        {/* Main toolbar row */}
+        <div className="flex flex-col xl:flex-row gap-4">
+          {/* Left: Snippet management */}
+          <div className="flex flex-col sm:flex-row gap-3 flex-1">
+            {/* Snippet selector + actions */}
+            <div className="flex items-end gap-2 flex-1 min-w-0">
+              <div className="flex flex-col flex-1 min-w-0">
+                <Label className="mb-1.5 text-xs text-muted-foreground font-medium">Snippet</Label>
+                <Select value={activeSnippetId} onValueChange={setActiveSnippetId}>
+                  <SelectTrigger className="h-10 px-3">
+                    <SelectValue placeholder="Select snippet" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {orderedSnippets.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.pinned ? "📌 " : ""}
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Snippet action icons */}
+              <div className="flex items-center gap-0.5 pb-0.5">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10"
+                  onClick={openRename}
+                  disabled={!activeSnippet}
+                  title="Rename snippet"
+                >
+                  <Edit3 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10"
+                  onClick={togglePin}
+                  disabled={!activeSnippet}
+                  title={activeSnippet?.pinned ? "Unpin snippet" : "Pin snippet"}
+                >
+                  <Pin className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 hover:text-destructive hover:bg-destructive/10"
+                  onClick={openDelete}
+                  disabled={!activeSnippet}
+                  title="Delete snippet"
+                >
+                  <Trash className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
-            {/* Icon actions */}
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9"
-                onClick={openRename}
-                disabled={!activeSnippet}
-                title="Rename snippet"
-              >
-                <Edit3 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9"
-                onClick={togglePin}
-                disabled={!activeSnippet}
-                title={activeSnippet?.pinned ? "Unpin snippet" : "Pin snippet"}
-              >
-                <Pin className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 hover:text-destructive hover:bg-destructive/10"
-                onClick={openDelete}
-                disabled={!activeSnippet}
-                title="Delete snippet"
-              >
-                <Trash className="h-4 w-4" />
+            {/* Save as new button */}
+            <div className="flex items-end">
+              <Button onClick={openSaveAsNew} className="h-10 px-4 w-full sm:w-auto">
+                <Save className="h-4 w-4 mr-2" /> Save as new
               </Button>
             </div>
           </div>
 
-          {/* Middle: Compare group */}
-          <div className="flex flex-1 min-w-[0] items-center gap-2">
-            <div className="flex flex-col flex-1 min-w-[0]">
-              <Label className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
+          {/* Divider (hidden on mobile) */}
+          <div className="hidden xl:block w-px bg-border self-stretch" />
+
+          {/* Middle: Compare */}
+          <div className="flex items-end gap-2 min-w-0 xl:w-64">
+            <div className="flex flex-col flex-1 min-w-0">
+              <Label className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                <ArrowLeftRight className="h-3.5 w-3.5" />
                 Compare
-                <ArrowLeftRight className="h-3 w-3" />
               </Label>
               <Select
                 value={compareSnippetId || "none"}
@@ -586,10 +599,13 @@ export default function CodeMinifyTools() {
             </div>
           </div>
 
-          {/* Right: Presets group */}
-          <div className="flex flex-1 min-w-[0] items-center gap-2">
-            <div className="flex flex-col flex-1 min-w-[0]">
-              <Label className="mb-1 text-xs text-muted-foreground">Presets</Label>
+          {/* Divider (hidden on mobile) */}
+          <div className="hidden xl:block w-px bg-border self-stretch" />
+
+          {/* Right: Presets */}
+          <div className="flex items-end gap-2 min-w-0 xl:w-72">
+            <div className="flex flex-col flex-1 min-w-0">
+              <Label className="mb-1.5 text-xs text-muted-foreground font-medium">Presets</Label>
               <Select
                 value={selectedPresetId}
                 onValueChange={(val) => {
@@ -621,21 +637,21 @@ export default function CodeMinifyTools() {
               </Select>
             </div>
 
-            <div className="flex items-center gap-1">
+            {/* Preset actions */}
+            <div className="flex items-center gap-0.5 pb-0.5">
               <Button
                 variant="secondary"
-                size="sm"
-                className="h-8 px-3"
+                size="icon"
+                className="h-10 w-10"
                 onClick={openSavePreset}
                 title="Save current settings as preset"
               >
-                <BookmarkPlus className="h-3 w-3 mr-1" />
-                Save
+                <BookmarkPlus className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-10 w-10"
                 onClick={() => requestDeletePreset(selectedPresetId)}
                 disabled={!selectedPresetId || !customPresets.some((p) => p.id === selectedPresetId)}
                 title="Delete selected preset"
@@ -646,31 +662,28 @@ export default function CodeMinifyTools() {
           </div>
         </div>
 
-        {/* Second row: primary snippet actions + compare summary */}
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={openSaveAsNew} className="h-10 px-3">
-              <Save className="h-4 w-4 mr-2" /> Save as new
-            </Button>
-          </div>
-
-          {compareOutput && (
-            <div className="flex flex-wrap gap-2 md:justify-end">
-              <div className="rounded-lg p-2.5 bg-muted/40 border border-border min-w-[120px]">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Current</p>
-                <p className="font-semibold text-sm">{outChars.toLocaleString()}</p>
+        {/* Compare stats (only when active) */}
+        {compareOutput && (
+          <>
+            <div className="my-4 border-t border-border" />
+            <div className="flex flex-wrap gap-3">
+              <div className="rounded-lg p-2.5 bg-muted/40 border border-border flex-1 min-w-[110px]">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Current</p>
+                <p className="font-semibold text-sm mt-0.5">{outChars.toLocaleString()}</p>
               </div>
-              <div className="rounded-lg p-2.5 bg-muted/40 border border-border min-w-[120px]">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Compare</p>
-                <p className="font-semibold text-sm">{compareOutput.output.length.toLocaleString()}</p>
+              <div className="rounded-lg p-2.5 bg-muted/40 border border-border flex-1 min-w-[110px]">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Compare</p>
+                <p className="font-semibold text-sm mt-0.5">{compareOutput.output.length.toLocaleString()}</p>
               </div>
-              <div className="rounded-lg p-2.5 bg-muted/40 border border-border min-w-[120px]">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Δ chars</p>
-                <p className="font-semibold text-sm">{(outChars - compareOutput.output.length).toLocaleString()}</p>
+              <div className="rounded-lg p-2.5 bg-muted/40 border border-border flex-1 min-w-[110px]">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Difference</p>
+                <p className="font-semibold text-sm mt-0.5">
+                  {(outChars - compareOutput.output.length).toLocaleString()} chars
+                </p>
               </div>
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-2 gap-8">
@@ -789,7 +802,7 @@ export default function CodeMinifyTools() {
                         ? `Paste HTML here...`
                         : `Paste CSS or JS here...`
                   }
-                  className="min-h[260px]"
+                  className="min-h-[260px]"
                 />
 
                 {/* Actions */}
@@ -951,7 +964,7 @@ export default function CodeMinifyTools() {
             <AlertDialogTitle>Delete this snippet?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently remove <span className="font-medium">{activeSnippet?.name ?? "this snippet"}</span>.
-              This can’t be undone.
+              This can't be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
