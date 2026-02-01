@@ -600,7 +600,7 @@ export default function EbookToPDF() {
     <ToolLayout title="E-book to PDF" description="Convert EPUB e-books to a clean PDF — best-effort.">
       {/* Moat bar */}
       <div className="mb-6 bg-surface-elevated rounded-xl p-4 border border-border">
-        <div className="grid gap-3 lg:grid-cols-3 items-start">
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr_280px] items-stretch">
           <div className="min-w-0">
             <Label>Presets</Label>
             <Select
