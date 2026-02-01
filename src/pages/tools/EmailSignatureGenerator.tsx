@@ -573,8 +573,6 @@ export default function EmailSignatureGenerator() {
                 </div>
               )}
             </td>
-
-            {includeQR && qrDataUrl && layout !== "stacked" ? null : null}
           </tr>
         </tbody>
       </table>
