@@ -12,6 +12,8 @@ import { PresetsPanel } from "@/components/moat/PresetsPanel";
 import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
 import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 type Currency =
   | "USD"
   | "EUR"
@@ -43,6 +45,7 @@ type Currency =
   | "BTC"
   | "ETH"
   | "LTC";
+
 type Settings = {
   currency: Currency;
   decimals: number;
@@ -63,42 +66,79 @@ const CURRENCY_SYMBOL: Record<Currency, string> = {
   SEK: "kr",
 
   // North America
-  CAD: "$", // Canadian Dollar
-  MXN: "$", // Mexican Peso
+  CAD: "$",
+  MXN: "$",
 
   // Europe (Non-Euro)
-  CHF: "CHF", // Swiss Franc
-  NOK: "kr", // Norwegian Krone
-  DKK: "kr", // Danish Krone
-  PLN: "zł", // Polish Zloty
-  TRY: "₺", // Turkish Lira
+  CHF: "CHF",
+  NOK: "kr",
+  DKK: "kr",
+  PLN: "zł",
+  TRY: "₺",
 
   // Asia & Pacific
-  JPY: "¥", // Japanese Yen
-  CNY: "¥", // Chinese Yuan
-  INR: "₹", // Indian Rupee
-  AUD: "$", // Australian Dollar
-  NZD: "$", // New Zealand Dollar
-  SGD: "$", // Singapore Dollar
-  HKD: "$", // Hong Kong Dollar
-  KRW: "₩", // South Korean Won
-  THB: "฿", // Thai Baht
-  IDR: "Rp", // Indonesian Rupiah
+  JPY: "¥",
+  CNY: "¥",
+  INR: "₹",
+  AUD: "$",
+  NZD: "$",
+  SGD: "$",
+  HKD: "$",
+  KRW: "₩",
+  THB: "฿",
+  IDR: "Rp",
 
   // South America & Africa
-  BRL: "R$", // Brazilian Real
-  ZAR: "R", // South African Rand
-  NGN: "₦", // Nigerian Naira
+  BRL: "R$",
+  ZAR: "R",
+  NGN: "₦",
 
   // Middle East
-  ILS: "₪", // Israeli New Shekel
-  AED: "د.إ", // UAE Dirham
-  SAR: "﷼", // Saudi Riyal
+  ILS: "₪",
+  AED: "د.إ",
+  SAR: "﷼",
 
   // Cryptocurrencies
-  BTC: "₿", // Bitcoin
-  ETH: "Ξ", // Ethereum
+  BTC: "₿",
+  ETH: "Ξ",
+  LTC: "Ł",
 };
+
+// Optional: nicer labels in the dropdown
+const CURRENCY_LABEL: Record<Currency, string> = {
+  USD: "US Dollar",
+  EUR: "Euro",
+  GBP: "British Pound",
+  SEK: "Swedish Krona",
+  CAD: "Canadian Dollar",
+  MXN: "Mexican Peso",
+  CHF: "Swiss Franc",
+  NOK: "Norwegian Krone",
+  DKK: "Danish Krone",
+  PLN: "Polish Złoty",
+  TRY: "Turkish Lira",
+  JPY: "Japanese Yen",
+  CNY: "Chinese Yuan",
+  INR: "Indian Rupee",
+  AUD: "Australian Dollar",
+  NZD: "New Zealand Dollar",
+  SGD: "Singapore Dollar",
+  HKD: "Hong Kong Dollar",
+  KRW: "South Korean Won",
+  THB: "Thai Baht",
+  IDR: "Indonesian Rupiah",
+  BRL: "Brazilian Real",
+  ZAR: "South African Rand",
+  NGN: "Nigerian Naira",
+  ILS: "Israeli Shekel",
+  AED: "UAE Dirham",
+  SAR: "Saudi Riyal",
+  BTC: "Bitcoin",
+  ETH: "Ethereum",
+  LTC: "Litecoin",
+};
+
+const ALL_CURRENCIES: Currency[] = Object.keys(CURRENCY_SYMBOL) as Currency[];
 
 const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
   { name: "Quick (USD) — 2 decimals", settings: { currency: "USD", decimals: 2, showFormulas: false } },
@@ -214,28 +254,40 @@ Settings: ${settings.currency} • decimals ${settings.decimals} • formulas ${
           />
 
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+
+          <div className="rounded-xl border border-border bg-muted/30 p-4 text-xs text-muted-foreground flex gap-2">
+            <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+            <div>
+              <b>Moat</b>: save/share calculator settings (currency, decimals, formulas). Your numbers aren’t stored.
+            </div>
+          </div>
         </div>
 
         {/* INPUT PANEL */}
         <div className="order-1 lg:order-2 space-y-6">
           <div className="tool-input-panel space-y-6">
+            {/* ✅ Currency dropdown (all currencies) */}
             <div className="space-y-2">
               <Label htmlFor="currency" className="text-sm font-medium">
                 Currency
               </Label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(["USD", "EUR", "GBP", "SEK"] as Currency[]).map((c) => (
-                  <Button
-                    key={c}
-                    type="button"
-                    variant={settings.currency === c ? "default" : "outline"}
-                    onClick={() => setSettings((p) => ({ ...p, currency: c }))}
-                    className="justify-center"
-                  >
-                    {CURRENCY_SYMBOL[c]} {c}
-                  </Button>
-                ))}
-              </div>
+
+              <Select
+                value={settings.currency}
+                onValueChange={(v) => setSettings((p) => ({ ...p, currency: v as Currency }))}
+              >
+                <SelectTrigger id="currency">
+                  <SelectValue placeholder="Select currency" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[320px]">
+                  {ALL_CURRENCIES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {CURRENCY_SYMBOL[c]} {c} — {CURRENCY_LABEL[c] ?? c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               <p className="text-xs text-muted-foreground">Affects formatting only</p>
             </div>
 
