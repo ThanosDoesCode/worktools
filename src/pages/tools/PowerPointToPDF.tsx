@@ -1,69 +1,101 @@
-import { useState, useCallback, useMemo } from "react";
-import { ToolLayout } from "@/components/layout/ToolLayout";
-import { Button } from "@/components/ui/button";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { jsPDF } from "jspdf";
-import { Copy, Download, Trash2, Presentation, FileText } from "lucide-react";
+import { ToolLayout } from "@/components/layout/ToolLayout";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Upload, Trash2, Presentation, Download, Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
 
 interface PowerpointFile {
   file: File;
-  preview: string;
   name: string;
   size: number;
+}
+
+function formatMB(bytes: number) {
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function isPpt(file: File) {
+  const name = file.name.toLowerCase();
+  return (
+    file.type === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    file.type === "application/vnd.ms-powerpoint" ||
+    name.endsWith(".pptx") ||
+    name.endsWith(".ppt")
+  );
 }
 
 export default function PowerpointToPDF() {
   const [presentations, setPresentations] = useState<PowerpointFile[]>([]);
   const [converting, setConverting] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ current: number; total: number; label: string } | null>(null);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const pptFiles = acceptedFiles
-      .filter(file => 
-        file.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
-        file.type === 'application/vnd.ms-powerpoint' ||
-        file.name.endsWith('.pptx') ||
-        file.name.endsWith('.ppt')
-      )
-      .map(file => ({
-        file,
-        preview: URL.createObjectURL(file),
-        name: file.name,
-        size: file.size
-      }));
-    
-    if (pptFiles.length === 0) {
-      toast.error("Please select valid PowerPoint files (.ppt, .pptx)");
-      return;
-    }
+  // cleanup pdfUrl on unmount / replace
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    };
+  }, [pdfUrl]);
 
-    setPresentations(prev => [...prev, ...pptFiles]);
-    setPdfUrl(null);
-    toast.success(`Added ${pptFiles.length} presentation${pptFiles.length > 1 ? 's' : ''}`);
-  }, []);
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      const pptFiles = acceptedFiles.filter(isPpt);
+
+      if (pptFiles.length === 0) {
+        toast.error("Please select valid PowerPoint files (.ppt, .pptx)");
+        return;
+      }
+
+      setPresentations((prev) => [
+        ...prev,
+        ...pptFiles.map((file) => ({
+          file,
+          name: file.name,
+          size: file.size,
+        })),
+      ]);
+
+      // reset previous output
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl);
+        setPdfUrl(null);
+      }
+      setProgress(null);
+
+      toast.success(`Added ${pptFiles.length} file${pptFiles.length > 1 ? "s" : ""}`);
+    },
+    [pdfUrl],
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    multiple: true,
     accept: {
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
-      'application/vnd.ms-powerpoint': ['.ppt'],
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
+      "application/vnd.ms-powerpoint": [".ppt"],
     },
-    multiple: true
   });
 
   const removeFile = (index: number) => {
-    URL.revokeObjectURL(presentations[index].preview);
-    setPresentations(prev => prev.filter((_, i) => i !== index));
+    setPresentations((prev) => prev.filter((_, i) => i !== index));
+    toast.message("Removed file");
   };
 
   const clearAll = () => {
-    presentations.forEach(ppt => URL.revokeObjectURL(ppt.preview));
     setPresentations([]);
-    setPdfUrl(null);
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+      setPdfUrl(null);
+    }
+    setProgress(null);
+    toast.message("Cleared");
   };
 
-  // Simulate conversion - In production, use a library like pptx2pdf or server-side conversion
+  const totalSize = useMemo(() => presentations.reduce((acc, f) => acc + f.size, 0), [presentations]);
+
   const convertToPDF = async () => {
     if (presentations.length === 0) {
       toast.error("Please add at least one presentation");
@@ -71,246 +103,188 @@ export default function PowerpointToPDF() {
     }
 
     setConverting(true);
+    setProgress({ current: 0, total: presentations.length, label: "Creating preview PDF…" });
 
     try {
-      // Create a simple PDF with title pages for each presentation
-      const pdf = new jsPDF();
-      
-      for (let i = 0; i < presentations.length; i++) {
-        if (i > 0) {
-          pdf.addPage();
-        }
+      const pdf = new jsPDF({ unit: "pt", format: "a4" });
 
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 40;
+
+      for (let i = 0; i < presentations.length; i++) {
         const ppt = presentations[i];
-        
-        // Title page
-        pdf.setFontSize(24);
-        pdf.text("PowerPoint Presentation", 20, 30);
-        pdf.setFontSize(16);
-        pdf.text(`File: ${ppt.name}`, 20, 50);
+
+        if (i > 0) pdf.addPage();
+
+        setProgress({ current: i + 1, total: presentations.length, label: `Adding: ${ppt.name}` });
+
+        // Header
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(20);
+        pdf.text("PowerPoint → PDF (Preview)", margin, 70);
+
+        pdf.setFont("helvetica", "normal");
         pdf.setFontSize(12);
-        pdf.text(`Size: ${(ppt.size / 1024 / 1024).toFixed(2)} MB`, 20, 65);
-        pdf.text(`Date: ${new Date().toLocaleDateString()}`, 20, 80);
-        
-        // Note about conversion
+        pdf.text(`File: ${ppt.name}`, margin, 105);
+        pdf.text(`Size: ${formatMB(ppt.size)}`, margin, 125);
+        pdf.text(`Created: ${new Date().toLocaleString()}`, margin, 145);
+
+        // Divider
+        pdf.setDrawColor(180);
+        pdf.line(margin, 165, pageW - margin, 165);
+
+        // Note
+        pdf.setTextColor(90);
+        pdf.setFontSize(11);
+        const note =
+          "This tool is currently a preview exporter. Browser-only conversion cannot reliably render real PPT/PPTX slides without a dedicated slide renderer or server-side conversion.";
+        const wrapped = pdf.splitTextToSize(note, pageW - margin * 2);
+        pdf.text(wrapped, margin, 200);
+
+        pdf.setTextColor(0);
+
+        // Footer
         pdf.setFontSize(10);
-        pdf.setTextColor(100);
-        const note = "Note: Full PowerPoint to PDF conversion requires server-side processing for best results. This is a preview version.";
-        const splitNote = pdf.splitTextToSize(note, 170);
-        pdf.text(splitNote, 20, 120);
+        pdf.setTextColor(120);
+        pdf.text(`Preview page ${i + 1} of ${presentations.length}`, margin, pageH - 30);
+        pdf.setTextColor(0);
       }
 
-      const pdfBlob = pdf.output('blob');
-      const url = URL.createObjectURL(pdfBlob);
+      const blob = pdf.output("blob");
+      const url = URL.createObjectURL(blob);
+
+      // replace old
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+
       setPdfUrl(url);
-      toast.success("PDF created successfully!");
-    } catch (error) {
-      console.error('Conversion error:', error);
-      toast.error("Failed to convert presentation to PDF");
+      toast.success("Preview PDF created!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to generate PDF");
     } finally {
       setConverting(false);
+      setProgress(null);
     }
   };
 
   const downloadPDF = () => {
     if (!pdfUrl) return;
-    
-    const link = document.createElement('a');
-    link.href = pdfUrl;
-    link.download = `converted-presentations-${Date.now()}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success("PDF downloaded");
+    const a = document.createElement("a");
+    a.href = pdfUrl;
+    a.download = `presentations-preview-${Date.now()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    toast.success("Downloaded");
   };
 
-  const totalSize = useMemo(() => {
-    return presentations.reduce((acc, ppt) => acc + ppt.size, 0);
-  }, [presentations]);
-
   return (
-    <ToolLayout 
-      title="PowerPoint to PDF" 
-      description="Convert PPT and PPTX presentations to PDF"
-    >
+    <ToolLayout title="PowerPoint to PDF" description="Convert PPT/PPTX presentations to PDF (preview exporter)">
       <div className="grid lg:grid-cols-2 gap-8">
-        {/* Input Panel */}
+        {/* LEFT */}
         <div className="space-y-6">
-          <div className="bg-surface-elevated rounded-xl p-6 border border-border">
-            {/* Drop Zone */}
+          <Card className="p-6">
             <div
               {...getRootProps()}
-              className={`
-                border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors
-                ${isDragActive 
-                  ? 'border-primary bg-primary/5' 
-                  : 'border-muted hover:border-muted-foreground hover:bg-surface'
-                }
-              `}
+              className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-colors ${
+                isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
+              }`}
             >
               <input {...getInputProps()} />
-              <Presentation className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-xl font-medium text-foreground mb-2">
-                {isDragActive ? 'Drop presentations here' : 'Drop presentations here or click to browse'}
+              <Presentation className="h-14 w-14 mx-auto mb-4 text-muted-foreground" />
+              <p className="text-lg font-medium">
+                {isDragActive ? "Drop presentations here…" : "Drop PPT/PPTX here or click to browse"}
               </p>
-              <p className="text-sm text-muted-foreground">
-                Supports PPT and PPTX formats
-              </p>
+              <p className="text-sm text-muted-foreground mt-2">Multiple files supported</p>
             </div>
 
-            {/* File Previews */}
             {presentations.length > 0 && (
-              <div className="mt-8">
-                <div className="flex justify-between items-center mb-4">
+              <div className="mt-6 space-y-4">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="text-lg font-medium text-foreground">
-                      {presentations.length} presentation{presentations.length > 1 ? 's' : ''} selected
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Total size: {(totalSize / 1024 / 1024).toFixed(2)} MB
-                    </p>
+                    <div className="font-medium">
+                      {presentations.length} file{presentations.length > 1 ? "s" : ""}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Total: {formatMB(totalSize)}</div>
                   </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={clearAll}
-                    className="text-destructive border-destructive hover:bg-destructive"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" /> Clear All
+                  <Button variant="outline" size="sm" onClick={clearAll} disabled={converting}>
+                    <Trash2 className="h-4 w-4 mr-2" /> Clear
                   </Button>
                 </div>
-                
-                <div className="space-y-4 max-h-64 overflow-y-auto p-2">
-                  {presentations.map((ppt, index) => (
-                    <div key={index} className="flex items-center gap-4 p-3 bg-muted rounded-lg group">
-                      <div className="bg-primary/10 rounded-lg p-2">
-                        <Presentation className="h-6 w-6 text-primary" />
+
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  {presentations.map((ppt, idx) => (
+                    <div key={`${ppt.name}-${idx}`} className="flex items-center gap-3 rounded-lg border p-3">
+                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Presentation className="h-5 w-5 text-primary" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{ppt.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {(ppt.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium truncate">{ppt.name}</div>
+                        <div className="text-xs text-muted-foreground">{formatMB(ppt.size)}</div>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeFile(index);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive hover:text-destructive-foreground rounded-full p-1"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <Button variant="ghost" size="icon" onClick={() => removeFile(idx)} disabled={converting}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </div>
                   ))}
                 </div>
+
+                {progress && (
+                  <div className="text-xs text-muted-foreground">
+                    {progress.label} ({progress.current}/{progress.total})
+                  </div>
+                )}
               </div>
             )}
-          </div>
+          </Card>
 
-          {/* Actions */}
           <div className="flex gap-3">
-            {presentations.length > 0 && !pdfUrl && (
-              <Button 
-                onClick={convertToPDF} 
-                disabled={converting}
+            {!pdfUrl ? (
+              <Button
+                onClick={convertToPDF}
+                disabled={presentations.length === 0 || converting}
                 className="flex-1"
                 size="lg"
               >
-                {converting ? 'Converting...' : `Convert ${presentations.length} Presentation${presentations.length > 1 ? 's' : ''}`}
+                {converting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creating PDF…
+                  </>
+                ) : (
+                  <>Convert to PDF (Preview)</>
+                )}
               </Button>
-            )}
-            {pdfUrl && (
+            ) : (
               <Button onClick={downloadPDF} className="flex-1" size="lg">
-                <Download className="h-4 w-4 mr-2" /> Download PDF
+                <Download className="h-4 w-4 mr-2" />
+                Download PDF
               </Button>
             )}
           </div>
         </div>
 
-        {/* Results Panel */}
+        {/* RIGHT */}
         <div className="space-y-6">
-          <div className="bg-surface-elevated rounded-xl p-6 border border-border">
-            <h3 className="text-xl font-semibold text-foreground mb-6">Conversion Status</h3>
-            
-            {presentations.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="bg-muted rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                  <Presentation className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <p className="text-foreground font-medium">No presentations added yet</p>
-                <p className="text-muted-foreground text-sm mt-1">Drop files on the left to get started</p>
-              </div>
-            ) : !pdfUrl ? (
-              <div className="space-y-4">
-                <div className="bg-primary/10 rounded-lg p-4 border border-primary/20">
-                  <h4 className="font-medium text-foreground mb-2">Ready to Convert</h4>
-                  <ul className="text-sm text-muted-foreground space-y-1">
-                    <li>• {presentations.length} presentation{presentations.length > 1 ? 's' : ''} will be converted</li>
-                    <li>• Each presentation will start on a new page</li>
-                    <li>• Full slide content conversion requires server processing</li>
-                  </ul>
-                </div>
-                
-                <Button 
-                  onClick={convertToPDF} 
-                  disabled={converting}
-                  className="w-full"
-                  size="lg"
-                >
-                  {converting ? 'Converting...' : `Convert ${presentations.length} Presentation${presentations.length > 1 ? 's' : ''}`}
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="bg-green-500/10 rounded-lg p-4 border border-green-500/20">
-                  <h4 className="font-medium text-green-600 mb-2 flex items-center">
-                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    PDF Generated Successfully!
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    Your presentation PDF is ready. The full version with slide content requires server-side processing.
-                  </p>
-                </div>
-                
-                <Button onClick={downloadPDF} className="w-full" size="lg">
-                  <Download className="h-4 w-4 mr-2" /> Download PDF
-                </Button>
-
-                <Button 
-                  onClick={() => {
-                    clearAll();
-                    toast.info("Start a new conversion");
-                  }} 
-                  variant="outline"
-                  className="w-full"
-                >
-                  Convert New Files
-                </Button>
-              </div>
-            )}
-
-            {/* Instructions */}
-            <div className="mt-8 pt-6 border-t border-border">
-              <h4 className="font-medium text-foreground mb-3">How it works:</h4>
-              <ol className="text-sm text-muted-foreground space-y-2">
-                <li className="flex gap-2">
-                  <span className="text-primary font-semibold">1.</span>
-                  Drag and drop .ppt or .pptx files
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-primary font-semibold">2.</span>
-                  Click "Convert to PDF" button
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-primary font-semibold">3.</span>
-                  Download your converted PDF
-                </li>
-              </ol>
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Info className="h-5 w-5 text-primary" />
+              <h3 className="font-semibold">About this tool</h3>
             </div>
-          </div>
+            <p className="text-sm text-muted-foreground">
+              Browser-only PPT/PPTX → PDF conversion needs a slide renderer. This current version generates a **preview
+              PDF** (one page per uploaded file) so you can keep the UI/flow working.
+            </p>
+          </Card>
+
+          <Card className="p-6 bg-muted/50">
+            <h3 className="font-semibold mb-2">To make it “real”</h3>
+            <ul className="text-sm text-muted-foreground space-y-2">
+              <li>• Add a client-side PPTX renderer OR</li>
+              <li>• Convert on a server (best quality)</li>
+            </ul>
+          </Card>
         </div>
       </div>
     </ToolLayout>
