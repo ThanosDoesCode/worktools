@@ -886,6 +886,7 @@ export default function ImageCompressor() {
           />
 
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
 
         {/* LEFT: UPLOAD + SETTINGS + ACTIONS */}
         <div className="order-1 lg:order-2 lg:col-span-1 space-y-6">
