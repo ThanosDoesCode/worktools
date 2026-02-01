@@ -12,7 +12,37 @@ import { PresetsPanel } from "@/components/moat/PresetsPanel";
 import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
 import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
 
-type Currency = "USD" | "EUR" | "GBP" | "SEK";
+type Currency =
+  | "USD"
+  | "EUR"
+  | "GBP"
+  | "SEK"
+  | "CAD"
+  | "MXN"
+  | "CHF"
+  | "NOK"
+  | "DKK"
+  | "PLN"
+  | "TRY"
+  | "JPY"
+  | "CNY"
+  | "INR"
+  | "AUD"
+  | "NZD"
+  | "SGD"
+  | "HKD"
+  | "KRW"
+  | "THB"
+  | "IDR"
+  | "BRL"
+  | "ZAR"
+  | "NGN"
+  | "ILS"
+  | "AED"
+  | "SAR"
+  | "BTC"
+  | "ETH"
+  | "LTC";
 type TimeMode = "minutes" | "hours";
 type WorkdaysMode = "simple" | "workdays";
 
