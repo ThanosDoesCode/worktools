@@ -1,22 +1,18 @@
-import { useMemo, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, FileText, Loader2, Sparkles } from "lucide-react";
+import { Upload, X, Download, FileText, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-import { saveAs } from "file-saver";
-
-// PDF.js
+// PDF text extraction (PDF.js)
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min?url";
 
-// MOAT
-import { useMoat } from "@/hooks/useMoat";
-import { PresetsPanel } from "@/components/moat/PresetsPanel";
-import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
-import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
+// DOCX generation
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
+import { saveAs } from "file-saver";
 
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -25,72 +21,33 @@ interface PDFFile {
   name: string;
 }
 
-type Settings = {
-  // Output formatting
-  includePageHeaders: boolean; // "=== Page N ==="
-  collapseWhitespace: boolean; // collapse runs of whitespace to single spaces
-  pageSeparator: "blank" | "formfeed" | "none";
-};
-
-const DEFAULT_SETTINGS: Settings = {
-  includePageHeaders: true,
-  collapseWhitespace: true,
-  pageSeparator: "blank",
-};
-
-const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
-  {
-    name: "Readable (recommended)",
-    settings: { includePageHeaders: true, collapseWhitespace: true, pageSeparator: "blank" },
-  },
-  {
-    name: "Raw-ish (keep spacing)",
-    settings: { includePageHeaders: true, collapseWhitespace: false, pageSeparator: "blank" },
-  },
-  { name: "No headers", settings: { includePageHeaders: false, collapseWhitespace: true, pageSeparator: "blank" } },
-  {
-    name: "Form feed separators",
-    settings: { includePageHeaders: true, collapseWhitespace: true, pageSeparator: "formfeed" },
-  },
-];
-
 function baseName(name: string) {
   return name.replace(/\.pdf$/i, "") || "document";
 }
 
-function normalizeWhitespace(s: string) {
-  return (s || "").replace(/\s+/g, " ").trim();
-}
-
-export default function PDFToText() {
+export default function PDFToWord() {
   const [pdfFile, setPdfFile] = useState<PDFFile | null>(null);
   const [converting, setConverting] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const { toast } = useToast();
 
-  // MOAT settings
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const toolSlug = "pdf-to-text";
-
-  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
-    toolSlug,
-    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
-    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
-  });
-
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       const file = acceptedFiles[0];
-      if (file && (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"))) {
-        setPdfFile({ file, name: file.name });
-        setProgress(null);
-      } else {
+      if (!file) return;
+
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (!isPdf) {
         toast({
           title: "Only PDFs supported",
           description: "Please upload a .pdf file.",
           variant: "destructive",
         });
+        return;
       }
+
+      setPdfFile({ file, name: file.name });
+      setProgress(null);
     },
     [toast],
   );
@@ -106,13 +63,7 @@ export default function PDFToText() {
     setProgress(null);
   };
 
-  const separatorText = useMemo(() => {
-    if (settings.pageSeparator === "formfeed") return "\f\n";
-    if (settings.pageSeparator === "blank") return "\n\n";
-    return "\n";
-  }, [settings.pageSeparator]);
-
-  const convertToText = async () => {
+  const convertToWord = async () => {
     if (!pdfFile) return;
 
     setConverting(true);
@@ -126,7 +77,25 @@ export default function PDFToText() {
       const totalPages: number = pdf.numPages;
       setProgress({ current: 0, total: totalPages });
 
-      const pages: string[] = [];
+      const children: Paragraph[] = [];
+
+      // Title + note (honest + free approach)
+      children.push(
+        new Paragraph({
+          text: baseName(pdfFile.name),
+          heading: HeadingLevel.TITLE,
+        }),
+      );
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "Text-first conversion (free, runs in your browser). Layout may differ from the original PDF.",
+              italics: true,
+            }),
+          ],
+        }),
+      );
 
       for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
         setProgress({ current: pageNumber, total: totalPages });
@@ -138,27 +107,61 @@ export default function PDFToText() {
           .map((it) => (typeof it.str === "string" ? it.str : ""))
           .filter(Boolean);
 
-        let pageText = strings.join(" ");
-        pageText = settings.collapseWhitespace ? normalizeWhitespace(pageText) : pageText.trim();
+        const pageText = strings.join(" ").replace(/\s+/g, " ").trim();
 
-        const header = settings.includePageHeaders ? `=== Page ${pageNumber} ===\n` : "";
-        pages.push(`${header}${pageText || "(No selectable text found)"}`);
+        children.push(
+          new Paragraph({
+            text: `Page ${pageNumber}`,
+            heading: HeadingLevel.HEADING_2,
+          }),
+        );
+
+        if (!pageText) {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "(No selectable text found on this page. If this is a scan, use PDF OCR first.)",
+                  italics: true,
+                }),
+              ],
+            }),
+          );
+        } else {
+          // Keep it readable: chunk into reasonable paragraph sizes
+          const chunks: string[] = [];
+          const maxLen = 1200;
+          let buf = pageText;
+
+          while (buf.length > maxLen) {
+            const cut = buf.lastIndexOf(" ", maxLen);
+            const idx = cut > 200 ? cut : maxLen;
+            chunks.push(buf.slice(0, idx).trim());
+            buf = buf.slice(idx).trim();
+          }
+          if (buf) chunks.push(buf);
+
+          for (const chunk of chunks) {
+            children.push(new Paragraph({ children: [new TextRun(chunk)] }));
+          }
+        }
       }
 
-      const fullText = pages.join(separatorText);
-      const blob = new Blob([fullText], { type: "text/plain;charset=utf-8" });
-      saveAs(blob, `${baseName(pdfFile.name)}.txt`);
+      const doc = new Document({
+        sections: [{ properties: {}, children }],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      saveAs(blob, `${baseName(pdfFile.name)}.docx`);
 
       toast({
         title: "Done!",
-        description: "Downloaded TXT file.",
+        description: "Your DOCX has been downloaded.",
       });
-
-      moat.recordJob();
     } catch (e: any) {
       toast({
-        title: "Extraction failed",
-        description: e?.message ? String(e.message) : "Something went wrong while extracting text.",
+        title: "Conversion failed",
+        description: e?.message ? String(e.message) : "Something went wrong while converting your PDF.",
         variant: "destructive",
       });
     } finally {
@@ -167,39 +170,13 @@ export default function PDFToText() {
     }
   };
 
-  const settingsSummary = useMemo(() => {
-    const header = settings.includePageHeaders ? "headers" : "no headers";
-    const ws = settings.collapseWhitespace ? "collapsed spaces" : "keep spacing";
-    const sep =
-      settings.pageSeparator === "blank" ? "blank line" : settings.pageSeparator === "formfeed" ? "form feed" : "none";
-    return `${header} • ${ws} • sep: ${sep}`;
-  }, [settings]);
-
   return (
-    <ToolLayout title="PDF to Text" description="Extract plain text content from PDF files.">
-      <div className="grid gap-8 lg:grid-cols-3">
-        {/* MOAT COLUMN */}
-        <div className="order-3 lg:order-1 space-y-3">
-          <LocalStatusIndicator />
-
-          <PresetsPanel
-            userPresets={moat.userPresets}
-            recommendedPresets={moat.recommendedPresets}
-            isLoading={moat.isLoadingPresets}
-            onApply={moat.applyPreset}
-            onSave={moat.saveCurrentAsPreset}
-            onRename={moat.renamePreset}
-            onDelete={moat.deletePreset}
-            onTogglePinned={moat.togglePinned}
-            onUseLastSettings={moat.useLastSettings}
-            onReset={moat.resetToDefaults}
-          />
-
-          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
-        </div>
-
-        {/* LEFT */}
-        <div className="order-1 lg:order-2 space-y-6">
+    <ToolLayout
+      title="PDF to Word (Text Extract)"
+      description="Extract selectable text from a PDF and download an editable DOCX."
+    >
+      <div className="grid lg:grid-cols-2 gap-8">
+        <div className="space-y-6">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -228,85 +205,28 @@ export default function PDFToText() {
 
               {progress && (
                 <div className="mt-3 text-xs text-muted-foreground">
-                  Extracting page {progress.current} / {progress.total}…
+                  Processing page {progress.current} / {progress.total}…
                 </div>
               )}
             </Card>
           )}
 
-          {/* Options */}
-          <Card className="p-6 space-y-4">
-            <div className="text-xs text-muted-foreground">{settingsSummary}</div>
-
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Page headers</p>
-                <p className="text-xs text-muted-foreground">Add “=== Page N ===” above each page.</p>
-              </div>
-              <select
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={settings.includePageHeaders ? "on" : "off"}
-                onChange={(e) => setSettings((p) => ({ ...p, includePageHeaders: e.target.value === "on" }))}
-                disabled={converting}
-              >
-                <option value="on">On</option>
-                <option value="off">Off</option>
-              </select>
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Whitespace</p>
-                <p className="text-xs text-muted-foreground">Collapse spacing for readability.</p>
-              </div>
-              <select
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={settings.collapseWhitespace ? "collapse" : "keep"}
-                onChange={(e) => setSettings((p) => ({ ...p, collapseWhitespace: e.target.value === "collapse" }))}
-                disabled={converting}
-              >
-                <option value="collapse">Collapse spaces</option>
-                <option value="keep">Keep spacing</option>
-              </select>
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Between pages</p>
-                <p className="text-xs text-muted-foreground">How pages are separated in the TXT.</p>
-              </div>
-              <select
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={settings.pageSeparator}
-                onChange={(e) =>
-                  setSettings((p) => ({ ...p, pageSeparator: e.target.value as Settings["pageSeparator"] }))
-                }
-                disabled={converting}
-              >
-                <option value="blank">Blank line</option>
-                <option value="formfeed">Form feed (\\f)</option>
-                <option value="none">None</option>
-              </select>
-            </div>
-          </Card>
-
-          <Button onClick={convertToText} disabled={!pdfFile || converting} className="w-full" size="lg">
+          <Button onClick={convertToWord} disabled={!pdfFile || converting} className="w-full" size="lg">
             {converting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Extracting...
+                Converting...
               </>
             ) : (
               <>
                 <Download className="h-4 w-4 mr-2" />
-                Extract Text
+                Download DOCX
               </>
             )}
           </Button>
         </div>
 
-        {/* RIGHT */}
-        <div className="order-2 lg:order-3 space-y-6">
+        <div className="space-y-6">
           <Card className="p-6">
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
@@ -314,7 +234,7 @@ export default function PDFToText() {
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                   1
                 </span>
-                <span>Upload your PDF file</span>
+                <span>Upload a PDF</span>
               </li>
               <li className="flex gap-3">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
@@ -326,7 +246,7 @@ export default function PDFToText() {
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                   3
                 </span>
-                <span>Download as a TXT file</span>
+                <span>Download an editable DOCX</span>
               </li>
             </ol>
           </Card>
@@ -334,8 +254,9 @@ export default function PDFToText() {
           <Card className="p-6 bg-muted/50">
             <h3 className="font-semibold mb-2">Notes</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Works best when the PDF contains real text</li>
-              <li>• If it’s a scanned PDF, use PDF OCR first</li>
+              <li>• Best for PDFs with real text (not scanned images)</li>
+              <li>• Layout/tables may not match the original PDF</li>
+              <li>• For scanned PDFs, run OCR first</li>
             </ul>
           </Card>
         </div>

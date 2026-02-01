@@ -1,9 +1,9 @@
-import { useState, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, FileText, Loader2 } from "lucide-react";
+import { Upload, X, Download, FileText, Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import { saveAs } from "file-saver";
@@ -12,6 +12,12 @@ import { saveAs } from "file-saver";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min?url";
 
+// MOAT
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
+
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorker;
 
 interface PDFFile {
@@ -19,8 +25,41 @@ interface PDFFile {
   name: string;
 }
 
+type Settings = {
+  // Output formatting
+  includePageHeaders: boolean; // "=== Page N ==="
+  collapseWhitespace: boolean; // collapse runs of whitespace to single spaces
+  pageSeparator: "blank" | "formfeed" | "none";
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  includePageHeaders: true,
+  collapseWhitespace: true,
+  pageSeparator: "blank",
+};
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  {
+    name: "Readable (recommended)",
+    settings: { includePageHeaders: true, collapseWhitespace: true, pageSeparator: "blank" },
+  },
+  {
+    name: "Raw-ish (keep spacing)",
+    settings: { includePageHeaders: true, collapseWhitespace: false, pageSeparator: "blank" },
+  },
+  { name: "No headers", settings: { includePageHeaders: false, collapseWhitespace: true, pageSeparator: "blank" } },
+  {
+    name: "Form feed separators",
+    settings: { includePageHeaders: true, collapseWhitespace: true, pageSeparator: "formfeed" },
+  },
+];
+
 function baseName(name: string) {
   return name.replace(/\.pdf$/i, "") || "document";
+}
+
+function normalizeWhitespace(s: string) {
+  return (s || "").replace(/\s+/g, " ").trim();
 }
 
 export default function PDFToText() {
@@ -28,6 +67,16 @@ export default function PDFToText() {
   const [converting, setConverting] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const { toast } = useToast();
+
+  // MOAT settings
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "pdf-to-text";
+
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
@@ -57,6 +106,12 @@ export default function PDFToText() {
     setProgress(null);
   };
 
+  const separatorText = useMemo(() => {
+    if (settings.pageSeparator === "formfeed") return "\f\n";
+    if (settings.pageSeparator === "blank") return "\n\n";
+    return "\n";
+  }, [settings.pageSeparator]);
+
   const convertToText = async () => {
     if (!pdfFile) return;
 
@@ -83,12 +138,14 @@ export default function PDFToText() {
           .map((it) => (typeof it.str === "string" ? it.str : ""))
           .filter(Boolean);
 
-        const pageText = strings.join(" ").replace(/\s+/g, " ").trim();
+        let pageText = strings.join(" ");
+        pageText = settings.collapseWhitespace ? normalizeWhitespace(pageText) : pageText.trim();
 
-        pages.push(`=== Page ${pageNumber} ===\n${pageText || "(No selectable text found)"}\n`);
+        const header = settings.includePageHeaders ? `=== Page ${pageNumber} ===\n` : "";
+        pages.push(`${header}${pageText || "(No selectable text found)"}`);
       }
 
-      const fullText = pages.join("\n");
+      const fullText = pages.join(separatorText);
       const blob = new Blob([fullText], { type: "text/plain;charset=utf-8" });
       saveAs(blob, `${baseName(pdfFile.name)}.txt`);
 
@@ -96,6 +153,8 @@ export default function PDFToText() {
         title: "Done!",
         description: "Downloaded TXT file.",
       });
+
+      moat.recordJob();
     } catch (e: any) {
       toast({
         title: "Extraction failed",
@@ -108,10 +167,39 @@ export default function PDFToText() {
     }
   };
 
+  const settingsSummary = useMemo(() => {
+    const header = settings.includePageHeaders ? "headers" : "no headers";
+    const ws = settings.collapseWhitespace ? "collapsed spaces" : "keep spacing";
+    const sep =
+      settings.pageSeparator === "blank" ? "blank line" : settings.pageSeparator === "formfeed" ? "form feed" : "none";
+    return `${header} • ${ws} • sep: ${sep}`;
+  }, [settings]);
+
   return (
     <ToolLayout title="PDF to Text" description="Extract plain text content from PDF files.">
-      <div className="grid lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+
+        {/* LEFT */}
+        <div className="order-1 lg:order-2 space-y-6">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -146,6 +234,62 @@ export default function PDFToText() {
             </Card>
           )}
 
+          {/* Options */}
+          <Card className="p-6 space-y-4">
+            <div className="text-xs text-muted-foreground">{settingsSummary}</div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Page headers</p>
+                <p className="text-xs text-muted-foreground">Add “=== Page N ===” above each page.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={settings.includePageHeaders ? "on" : "off"}
+                onChange={(e) => setSettings((p) => ({ ...p, includePageHeaders: e.target.value === "on" }))}
+                disabled={converting}
+              >
+                <option value="on">On</option>
+                <option value="off">Off</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Whitespace</p>
+                <p className="text-xs text-muted-foreground">Collapse spacing for readability.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={settings.collapseWhitespace ? "collapse" : "keep"}
+                onChange={(e) => setSettings((p) => ({ ...p, collapseWhitespace: e.target.value === "collapse" }))}
+                disabled={converting}
+              >
+                <option value="collapse">Collapse spaces</option>
+                <option value="keep">Keep spacing</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Between pages</p>
+                <p className="text-xs text-muted-foreground">How pages are separated in the TXT.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={settings.pageSeparator}
+                onChange={(e) =>
+                  setSettings((p) => ({ ...p, pageSeparator: e.target.value as Settings["pageSeparator"] }))
+                }
+                disabled={converting}
+              >
+                <option value="blank">Blank line</option>
+                <option value="formfeed">Form feed (\\f)</option>
+                <option value="none">None</option>
+              </select>
+            </div>
+          </Card>
+
           <Button onClick={convertToText} disabled={!pdfFile || converting} className="w-full" size="lg">
             {converting ? (
               <>
@@ -161,7 +305,8 @@ export default function PDFToText() {
           </Button>
         </div>
 
-        <div className="space-y-6">
+        {/* RIGHT */}
+        <div className="order-2 lg:order-3 space-y-6">
           <Card className="p-6">
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
