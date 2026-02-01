@@ -479,6 +479,7 @@ export default function ExcelToPDF() {
           <div className="mt-3">
             <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
           </div>
+        </div>
 
         {/* Left */}
         <div className="order-1 lg:order-2 space-y-6">
