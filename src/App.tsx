@@ -51,6 +51,7 @@ import VaultPage from "./pages/VaultPage";
 import WorkflowsPage from "./pages/WorkflowsPage";
 import PreferencesPage from "./pages/PreferencesPage";
 import TrustCenterPage from "./pages/TrustCenterPage";
+import CropPDF from "./pages/tools/CropPDF";
 
 const queryClient = new QueryClient();
 
@@ -108,6 +109,7 @@ const App = () => (
           <Route path="/tools/generator-tools" element={<GeneratorTools />} />
           <Route path="/tools/business-docs" element={<BusinessDocs />} />
           <Route path="/tools/career-kit" element={<CareerKit />} />
+          <Route path="/tools/crop-pdf" element={<CropPDF />} />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
