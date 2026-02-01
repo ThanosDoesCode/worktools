@@ -257,14 +257,6 @@ Team Monthly Cost: ${formatCurrency(calculations.teamMonthlyCost)}`;
 
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
 
-          <div className="rounded-xl border border-border bg-muted/30 p-4 text-xs text-muted-foreground flex gap-2">
-            <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-            <div>
-              <b>Moat</b>: save/load presets (teams, roles), last-used settings, shareable link, local-first.
-            </div>
-          </div>
-        </div>
-
         {/* Input Panel */}
         <div className="order-1 lg:order-2 lg:col-span-1 space-y-6">
           <div className="bg-surface-elevated rounded-xl p-6 border border-border">
