@@ -3,14 +3,10 @@ import { useDropzone } from "react-dropzone";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, X, Download, ScanSearch, Loader2 } from "lucide-react";
+import { Upload, X, Download, ScanSearch, Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import { saveAs } from "file-saver";
-
-// shadcn select
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // PDF.js
 import * as pdfjsLib from "pdfjs-dist";
@@ -22,6 +18,12 @@ import { createWorker } from "tesseract.js";
 // Build output PDF
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
+/** Moat */
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
+
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorker;
 
 interface PDFFile {
@@ -29,6 +31,11 @@ interface PDFFile {
   name: string;
 }
 
+/**
+ * Tesseract language codes.
+ * NOTE: Availability depends on how tesseract.js fetches language data in your build.
+ * Some may fail in-browser; we fallback to English if preferred fails.
+ */
 type OcrLang =
   | "eng" // English
   | "ell" // Greek
@@ -43,23 +50,74 @@ type OcrLang =
   | "dan" // Danish
   | "fin" // Finnish
   | "pol" // Polish
-  | "ces" // Czech
-  | "hun" // Hungarian
-  | "ron" // Romanian
   | "tur" // Turkish
-  | "rus" // Russian
+  | "ces" // Czech
+  | "ron" // Romanian
+  | "hun" // Hungarian
   | "ukr" // Ukrainian
+  | "rus" // Russian
   | "ara" // Arabic
   | "heb" // Hebrew
   | "hin" // Hindi
   | "tha" // Thai
   | "vie" // Vietnamese
   | "ind" // Indonesian
-  | "msa" // Malay
-  | "kor" // Korean
   | "jpn" // Japanese
+  | "kor" // Korean
   | "chi_sim" // Chinese (Simplified)
   | "chi_tra"; // Chinese (Traditional)
+
+type Settings = {
+  preferredLang: OcrLang;
+  fallbackLang: OcrLang;
+  scale: 1 | 2 | 3;
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  preferredLang: "eng",
+  fallbackLang: "eng",
+  scale: 2,
+};
+
+const LANG_OPTIONS: Array<{ code: OcrLang; label: string; note?: string }> = [
+  { code: "eng", label: "English" },
+  { code: "ell", label: "Greek" },
+  { code: "spa", label: "Spanish" },
+  { code: "fra", label: "French" },
+  { code: "deu", label: "German" },
+  { code: "ita", label: "Italian" },
+  { code: "por", label: "Portuguese" },
+  { code: "nld", label: "Dutch" },
+  { code: "swe", label: "Swedish" },
+  { code: "nor", label: "Norwegian" },
+  { code: "dan", label: "Danish" },
+  { code: "fin", label: "Finnish" },
+  { code: "pol", label: "Polish" },
+  { code: "tur", label: "Turkish" },
+  { code: "ces", label: "Czech" },
+  { code: "ron", label: "Romanian" },
+  { code: "hun", label: "Hungarian" },
+  { code: "ukr", label: "Ukrainian" },
+  { code: "rus", label: "Russian" },
+  { code: "ara", label: "Arabic" },
+  { code: "heb", label: "Hebrew" },
+  { code: "hin", label: "Hindi" },
+  { code: "tha", label: "Thai" },
+  { code: "vie", label: "Vietnamese" },
+  { code: "ind", label: "Indonesian" },
+  { code: "jpn", label: "Japanese" },
+  { code: "kor", label: "Korean" },
+  { code: "chi_sim", label: "Chinese (Simplified)" },
+  { code: "chi_tra", label: "Chinese (Traditional)" },
+];
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  { name: "English — Fast (1x)", settings: { preferredLang: "eng", fallbackLang: "eng", scale: 1 } },
+  { name: "English — Balanced (2x)", settings: { preferredLang: "eng", fallbackLang: "eng", scale: 2 } },
+  { name: "English — High (3x)", settings: { preferredLang: "eng", fallbackLang: "eng", scale: 3 } },
+  { name: "Greek → English fallback", settings: { preferredLang: "ell", fallbackLang: "eng", scale: 2 } },
+  { name: "Swedish → English fallback", settings: { preferredLang: "swe", fallbackLang: "eng", scale: 2 } },
+];
 
 function baseName(name: string) {
   return name.replace(/\.pdf$/i, "") || "document";
@@ -69,56 +127,30 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-const LANG_OPTIONS: Array<{ code: OcrLang; label: string }> = [
-  { code: "eng", label: "English" },
-  { code: "spa", label: "Spanish" },
-  { code: "fra", label: "French" },
-  { code: "deu", label: "German" },
-  { code: "ita", label: "Italian" },
-  { code: "por", label: "Portuguese" },
-  { code: "nld", label: "Dutch" },
-
-  { code: "swe", label: "Swedish" },
-  { code: "nor", label: "Norwegian" },
-  { code: "dan", label: "Danish" },
-  { code: "fin", label: "Finnish" },
-
-  { code: "pol", label: "Polish" },
-  { code: "ces", label: "Czech" },
-  { code: "hun", label: "Hungarian" },
-  { code: "ron", label: "Romanian" },
-
-  { code: "ell", label: "Greek" },
-  { code: "tur", label: "Turkish" },
-  { code: "rus", label: "Russian" },
-  { code: "ukr", label: "Ukrainian" },
-
-  { code: "ara", label: "Arabic" },
-  { code: "heb", label: "Hebrew" },
-
-  { code: "hin", label: "Hindi" },
-  { code: "tha", label: "Thai" },
-  { code: "vie", label: "Vietnamese" },
-  { code: "ind", label: "Indonesian" },
-  { code: "msa", label: "Malay" },
-
-  { code: "kor", label: "Korean" },
-  { code: "jpn", label: "Japanese" },
-  { code: "chi_sim", label: "Chinese (Simplified)" },
-  { code: "chi_tra", label: "Chinese (Traditional)" },
-];
-
 export default function PDFOCR() {
+  const { toast } = useToast();
+
   const [pdfFile, setPdfFile] = useState<PDFFile | null>(null);
   const [converting, setConverting] = useState(false);
   const [progress, setProgress] = useState<{ page: number; total: number; status: string } | null>(null);
 
-  // Controls
-  const [preferredLang, setPreferredLang] = useState<OcrLang>("eng");
-  const [fallbackLang, setFallbackLang] = useState<OcrLang>("eng");
-  const [scale, setScale] = useState<number>(2); // OCR quality (render scale)
+  // Moat settings only
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "pdf-ocr";
 
-  const { toast } = useToast();
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
+
+  const preferredLabel = useMemo(() => {
+    return LANG_OPTIONS.find((l) => l.code === settings.preferredLang)?.label ?? settings.preferredLang;
+  }, [settings.preferredLang]);
+
+  const fallbackLabel = useMemo(() => {
+    return LANG_OPTIONS.find((l) => l.code === settings.fallbackLang)?.label ?? settings.fallbackLang;
+  }, [settings.fallbackLang]);
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
@@ -141,22 +173,12 @@ export default function PDFOCR() {
     onDrop,
     accept: { "application/pdf": [".pdf"] },
     maxFiles: 1,
-    disabled: converting,
   });
 
   const clearFile = () => {
     setPdfFile(null);
     setProgress(null);
   };
-
-  const preferredLabel = useMemo(
-    () => LANG_OPTIONS.find((l) => l.code === preferredLang)?.label ?? preferredLang,
-    [preferredLang],
-  );
-  const fallbackLabel = useMemo(
-    () => LANG_OPTIONS.find((l) => l.code === fallbackLang)?.label ?? fallbackLang,
-    [fallbackLang],
-  );
 
   // canvas -> png bytes
   const canvasToPngBytes = async (canvas: HTMLCanvasElement): Promise<Uint8Array> => {
@@ -167,10 +189,26 @@ export default function PDFOCR() {
     return new Uint8Array(ab);
   };
 
-  async function initLang(worker: any, lang: OcrLang) {
-    await worker.loadLanguage(lang);
-    await worker.initialize(lang);
-  }
+  const initWorkerWithFallback = async (worker: any, primary: OcrLang, fallback: OcrLang) => {
+    // Try primary
+    try {
+      await worker.loadLanguage(primary);
+      await worker.initialize(primary);
+      return { used: primary as OcrLang, fellBack: false };
+    } catch {
+      // Try fallback
+      try {
+        await worker.loadLanguage(fallback);
+        await worker.initialize(fallback);
+        return { used: fallback as OcrLang, fellBack: true };
+      } catch {
+        // Final fallback: English
+        await worker.loadLanguage("eng");
+        await worker.initialize("eng");
+        return { used: "eng" as OcrLang, fellBack: true };
+      }
+    }
+  };
 
   const performOCR = async () => {
     if (!pdfFile) return;
@@ -193,18 +231,23 @@ export default function PDFOCR() {
       // Create OCR worker
       worker = await createWorker();
 
-      // Preferred language with fallback
-      try {
-        await initLang(worker, preferredLang);
-      } catch {
-        if (fallbackLang !== preferredLang) {
-          toast({
-            title: "Language pack fallback",
-            description: `Could not load ${preferredLabel}. Falling back to ${fallbackLabel}.`,
-            variant: "destructive",
-          });
-        }
-        await initLang(worker, fallbackLang);
+      const { used, fellBack } = await initWorkerWithFallback(
+        worker,
+        settings.preferredLang,
+        settings.fallbackLang || "eng",
+      );
+
+      if (fellBack) {
+        toast({
+          title: "OCR language fallback",
+          description: `Preferred "${preferredLabel}" wasn't available. Using "${LANG_OPTIONS.find((l) => l.code === used)?.label ?? used}".`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "OCR ready",
+          description: `Using "${preferredLabel}".`,
+        });
       }
 
       // Output PDF
@@ -215,7 +258,7 @@ export default function PDFOCR() {
         setProgress({ page: pageNumber, total: totalPages, status: "Rendering page…" });
 
         const page = await pdf.getPage(pageNumber);
-        const viewport = page.getViewport({ scale });
+        const viewport = page.getViewport({ scale: settings.scale });
 
         // Render page to canvas
         const canvas = document.createElement("canvas");
@@ -228,9 +271,10 @@ export default function PDFOCR() {
 
         // OCR
         setProgress({ page: pageNumber, total: totalPages, status: "Running OCR…" });
+
         const { data } = await worker.recognize(canvas);
 
-        // Create PDF page with same pixel dimensions (1px = 1pt here; fine for search)
+        // Create PDF page with same pixel dimensions (1px ~ 1pt; fine for search)
         const w = canvas.width;
         const h = canvas.height;
         const outPage = outPdf.addPage([w, h]);
@@ -246,14 +290,14 @@ export default function PDFOCR() {
           height: h,
         });
 
-        // Add invisible text layer using word bounding boxes
-        // Tesseract bbox origin is top-left; PDF origin is bottom-left
+        // Invisible text layer (word bounding boxes)
         const words = (data?.words || []) as Array<{
           text: string;
           bbox: { x0: number; y0: number; x1: number; y1: number };
           confidence?: number;
         }>;
 
+        // Tiny opacity so it stays invisible but searchable
         const textOpacity = 0.01;
 
         for (const word of words) {
@@ -266,8 +310,10 @@ export default function PDFOCR() {
 
           if (boxW < 2 || boxH < 2) continue;
 
+          // PDF origin bottom-left; image origin top-left.
           const x = clamp(x0, 0, w - 1);
           const y = clamp(h - y1, 0, h - 1);
+
           const fontSize = clamp(boxH, 6, 48);
 
           outPage.drawText(t, {
@@ -285,12 +331,16 @@ export default function PDFOCR() {
 
       const outBytes = await outPdf.save();
       const blob = new Blob([new Uint8Array(outBytes)], { type: "application/pdf" });
-      saveAs(blob, `${baseName(pdfFile.name)}-searchable.pdf`);
+
+      const langTag = settings.preferredLang === "eng" ? "ocr" : `ocr-${settings.preferredLang}`;
+      saveAs(blob, `${baseName(pdfFile.name)}-${langTag}.pdf`);
 
       toast({
         title: "Done!",
         description: "Downloaded a searchable (OCR) PDF.",
       });
+
+      moat.recordJob();
     } catch (e: any) {
       toast({
         title: "OCR failed",
@@ -313,8 +363,29 @@ export default function PDFOCR() {
       title="PDF OCR"
       description="Make scanned PDFs searchable by adding an invisible text layer (runs in your browser)."
     >
-      <div className="grid lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+
+        {/* LEFT: INPUTS + ACTION */}
+        <div className="order-1 lg:order-2 space-y-6">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -336,7 +407,7 @@ export default function PDFOCR() {
                   <ScanSearch className="h-8 w-8 text-primary shrink-0" />
                   <span className="font-medium truncate">{pdfFile.name}</span>
                 </div>
-                <Button variant="ghost" size="icon" onClick={clearFile} disabled={converting}>
+                <Button variant="ghost" size="icon" onClick={clearFile} disabled={converting} aria-label="Clear file">
                   <X className="h-4 w-4" />
                 </Button>
               </div>
@@ -349,63 +420,70 @@ export default function PDFOCR() {
             </Card>
           )}
 
-          <Card className="p-6 space-y-4">
-            {/* Preferred language */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Preferred language</Label>
-              <Select value={preferredLang} onValueChange={(v) => setPreferredLang(v as OcrLang)} disabled={converting}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select preferred language" />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {LANG_OPTIONS.map((l) => (
-                    <SelectItem key={l.code} value={l.code}>
-                      {l.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">We try this language first.</p>
-            </div>
-
-            {/* Fallback language */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Fallback language</Label>
-              <Select value={fallbackLang} onValueChange={(v) => setFallbackLang(v as OcrLang)} disabled={converting}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select fallback language" />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {LANG_OPTIONS.map((l) => (
-                    <SelectItem key={l.code} value={l.code}>
-                      {l.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Used automatically if the preferred language pack can’t load.
-              </p>
-            </div>
-
-            {/* Scale */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Quality / scale</Label>
-              <Select
-                value={String(scale)}
-                onValueChange={(v) => setScale(clamp(Number(v), 1, 3))}
+          <Card className="p-6 space-y-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Preferred language</p>
+                <p className="text-xs text-muted-foreground">If unavailable, we’ll fallback.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={settings.preferredLang}
+                onChange={(e) => setSettings((p) => ({ ...p, preferredLang: e.target.value as OcrLang }))}
                 disabled={converting}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select quality" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">Fast (1x)</SelectItem>
-                  <SelectItem value="2">Balanced (2x)</SelectItem>
-                  <SelectItem value="3">High (3x)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Higher = better OCR, slower.</p>
+                {LANG_OPTIONS.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Fallback language</p>
+                <p className="text-xs text-muted-foreground">Used if preferred fails.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={settings.fallbackLang}
+                onChange={(e) => setSettings((p) => ({ ...p, fallbackLang: e.target.value as OcrLang }))}
+                disabled={converting}
+              >
+                {LANG_OPTIONS.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Quality / scale</p>
+                <p className="text-xs text-muted-foreground">Higher = better OCR, slower.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={String(settings.scale)}
+                onChange={(e) => setSettings((p) => ({ ...p, scale: Number(e.target.value) as 1 | 2 | 3 }))}
+                disabled={converting}
+              >
+                <option value="1">Fast (1x)</option>
+                <option value="2">Balanced (2x)</option>
+                <option value="3">High (3x)</option>
+              </select>
+            </div>
+
+            <div className="text-xs text-muted-foreground">
+              Current: <span className="font-medium text-foreground">{preferredLabel}</span>{" "}
+              {settings.preferredLang !== settings.fallbackLang && (
+                <>
+                  → fallback <span className="font-medium text-foreground">{fallbackLabel}</span>
+                </>
+              )}{" "}
+              • scale <span className="font-medium text-foreground">{settings.scale}x</span>
             </div>
           </Card>
 
@@ -424,7 +502,8 @@ export default function PDFOCR() {
           </Button>
         </div>
 
-        <div className="space-y-6">
+        {/* RIGHT: HELP */}
+        <div className="order-2 lg:order-3 space-y-6">
           <Card className="p-6">
             <h3 className="font-semibold mb-4">How it works</h3>
             <ol className="space-y-3 text-sm text-muted-foreground">
@@ -452,10 +531,10 @@ export default function PDFOCR() {
           <Card className="p-6 bg-muted/50">
             <h3 className="font-semibold mb-2">Notes</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• This runs locally in your browser (no server upload)</li>
+              <li>• Runs locally in your browser (no server upload)</li>
               <li>• Large PDFs can be slow (OCR is heavy)</li>
-              <li>• Text alignment may vary, but search/copy works</li>
-              <li>• If a language pack fails to load, the fallback will be used.</li>
+              <li>• Language availability depends on your Tesseract.js setup</li>
+              <li>• If a language isn’t available, we automatically fallback</li>
             </ul>
           </Card>
         </div>
