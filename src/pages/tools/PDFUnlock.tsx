@@ -1,19 +1,40 @@
-import React, { useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import { PDFDocument } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
+
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min?url";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Upload, Unlock, Download, FileText, Shield, Eye, EyeOff, Loader2, AlertCircle, Lock } from "lucide-react";
+import {
+  Upload,
+  Unlock,
+  Download,
+  FileText,
+  Shield,
+  Eye,
+  EyeOff,
+  Loader2,
+  AlertCircle,
+  Lock,
+  Sparkles,
+} from "lucide-react";
 import { toast } from "sonner";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// MOAT
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
+
+// Configure PDF.js worker (Vite-friendly; avoids CDN)
+(pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorker;
 
 function formatMB(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
@@ -23,20 +44,71 @@ function baseName(name: string) {
   return (name || "document").replace(/\.pdf$/i, "") || "document";
 }
 
+type ImageFormat = "png" | "jpeg";
+
+type Settings = {
+  renderScale: 1 | 2 | 3; // higher = sharper, slower
+  imageFormat: ImageFormat; // output rendering format
+  jpegQuality: number; // 0.6..1.0 used only if jpeg
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  renderScale: 2,
+  imageFormat: "png",
+  jpegQuality: 0.92,
+};
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  { name: "Balanced (recommended)", settings: { ...DEFAULT_SETTINGS, renderScale: 2, imageFormat: "png" } },
+  { name: "Fast", settings: { ...DEFAULT_SETTINGS, renderScale: 1, imageFormat: "jpeg", jpegQuality: 0.85 } },
+  { name: "High quality", settings: { ...DEFAULT_SETTINGS, renderScale: 3, imageFormat: "png" } },
+  {
+    name: "Smaller file (JPG)",
+    settings: { ...DEFAULT_SETTINGS, renderScale: 2, imageFormat: "jpeg", jpegQuality: 0.85 },
+  },
+];
+
+async function checkEncrypted(file: File): Promise<boolean | null> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const task = (pdfjsLib as any).getDocument({ data: arrayBuffer });
+    try {
+      await task.promise;
+      return false;
+    } catch (err: any) {
+      if (err?.name === "PasswordException") return true;
+      return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
 export default function PDFUnlock() {
   const [file, setFile] = useState<File | null>(null);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+
   const [outputBlob, setOutputBlob] = useState<Blob | null>(null);
   const [outputName, setOutputName] = useState<string>("");
+
   const [isEncrypted, setIsEncrypted] = useState<boolean | null>(null);
 
+  // MOAT settings
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "pdf-unlock";
+
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    const pdfFile = acceptedFiles.find(
-      (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf")
-    );
+    const pdfFile = acceptedFiles.find((f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
     if (!pdfFile) {
       toast.error("Please upload a PDF file.");
       return;
@@ -49,24 +121,15 @@ export default function PDFUnlock() {
     setPassword("");
     setIsEncrypted(null);
 
-    // Check if the PDF is encrypted
-    try {
-      const arrayBuffer = await pdfFile.arrayBuffer();
-      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-      
-      try {
-        await loadingTask.promise;
-        setIsEncrypted(false);
-        toast.info("This PDF is not password-protected.");
-      } catch (err: any) {
-        if (err?.name === "PasswordException") {
-          setIsEncrypted(true);
-        } else {
-          toast.error("Could not read PDF file.");
-        }
-      }
-    } catch {
-      toast.error("Could not read PDF file.");
+    const encrypted = await checkEncrypted(pdfFile);
+    setIsEncrypted(encrypted);
+
+    if (encrypted === false) {
+      toast.info("This PDF is not password-protected.");
+    } else if (encrypted === true) {
+      toast.message("Password-protected PDF detected.");
+    } else {
+      toast.error("Could not determine if the PDF is encrypted.");
     }
   }, []);
 
@@ -87,9 +150,20 @@ export default function PDFUnlock() {
     setIsEncrypted(null);
   };
 
+  const canUnlock = useMemo(
+    () => !!file && isEncrypted === true && password.trim().length > 0 && !isProcessing,
+    [file, isEncrypted, password, isProcessing],
+  );
+
+  const settingsSummary = useMemo(() => {
+    const fmt = settings.imageFormat === "png" ? "PNG" : `JPG (${Math.round(settings.jpegQuality * 100)}%)`;
+    return `render ${settings.renderScale}x • ${fmt}`;
+  }, [settings]);
+
   const handleUnlock = async () => {
     if (!file) return toast.error("Please upload a PDF file first.");
     if (!password.trim()) return toast.error("Please enter the password.");
+    if (isEncrypted !== true) return toast.error("This PDF doesn't appear to be encrypted.");
 
     setIsProcessing(true);
     setProgress(10);
@@ -98,52 +172,57 @@ export default function PDFUnlock() {
       const arrayBuffer = await file.arrayBuffer();
       setProgress(20);
 
-      // Try to open with password using pdfjs-dist to decrypt
-      const loadingTask = pdfjsLib.getDocument({
+      // Open with password using pdfjs (decrypts in-memory)
+      const loadingTask = (pdfjsLib as any).getDocument({
         data: arrayBuffer,
         password: password,
       });
 
       setProgress(40);
-
       const pdfDoc = await loadingTask.promise;
-      setProgress(60);
+      setProgress(55);
 
-      // Re-render all pages to a new unprotected PDF
+      // Re-render all pages to a new unprotected PDF (image-based output)
       const newPdfDoc = await PDFDocument.create();
-      const pageCount = pdfDoc.numPages;
+      const pageCount: number = pdfDoc.numPages;
 
       for (let i = 1; i <= pageCount; i++) {
         const page = await pdfDoc.getPage(i);
-        const viewport = page.getViewport({ scale: 2 });
-        
-        // Create canvas to render page
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d")!;
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
 
-        await page.render({ canvasContext: context, viewport }).promise;
+        // Render at chosen scale for sharper output
+        const viewportHi = page.getViewport({ scale: settings.renderScale });
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Could not create canvas context.");
+
+        canvas.width = Math.floor(viewportHi.width);
+        canvas.height = Math.floor(viewportHi.height);
+
+        await page.render({ canvasContext: context, viewport: viewportHi }).promise;
 
         // Convert canvas to image and embed in new PDF
-        const imgData = canvas.toDataURL("image/png");
-        const pngImage = await newPdfDoc.embedPng(imgData);
+        const mime = settings.imageFormat === "png" ? "image/png" : "image/jpeg";
+        const dataUrl = canvas.toDataURL(mime, settings.imageFormat === "jpeg" ? settings.jpegQuality : undefined);
 
-        // Create page with original dimensions (in points, not pixels)
-        const originalViewport = page.getViewport({ scale: 1 });
-        const newPage = newPdfDoc.addPage([originalViewport.width, originalViewport.height]);
-        newPage.drawImage(pngImage, {
+        const embedded =
+          settings.imageFormat === "png" ? await newPdfDoc.embedPng(dataUrl) : await newPdfDoc.embedJpg(dataUrl);
+
+        // Page size: keep original points (scale: 1)
+        const viewport = page.getViewport({ scale: 1 });
+        const newPage = newPdfDoc.addPage([viewport.width, viewport.height]);
+        newPage.drawImage(embedded, {
           x: 0,
           y: 0,
-          width: originalViewport.width,
-          height: originalViewport.height,
+          width: viewport.width,
+          height: viewport.height,
         });
 
-        setProgress(60 + Math.round((i / pageCount) * 30));
+        const pct = 55 + Math.round((i / pageCount) * 40);
+        setProgress(pct);
       }
 
       const unlockedBytes = await newPdfDoc.save();
-      setProgress(95);
+      setProgress(98);
 
       const blob = new Blob([new Uint8Array(unlockedBytes)], { type: "application/pdf" });
       const name = `${baseName(file.name)}_unlocked.pdf`;
@@ -153,9 +232,15 @@ export default function PDFUnlock() {
       setProgress(100);
 
       toast.success("PDF unlocked successfully!");
+      moat.recordJob();
     } catch (err: any) {
       console.error(err);
-      if (err?.name === "PasswordException" || err?.message?.includes("password")) {
+      if (
+        err?.name === "PasswordException" ||
+        String(err?.message || "")
+          .toLowerCase()
+          .includes("password")
+      ) {
         toast.error("Incorrect password. Please try again.");
       } else {
         toast.error(err?.message || "Failed to unlock PDF.");
@@ -179,16 +264,43 @@ export default function PDFUnlock() {
     toast.success("Downloaded!");
   };
 
-  const canUnlock = !!file && isEncrypted && password.trim().length > 0 && !isProcessing;
-
   return (
     <ToolLayout
       title="PDF Unlock"
       description="Remove password protection from your PDF. Enter the correct password and download an unprotected copy. Everything runs locally in your browser."
     >
-      <div className="grid lg:grid-cols-2 gap-8">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* MOAT */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+
+          <Card className="p-4 bg-muted/30 border border-border">
+            <div className="flex gap-2 text-xs text-muted-foreground">
+              <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+              <div>
+                <b>Moat</b> saves/shares your unlock settings (quality, format). Your PDF + password are never stored.
+              </div>
+            </div>
+          </Card>
+        </div>
+
         {/* LEFT */}
-        <div className="space-y-6">
+        <div className="order-1 lg:order-2 space-y-6">
           <Card>
             <CardContent className="p-6">
               <div
@@ -202,8 +314,9 @@ export default function PDFUnlock() {
                 {file ? (
                   <div className="space-y-2">
                     <FileText className="w-8 h-8 mx-auto text-primary" />
-                    <p className="font-medium">{file.name}</p>
+                    <p className="font-medium break-all">{file.name}</p>
                     <p className="text-sm text-muted-foreground">{formatMB(file.size)}</p>
+
                     {isEncrypted === true && (
                       <p className="text-xs text-amber-600 flex items-center justify-center gap-1">
                         <Shield className="w-3 h-3" /> Password-protected
@@ -213,6 +326,9 @@ export default function PDFUnlock() {
                       <p className="text-xs text-green-600 flex items-center justify-center gap-1">
                         <Unlock className="w-3 h-3" /> Not encrypted
                       </p>
+                    )}
+                    {isEncrypted === null && (
+                      <p className="text-xs text-muted-foreground">Could not determine encryption status</p>
                     )}
                   </div>
                 ) : (
@@ -225,6 +341,66 @@ export default function PDFUnlock() {
                   </>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Options */}
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <div className="text-xs text-muted-foreground">{settingsSummary}</div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Render quality</p>
+                  <p className="text-xs text-muted-foreground">Higher = sharper output, slower.</p>
+                </div>
+                <select
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                  value={String(settings.renderScale)}
+                  onChange={(e) => setSettings((p) => ({ ...p, renderScale: Number(e.target.value) as 1 | 2 | 3 }))}
+                  disabled={isProcessing}
+                >
+                  <option value="1">Fast (1x)</option>
+                  <option value="2">Balanced (2x)</option>
+                  <option value="3">High (3x)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Output image format</p>
+                  <p className="text-xs text-muted-foreground">PNG is crisp; JPG is smaller.</p>
+                </div>
+                <select
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                  value={settings.imageFormat}
+                  onChange={(e) => setSettings((p) => ({ ...p, imageFormat: e.target.value as ImageFormat }))}
+                  disabled={isProcessing}
+                >
+                  <option value="png">PNG</option>
+                  <option value="jpeg">JPG</option>
+                </select>
+              </div>
+
+              {settings.imageFormat === "jpeg" && (
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">JPG quality</p>
+                    <p className="text-xs text-muted-foreground">Lower = smaller file.</p>
+                  </div>
+                  <select
+                    className="h-10 rounded-md border bg-background px-3 text-sm"
+                    value={String(settings.jpegQuality)}
+                    onChange={(e) => setSettings((p) => ({ ...p, jpegQuality: Number(e.target.value) }))}
+                    disabled={isProcessing}
+                  >
+                    <option value="0.75">75%</option>
+                    <option value="0.85">85%</option>
+                    <option value="0.92">92%</option>
+                    <option value="0.98">98%</option>
+                  </select>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -249,7 +425,7 @@ export default function PDFUnlock() {
           )}
 
           {/* PASSWORD FORM */}
-          {file && isEncrypted && !outputBlob && (
+          {file && isEncrypted === true && !outputBlob && (
             <Card>
               <CardContent className="p-6 space-y-4">
                 <div className="flex items-center gap-2">
@@ -269,13 +445,14 @@ export default function PDFUnlock() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && canUnlock) handleUnlock();
                       }}
+                      autoComplete="current-password"
                     />
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
                       className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                      onClick={() => setShowPassword(!showPassword)}
+                      onClick={() => setShowPassword((v) => !v)}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
@@ -330,8 +507,8 @@ export default function PDFUnlock() {
           )}
         </div>
 
-        {/* RIGHT - Info */}
-        <div className="space-y-6">
+        {/* RIGHT */}
+        <div className="order-2 lg:order-3 space-y-6">
           <Card>
             <CardContent className="p-6 space-y-4">
               <div className="flex items-center gap-2">
@@ -340,16 +517,13 @@ export default function PDFUnlock() {
               </div>
               <ul className="space-y-3 text-sm text-muted-foreground">
                 <li className="flex gap-2">
-                  <span className="font-bold text-primary">1.</span>
-                  Upload a password-protected PDF
+                  <span className="font-bold text-primary">1.</span> Upload a password-protected PDF
                 </li>
                 <li className="flex gap-2">
-                  <span className="font-bold text-primary">2.</span>
-                  Enter the correct password
+                  <span className="font-bold text-primary">2.</span> Enter the correct password
                 </li>
                 <li className="flex gap-2">
-                  <span className="font-bold text-primary">3.</span>
-                  Download the unlocked PDF
+                  <span className="font-bold text-primary">3.</span> Download the unlocked PDF
                 </li>
               </ul>
             </CardContent>
@@ -365,7 +539,7 @@ export default function PDFUnlock() {
                 <li>✓ All processing happens in your browser</li>
                 <li>✓ Your files never leave your device</li>
                 <li>✓ Password is not stored or transmitted</li>
-                <li>✓ No server uploads required</li>
+                <li>✓ Moat saves settings only</li>
               </ul>
             </CardContent>
           </Card>
@@ -380,7 +554,7 @@ export default function PDFUnlock() {
                 <li>• You must know the correct password</li>
                 <li>• This tool cannot crack or bypass passwords</li>
                 <li>• Only use on PDFs you have permission to unlock</li>
-                <li>• The unlocked PDF is re-rendered as images for compatibility</li>
+                <li>• Output is image-based (best compatibility)</li>
               </ul>
             </CardContent>
           </Card>
