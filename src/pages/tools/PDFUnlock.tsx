@@ -288,15 +288,6 @@ export default function PDFUnlock() {
           />
 
           <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
-
-          <Card className="p-4 bg-muted/30 border border-border">
-            <div className="flex gap-2 text-xs text-muted-foreground">
-              <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-              <div>
-                <b>Moat</b> saves/shares your unlock settings (quality, format). Your PDF + password are never stored.
-              </div>
-            </div>
-          </Card>
         </div>
 
         {/* LEFT */}
@@ -539,7 +530,6 @@ export default function PDFUnlock() {
                 <li>✓ All processing happens in your browser</li>
                 <li>✓ Your files never leave your device</li>
                 <li>✓ Password is not stored or transmitted</li>
-                <li>✓ Moat saves settings only</li>
               </ul>
             </CardContent>
           </Card>
