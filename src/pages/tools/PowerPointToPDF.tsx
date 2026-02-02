@@ -4,8 +4,14 @@ import { jsPDF } from "jspdf";
 import { ToolLayout } from "@/components/layout/ToolLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Upload, Trash2, Presentation, Download, Loader2, Info } from "lucide-react";
+import { Presentation, Trash2, Download, Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
+
+// MOAT
+import { useMoat } from "@/hooks/useMoat";
+import { PresetsPanel } from "@/components/moat/PresetsPanel";
+import { CopyLinkButton } from "@/components/moat/CopyLinkButton";
+import { LocalStatusIndicator } from "@/components/moat/LocalStatusIndicator";
 
 interface PowerpointFile {
   file: File;
@@ -27,11 +33,56 @@ function isPpt(file: File) {
   );
 }
 
+type Settings = {
+  pageFormat: "a4" | "letter";
+  orientation: "portrait" | "landscape";
+  includeFooter: boolean;
+  includeTimestamp: boolean;
+  marginPt: number; // points
+  title: string; // header title
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  pageFormat: "a4",
+  orientation: "portrait",
+  includeFooter: true,
+  includeTimestamp: true,
+  marginPt: 40,
+  title: "PowerPoint → PDF (Preview)",
+};
+
+const RECOMMENDED_PRESETS: Array<{ name: string; settings: Settings }> = [
+  { name: "A4 • Portrait • Default", settings: { ...DEFAULT_SETTINGS, pageFormat: "a4", orientation: "portrait" } },
+  { name: "A4 • Landscape", settings: { ...DEFAULT_SETTINGS, pageFormat: "a4", orientation: "landscape" } },
+  {
+    name: "Letter • Portrait",
+    settings: { ...DEFAULT_SETTINGS, pageFormat: "letter", orientation: "portrait" },
+  },
+  {
+    name: "No footer",
+    settings: { ...DEFAULT_SETTINGS, includeFooter: false },
+  },
+];
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
 export default function PowerpointToPDF() {
   const [presentations, setPresentations] = useState<PowerpointFile[]>([]);
   const [converting, setConverting] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ current: number; total: number; label: string } | null>(null);
+
+  // MOAT settings (only settings get saved/shared; files never do)
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const toolSlug = "powerpoint-to-pdf";
+
+  const moat = useMoat(settings as Record<string, unknown>, (s) => setSettings(s as Settings), {
+    toolSlug,
+    defaultSettings: DEFAULT_SETTINGS as Record<string, unknown>,
+    recommendedPresets: RECOMMENDED_PRESETS.map((p) => ({ id: p.name, name: p.name, settings: p.settings })),
+  });
 
   // cleanup pdfUrl on unmount / replace
   useEffect(() => {
@@ -96,6 +147,13 @@ export default function PowerpointToPDF() {
 
   const totalSize = useMemo(() => presentations.reduce((acc, f) => acc + f.size, 0), [presentations]);
 
+  const settingsSummary = useMemo(() => {
+    const fmt = settings.pageFormat.toUpperCase();
+    const o = settings.orientation === "portrait" ? "Portrait" : "Landscape";
+    const footer = settings.includeFooter ? "Footer" : "No footer";
+    return `${fmt} • ${o} • ${footer} • margin ${settings.marginPt}pt`;
+  }, [settings]);
+
   const convertToPDF = async () => {
     if (presentations.length === 0) {
       toast.error("Please add at least one presentation");
@@ -106,15 +164,18 @@ export default function PowerpointToPDF() {
     setProgress({ current: 0, total: presentations.length, label: "Creating preview PDF…" });
 
     try {
-      const pdf = new jsPDF({ unit: "pt", format: "a4" });
+      const pdf = new jsPDF({
+        unit: "pt",
+        format: settings.pageFormat,
+        orientation: settings.orientation,
+      });
 
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
-      const margin = 40;
+      const margin = clamp(settings.marginPt, 16, 120);
 
       for (let i = 0; i < presentations.length; i++) {
         const ppt = presentations[i];
-
         if (i > 0) pdf.addPage();
 
         setProgress({ current: i + 1, total: presentations.length, label: `Adding: ${ppt.name}` });
@@ -122,13 +183,16 @@ export default function PowerpointToPDF() {
         // Header
         pdf.setFont("helvetica", "bold");
         pdf.setFontSize(20);
-        pdf.text("PowerPoint → PDF (Preview)", margin, 70);
+        pdf.text(settings.title || "PowerPoint → PDF (Preview)", margin, 70);
 
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(12);
         pdf.text(`File: ${ppt.name}`, margin, 105);
         pdf.text(`Size: ${formatMB(ppt.size)}`, margin, 125);
-        pdf.text(`Created: ${new Date().toLocaleString()}`, margin, 145);
+
+        if (settings.includeTimestamp) {
+          pdf.text(`Created: ${new Date().toLocaleString()}`, margin, 145);
+        }
 
         // Divider
         pdf.setDrawColor(180);
@@ -141,14 +205,15 @@ export default function PowerpointToPDF() {
           "This tool is currently a preview exporter. Browser-only conversion cannot reliably render real PPT/PPTX slides without a dedicated slide renderer or server-side conversion.";
         const wrapped = pdf.splitTextToSize(note, pageW - margin * 2);
         pdf.text(wrapped, margin, 200);
-
         pdf.setTextColor(0);
 
         // Footer
-        pdf.setFontSize(10);
-        pdf.setTextColor(120);
-        pdf.text(`Preview page ${i + 1} of ${presentations.length}`, margin, pageH - 30);
-        pdf.setTextColor(0);
+        if (settings.includeFooter) {
+          pdf.setFontSize(10);
+          pdf.setTextColor(120);
+          pdf.text(`Preview page ${i + 1} of ${presentations.length}`, margin, pageH - 30);
+          pdf.setTextColor(0);
+        }
       }
 
       const blob = pdf.output("blob");
@@ -159,6 +224,7 @@ export default function PowerpointToPDF() {
 
       setPdfUrl(url);
       toast.success("Preview PDF created!");
+      moat.recordJob();
     } catch (err) {
       console.error(err);
       toast.error("Failed to generate PDF");
@@ -181,9 +247,29 @@ export default function PowerpointToPDF() {
 
   return (
     <ToolLayout title="PowerPoint to PDF" description="Convert PPT/PPTX presentations to PDF (preview exporter)">
-      <div className="grid lg:grid-cols-2 gap-8">
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* MOAT COLUMN */}
+        <div className="order-3 lg:order-1 space-y-3">
+          <LocalStatusIndicator />
+
+          <PresetsPanel
+            userPresets={moat.userPresets}
+            recommendedPresets={moat.recommendedPresets}
+            isLoading={moat.isLoadingPresets}
+            onApply={moat.applyPreset}
+            onSave={moat.saveCurrentAsPreset}
+            onRename={moat.renamePreset}
+            onDelete={moat.deletePreset}
+            onTogglePinned={moat.togglePinned}
+            onUseLastSettings={moat.useLastSettings}
+            onReset={moat.resetToDefaults}
+          />
+
+          <CopyLinkButton toolSlug={toolSlug} currentSettings={settings} />
+        </div>
+
         {/* LEFT */}
-        <div className="space-y-6">
+        <div className="order-1 lg:order-2 space-y-6">
           <Card className="p-6">
             <div
               {...getRootProps()}
@@ -207,6 +293,7 @@ export default function PowerpointToPDF() {
                       {presentations.length} file{presentations.length > 1 ? "s" : ""}
                     </div>
                     <div className="text-xs text-muted-foreground">Total: {formatMB(totalSize)}</div>
+                    <div className="text-[11px] text-muted-foreground mt-1">{settingsSummary}</div>
                   </div>
                   <Button variant="outline" size="sm" onClick={clearAll} disabled={converting}>
                     <Trash2 className="h-4 w-4 mr-2" /> Clear
@@ -239,6 +326,98 @@ export default function PowerpointToPDF() {
             )}
           </Card>
 
+          {/* Settings card (simple + MOAT friendly) */}
+          <Card className="p-6 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Page size</p>
+                <p className="text-xs text-muted-foreground">A4 for EU, Letter for US.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={settings.pageFormat}
+                onChange={(e) => setSettings((p) => ({ ...p, pageFormat: e.target.value as Settings["pageFormat"] }))}
+                disabled={converting}
+              >
+                <option value="a4">A4</option>
+                <option value="letter">Letter</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Orientation</p>
+                <p className="text-xs text-muted-foreground">Preview pages layout.</p>
+              </div>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={settings.orientation}
+                onChange={(e) => setSettings((p) => ({ ...p, orientation: e.target.value as Settings["orientation"] }))}
+                disabled={converting}
+              >
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Landscape</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Margin (pt)</p>
+                <p className="text-xs text-muted-foreground">Space around text.</p>
+              </div>
+              <input
+                type="number"
+                min={16}
+                max={120}
+                step={4}
+                className="h-10 w-24 rounded-md border bg-background px-3 text-sm text-right"
+                value={settings.marginPt}
+                onChange={(e) => setSettings((p) => ({ ...p, marginPt: clamp(Number(e.target.value || 0), 16, 120) }))}
+                disabled={converting}
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Footer</p>
+                <p className="text-xs text-muted-foreground">Show page count at bottom.</p>
+              </div>
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={settings.includeFooter}
+                onChange={(e) => setSettings((p) => ({ ...p, includeFooter: e.target.checked }))}
+                disabled={converting}
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Timestamp</p>
+                <p className="text-xs text-muted-foreground">Include creation time.</p>
+              </div>
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={settings.includeTimestamp}
+                onChange={(e) => setSettings((p) => ({ ...p, includeTimestamp: e.target.checked }))}
+                disabled={converting}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Header title</p>
+              <input
+                type="text"
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={settings.title}
+                onChange={(e) => setSettings((p) => ({ ...p, title: e.target.value }))}
+                disabled={converting}
+                placeholder="PowerPoint → PDF (Preview)"
+              />
+            </div>
+          </Card>
+
           <div className="flex gap-3">
             {!pdfUrl ? (
               <Button
@@ -266,15 +445,15 @@ export default function PowerpointToPDF() {
         </div>
 
         {/* RIGHT */}
-        <div className="space-y-6">
+        <div className="order-2 lg:order-3 space-y-6">
           <Card className="p-6">
             <div className="flex items-center gap-2 mb-3">
               <Info className="h-5 w-5 text-primary" />
               <h3 className="font-semibold">About this tool</h3>
             </div>
             <p className="text-sm text-muted-foreground">
-              Browser-only PPT/PPTX → PDF conversion needs a slide renderer. This current version generates a **preview
-              PDF** (one page per uploaded file) so you can keep the UI/flow working.
+              Browser-only PPT/PPTX → PDF conversion needs a slide renderer. This current version generates a{" "}
+              <b>preview PDF</b> (one page per uploaded file) so you can keep the UI/flow working.
             </p>
           </Card>
 
