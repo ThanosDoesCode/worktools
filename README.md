@@ -1,4 +1,4 @@
-# Welcome to your Worktools Mini
+# Welcome to Worktools Mini
 
 ## Project info
 
