@@ -2,7 +2,7 @@
 
 ## Project info
 
-**URL**: [[worktools-orpin.vercel.app](https://worktools-p8476pwvc-thanos-s-projects-c09a1f91.vercel.app/)](url)
+**URL**: https://worktools-p8476pwvc-thanos-s-projects-c09a1f91.vercel.app/
 
 ## What technologies are used for this project?
 
