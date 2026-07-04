@@ -26,8 +26,8 @@ export default function ImageResizer() {
   const [file, setFile] = useState<File | null>(null);
   const [originalUrl, setOriginalUrl] = useState<string>("");
   const [originalDims, setOriginalDims] = useState<{ w: number; h: number } | null>(null);
-  const [width, setWidth] = useState<number>(1000);
-  const [height, setHeight] = useState<number>(1000);
+  const [width, setWidth] = useState<string>("1000");
+  const [height, setHeight] = useState<string>("1000");
   const [keepAspect, setKeepAspect] = useState(true);
   const [format, setFormat] = useState<Format>("png");
   const [quality, setQuality] = useState<number>(92);
@@ -35,19 +35,28 @@ export default function ImageResizer() {
   const [resizedSize, setResizedSize] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const originalUrlRef = useRef<string>("");
+  const resizedUrlRef = useRef<string>("");
+
+  useEffect(() => {
+    originalUrlRef.current = originalUrl;
+  }, [originalUrl]);
+  useEffect(() => {
+    resizedUrlRef.current = resizedUrl;
+  }, [resizedUrl]);
 
   useEffect(() => {
     return () => {
-      if (originalUrl) URL.revokeObjectURL(originalUrl);
-      if (resizedUrl) URL.revokeObjectURL(resizedUrl);
+      if (originalUrlRef.current) URL.revokeObjectURL(originalUrlRef.current);
+      if (resizedUrlRef.current) URL.revokeObjectURL(resizedUrlRef.current);
     };
-  }, [originalUrl, resizedUrl]);
+  }, []);
 
   const onDrop = useCallback((accepted: File[]) => {
     const f = accepted[0];
     if (!f) return;
-    if (originalUrl) URL.revokeObjectURL(originalUrl);
-    if (resizedUrl) URL.revokeObjectURL(resizedUrl);
+    if (originalUrlRef.current) URL.revokeObjectURL(originalUrlRef.current);
+    if (resizedUrlRef.current) URL.revokeObjectURL(resizedUrlRef.current);
     setResizedUrl("");
     setResizedSize(0);
     setFile(f);
@@ -56,11 +65,11 @@ export default function ImageResizer() {
     const img = new Image();
     img.onload = () => {
       setOriginalDims({ w: img.naturalWidth, h: img.naturalHeight });
-      setWidth(img.naturalWidth);
-      setHeight(img.naturalHeight);
+      setWidth(String(img.naturalWidth));
+      setHeight(String(img.naturalHeight));
     };
     img.src = url;
-  }, [originalUrl, resizedUrl]);
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -68,19 +77,21 @@ export default function ImageResizer() {
     multiple: false,
   });
 
-  const handleWidthChange = (v: number) => {
+  const handleWidthChange = (v: string) => {
     setWidth(v);
-    if (keepAspect && originalDims) {
+    const n = Number(v);
+    if (keepAspect && originalDims && v !== "" && Number.isFinite(n) && n > 0) {
       const ratio = originalDims.h / originalDims.w;
-      setHeight(Math.round(v * ratio));
+      setHeight(String(Math.round(n * ratio)));
     }
   };
 
-  const handleHeightChange = (v: number) => {
+  const handleHeightChange = (v: string) => {
     setHeight(v);
-    if (keepAspect && originalDims) {
+    const n = Number(v);
+    if (keepAspect && originalDims && v !== "" && Number.isFinite(n) && n > 0) {
       const ratio = originalDims.w / originalDims.h;
-      setWidth(Math.round(v * ratio));
+      setWidth(String(Math.round(n * ratio)));
     }
   };
 
@@ -88,8 +99,8 @@ export default function ImageResizer() {
     const p = PRESETS[Number(idx)];
     if (!p) return;
     setKeepAspect(false);
-    setWidth(p.w);
-    setHeight(p.h);
+    setWidth(String(p.w));
+    setHeight(String(p.h));
   };
 
   const resize = async () => {
@@ -97,7 +108,9 @@ export default function ImageResizer() {
       toast.error("Upload an image first");
       return;
     }
-    if (width < 1 || height < 1 || width > 10000 || height > 10000) {
+    const w = Number(width);
+    const h = Number(height);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 1 || h < 1 || w > 10000 || h > 10000) {
       toast.error("Dimensions must be between 1 and 10000");
       return;
     }
@@ -110,17 +123,17 @@ export default function ImageResizer() {
         img.src = originalUrl;
       });
       const canvas = canvasRef.current ?? document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas not supported");
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       if (format === "jpeg") {
         ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillRect(0, 0, w, h);
       }
-      ctx.drawImage(img, 0, 0, width, height);
+      ctx.drawImage(img, 0, 0, w, h);
       const mime = `image/${format}`;
       const blob: Blob = await new Promise((res, rej) =>
         canvas.toBlob(
@@ -129,11 +142,11 @@ export default function ImageResizer() {
           format === "png" ? undefined : quality / 100,
         ),
       );
-      if (resizedUrl) URL.revokeObjectURL(resizedUrl);
+      if (resizedUrlRef.current) URL.revokeObjectURL(resizedUrlRef.current);
       const url = URL.createObjectURL(blob);
       setResizedUrl(url);
       setResizedSize(blob.size);
-      toast.success(`Resized to ${width} x ${height}`);
+      toast.success(`Resized to ${w} x ${h}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to resize image");
     } finally {
@@ -153,15 +166,15 @@ export default function ImageResizer() {
   };
 
   const reset = () => {
-    if (originalUrl) URL.revokeObjectURL(originalUrl);
-    if (resizedUrl) URL.revokeObjectURL(resizedUrl);
+    if (originalUrlRef.current) URL.revokeObjectURL(originalUrlRef.current);
+    if (resizedUrlRef.current) URL.revokeObjectURL(resizedUrlRef.current);
     setFile(null);
     setOriginalUrl("");
     setResizedUrl("");
     setResizedSize(0);
     setOriginalDims(null);
-    setWidth(1000);
-    setHeight(1000);
+    setWidth("1000");
+    setHeight("1000");
   };
 
   const formatBytes = (b: number) => {
@@ -243,7 +256,7 @@ export default function ImageResizer() {
                   min={1}
                   max={10000}
                   value={width}
-                  onChange={(e) => handleWidthChange(Number(e.target.value))}
+                  onChange={(e) => handleWidthChange(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
@@ -254,7 +267,7 @@ export default function ImageResizer() {
                   min={1}
                   max={10000}
                   value={height}
-                  onChange={(e) => handleHeightChange(Number(e.target.value))}
+                  onChange={(e) => handleHeightChange(e.target.value)}
                 />
               </div>
             </div>
