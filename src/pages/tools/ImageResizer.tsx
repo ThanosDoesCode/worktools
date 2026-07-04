@@ -97,8 +97,8 @@ export default function ImageResizer() {
     const p = PRESETS[Number(idx)];
     if (!p) return;
     setKeepAspect(false);
-    setWidth(p.w);
-    setHeight(p.h);
+    setWidth(String(p.w));
+    setHeight(String(p.h));
   };
 
   const resize = async () => {
@@ -106,7 +106,9 @@ export default function ImageResizer() {
       toast.error("Upload an image first");
       return;
     }
-    if (width < 1 || height < 1 || width > 10000 || height > 10000) {
+    const w = Number(width);
+    const h = Number(height);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 1 || h < 1 || w > 10000 || h > 10000) {
       toast.error("Dimensions must be between 1 and 10000");
       return;
     }
@@ -119,17 +121,17 @@ export default function ImageResizer() {
         img.src = originalUrl;
       });
       const canvas = canvasRef.current ?? document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas not supported");
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       if (format === "jpeg") {
         ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillRect(0, 0, w, h);
       }
-      ctx.drawImage(img, 0, 0, width, height);
+      ctx.drawImage(img, 0, 0, w, h);
       const mime = `image/${format}`;
       const blob: Blob = await new Promise((res, rej) =>
         canvas.toBlob(
@@ -138,11 +140,11 @@ export default function ImageResizer() {
           format === "png" ? undefined : quality / 100,
         ),
       );
-      if (resizedUrl) URL.revokeObjectURL(resizedUrl);
+      if (resizedUrlRef.current) URL.revokeObjectURL(resizedUrlRef.current);
       const url = URL.createObjectURL(blob);
       setResizedUrl(url);
       setResizedSize(blob.size);
-      toast.success(`Resized to ${width} x ${height}`);
+      toast.success(`Resized to ${w} x ${h}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to resize image");
     } finally {
@@ -162,15 +164,15 @@ export default function ImageResizer() {
   };
 
   const reset = () => {
-    if (originalUrl) URL.revokeObjectURL(originalUrl);
-    if (resizedUrl) URL.revokeObjectURL(resizedUrl);
+    if (originalUrlRef.current) URL.revokeObjectURL(originalUrlRef.current);
+    if (resizedUrlRef.current) URL.revokeObjectURL(resizedUrlRef.current);
     setFile(null);
     setOriginalUrl("");
     setResizedUrl("");
     setResizedSize(0);
     setOriginalDims(null);
-    setWidth(1000);
-    setHeight(1000);
+    setWidth("1000");
+    setHeight("1000");
   };
 
   const formatBytes = (b: number) => {
