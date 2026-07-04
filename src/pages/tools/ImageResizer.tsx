@@ -26,8 +26,8 @@ export default function ImageResizer() {
   const [file, setFile] = useState<File | null>(null);
   const [originalUrl, setOriginalUrl] = useState<string>("");
   const [originalDims, setOriginalDims] = useState<{ w: number; h: number } | null>(null);
-  const [width, setWidth] = useState<number>(1000);
-  const [height, setHeight] = useState<number>(1000);
+  const [width, setWidth] = useState<string>("1000");
+  const [height, setHeight] = useState<string>("1000");
   const [keepAspect, setKeepAspect] = useState(true);
   const [format, setFormat] = useState<Format>("png");
   const [quality, setQuality] = useState<number>(92);
@@ -35,19 +35,28 @@ export default function ImageResizer() {
   const [resizedSize, setResizedSize] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const originalUrlRef = useRef<string>("");
+  const resizedUrlRef = useRef<string>("");
+
+  useEffect(() => {
+    originalUrlRef.current = originalUrl;
+  }, [originalUrl]);
+  useEffect(() => {
+    resizedUrlRef.current = resizedUrl;
+  }, [resizedUrl]);
 
   useEffect(() => {
     return () => {
-      if (originalUrl) URL.revokeObjectURL(originalUrl);
-      if (resizedUrl) URL.revokeObjectURL(resizedUrl);
+      if (originalUrlRef.current) URL.revokeObjectURL(originalUrlRef.current);
+      if (resizedUrlRef.current) URL.revokeObjectURL(resizedUrlRef.current);
     };
-  }, [originalUrl, resizedUrl]);
+  }, []);
 
   const onDrop = useCallback((accepted: File[]) => {
     const f = accepted[0];
     if (!f) return;
-    if (originalUrl) URL.revokeObjectURL(originalUrl);
-    if (resizedUrl) URL.revokeObjectURL(resizedUrl);
+    if (originalUrlRef.current) URL.revokeObjectURL(originalUrlRef.current);
+    if (resizedUrlRef.current) URL.revokeObjectURL(resizedUrlRef.current);
     setResizedUrl("");
     setResizedSize(0);
     setFile(f);
@@ -56,11 +65,11 @@ export default function ImageResizer() {
     const img = new Image();
     img.onload = () => {
       setOriginalDims({ w: img.naturalWidth, h: img.naturalHeight });
-      setWidth(img.naturalWidth);
-      setHeight(img.naturalHeight);
+      setWidth(String(img.naturalWidth));
+      setHeight(String(img.naturalHeight));
     };
     img.src = url;
-  }, [originalUrl, resizedUrl]);
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
