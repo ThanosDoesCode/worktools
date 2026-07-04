@@ -19,7 +19,11 @@ const PRESETS: { label: string; w: number; h: number }[] = [
   { label: "1080 x 1080 (Instagram)", w: 1080, h: 1080 },
   { label: "1200 x 630 (OG Image)", w: 1200, h: 630 },
   { label: "800 x 600", w: 800, h: 600 },
-  { label: "512 x 512 (Icon)", w: 512, h: 512 },
+  { label: "800 x 800 (Profile - Large)", w: 800, h: 800 },
+  { label: "512 x 512 (Profile / Icon)", w: 512, h: 512 },
+  { label: "400 x 400 (Profile - Twitter/X)", w: 400, h: 400 },
+  { label: "320 x 320 (Profile - LinkedIn)", w: 320, h: 320 },
+  { label: "200 x 200 (Profile - Small)", w: 200, h: 200 },
 ];
 
 export default function ImageResizer() {
