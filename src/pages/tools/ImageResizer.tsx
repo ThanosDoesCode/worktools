@@ -256,7 +256,7 @@ export default function ImageResizer() {
                   min={1}
                   max={10000}
                   value={width}
-                  onChange={(e) => handleWidthChange(Number(e.target.value))}
+                  onChange={(e) => handleWidthChange(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
@@ -267,7 +267,7 @@ export default function ImageResizer() {
                   min={1}
                   max={10000}
                   value={height}
-                  onChange={(e) => handleHeightChange(Number(e.target.value))}
+                  onChange={(e) => handleHeightChange(e.target.value)}
                 />
               </div>
             </div>
