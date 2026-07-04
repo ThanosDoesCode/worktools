@@ -320,6 +320,15 @@ export const tools: Tool[] = [
     keywords: ["image", "compress", "email", "instagram", "linkedin", "webp", "jpg", "png"],
     icon: "Wand2",
   },
+  {
+    id: "41",
+    name: "Image Resizer",
+    description: "Change image resolution to any size (e.g. 1000x1000) and download instantly",
+    category: "files",
+    slug: "image-resizer",
+    keywords: ["image", "resize", "resolution", "dimensions", "scale", "1000x1000", "pixels"],
+    icon: "Maximize2",
+  },
 
   {
     id: "32",
