@@ -126,6 +126,27 @@ export default function ImageResizer() {
         img.onerror = () => rej(new Error("Failed to load image"));
         img.src = originalUrl;
       });
+      // Stepped downscaling: repeatedly halve until within 2x of target,
+      // then final draw. Produces much sharper results than a single big downscale.
+      let srcCanvas: HTMLCanvasElement | OffscreenCanvas | HTMLImageElement = img;
+      let curW = img.naturalWidth;
+      let curH = img.naturalHeight;
+      while (curW * 0.5 > w && curH * 0.5 > h) {
+        const nextW = Math.round(curW * 0.5);
+        const nextH = Math.round(curH * 0.5);
+        const step = document.createElement("canvas");
+        step.width = nextW;
+        step.height = nextH;
+        const sctx = step.getContext("2d");
+        if (!sctx) throw new Error("Canvas not supported");
+        sctx.imageSmoothingEnabled = true;
+        sctx.imageSmoothingQuality = "high";
+        sctx.drawImage(srcCanvas as CanvasImageSource, 0, 0, nextW, nextH);
+        srcCanvas = step;
+        curW = nextW;
+        curH = nextH;
+      }
+
       const canvas = canvasRef.current ?? document.createElement("canvas");
       canvas.width = w;
       canvas.height = h;
@@ -137,7 +158,7 @@ export default function ImageResizer() {
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, w, h);
       }
-      ctx.drawImage(img, 0, 0, w, h);
+      ctx.drawImage(srcCanvas as CanvasImageSource, 0, 0, w, h);
       const mime = `image/${format}`;
       const blob: Blob = await new Promise((res, rej) =>
         canvas.toBlob(
