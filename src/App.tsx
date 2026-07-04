@@ -41,6 +41,7 @@ import ZipTools from "./pages/tools/ZipTools";
 import CodeMinifyTools from "./pages/tools/CodeMinifyTools";
 import ImageConverter from "./pages/tools/ImageConverter";
 import ImageCompressor from "./pages/tools/ImageCompressor";
+import ImageResizer from "./pages/tools/ImageResizer";
 import CompressPDF from "@/pages/tools/CompressPDF";
 import PDFProtect from "@/pages/tools/PDFProtect";
 import PDFUnlock from "@/pages/tools/PDFUnlock";
@@ -102,6 +103,7 @@ const App = () => (
           <Route path="/tools/minify-prettify" element={<CodeMinifyTools />} />
           <Route path="/tools/image-converter" element={<ImageConverter />} />
           <Route path="/tools/image-compressor" element={<ImageCompressor />} />
+          <Route path="/tools/image-resizer" element={<ImageResizer />} />
           <Route path="/tools/compress-pdf" element={<CompressPDF />} />
           <Route path="/tools/pdf-protect" element={<PDFProtect />} />
           <Route path="/tools/pdf-unlock" element={<PDFUnlock />} />
