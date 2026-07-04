@@ -77,19 +77,21 @@ export default function ImageResizer() {
     multiple: false,
   });
 
-  const handleWidthChange = (v: number) => {
+  const handleWidthChange = (v: string) => {
     setWidth(v);
-    if (keepAspect && originalDims) {
+    const n = Number(v);
+    if (keepAspect && originalDims && v !== "" && Number.isFinite(n) && n > 0) {
       const ratio = originalDims.h / originalDims.w;
-      setHeight(Math.round(v * ratio));
+      setHeight(String(Math.round(n * ratio)));
     }
   };
 
-  const handleHeightChange = (v: number) => {
+  const handleHeightChange = (v: string) => {
     setHeight(v);
-    if (keepAspect && originalDims) {
+    const n = Number(v);
+    if (keepAspect && originalDims && v !== "" && Number.isFinite(n) && n > 0) {
       const ratio = originalDims.w / originalDims.h;
-      setWidth(Math.round(v * ratio));
+      setWidth(String(Math.round(n * ratio)));
     }
   };
 
